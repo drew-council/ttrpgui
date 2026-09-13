@@ -1,7 +1,7 @@
 # ADR 001: Keep Zed's editing model authoritative
 
-Status: editor gate under verification. This is an implementation of the editor
-proof, not an accepted campaign release. Campaign UI work follows the gate.
+Status: source-on-edit editor foundation accepted for campaign integration.
+The complete campaign release and performance gates remain under verification.
 
 The desktop composes Zed's `Workspace`, `Project`, `Editor`, `vim`, search,
 command palette, and the live Markdown addon from **one source revision**.
@@ -43,6 +43,15 @@ requiring a mouse-only source button would make these constructs inaccessible to
 ordinary document editing. Formatting preservation means preserving Markdown
 through source-backed transactions here, not promising semantic rich-text
 operators that rewrite markup around arbitrary selections.
+
+Live Neovim comparisons exposed display-coordinate failures at concealed inline
+punctuation and multi-line replacement blocks. The editor now offers an addon
+source-display scope. Vim's existing editor-update boundary enters that scope,
+temporarily suspending only the Markdown addon's decorations, then restores
+cached presentation before the next frame. This preserves upstream source
+coordinates without replacing Vim's operators or the document engine. Tests
+cover commands crossing bold text, tables, images, quotes, and headings. All
+564 upstream Vim tests and 31 Markdown-addon tests pass with this patch.
 
 ## Prior art decision
 

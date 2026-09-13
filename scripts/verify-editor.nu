@@ -13,9 +13,9 @@ def main [--neovim] {
   checked cargo check --locked
   checked cargo test --locked --test launcher
   checked cargo run --locked -- --smoke-test
-  checked cargo test --manifest-path upstream/zed/Cargo.toml --locked -p markdown_live_preview --lib
-  checked cargo test --manifest-path upstream/zed/Cargo.toml --locked -p vim --lib
+  checked cargo test --manifest-path upstream/zed/Cargo.toml --locked -p markdown_live_preview --lib -- --test-threads=2
+  checked cargo test --manifest-path upstream/zed/Cargo.toml --locked -p vim --lib -- --test-threads=2
   if $neovim {
-    checked cargo test --manifest-path upstream/zed/Cargo.toml --locked -p vim --features neovim --lib campaign_markdown
+    checked cargo test --manifest-path upstream/zed/Cargo.toml --locked -p vim --features neovim --lib campaign_markdown -- --test-threads=2
   }
 }

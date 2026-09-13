@@ -1,4 +1,10 @@
+mod campaign;
 mod editor_workspace;
+mod encounter;
+mod fields;
+mod link_completion;
+mod navigator;
+mod visuals;
 
 use std::{cell::Cell, path::PathBuf, rc::Rc, sync::Arc, time::Duration};
 
@@ -8,7 +14,7 @@ use settings::SettingsStore;
 use workspace::{AppState, OpenMode, Workspace};
 
 /// Compose the native editor proof using one Zed/GPUI dependency graph.
-pub fn run(smoke: bool) -> anyhow::Result<()> {
+pub fn run(smoke: bool, campaign_root: Option<PathBuf>) -> anyhow::Result<()> {
     zlog::init();
     zlog::init_output_stderr();
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -44,6 +50,19 @@ pub fn run(smoke: bool) -> anyhow::Result<()> {
         paths.push(path);
     }
 
+    let campaign = if smoke && campaign_root.is_none() {
+        None
+    } else {
+        Some(campaign::CampaignModel::open(if smoke {
+            data.join("campaign")
+        } else {
+            campaign_root.unwrap_or_else(|| root.join(".editor-proof/campaign"))
+        })?)
+    };
+    if let Some(campaign) = &campaign {
+        paths = vec![campaign.store.root().to_path_buf()];
+    }
+
     let outcome = Rc::new(Cell::new(false));
     let result = outcome.clone();
     let application = if smoke {
@@ -64,7 +83,7 @@ pub fn run(smoke: bool) -> anyhow::Result<()> {
             })
             .detach();
         }
-        if let Err(error) = initialize(cx, paths, smoke, result) {
+        if let Err(error) = initialize(cx, paths, smoke, result, campaign) {
             eprintln!("Failed to start editor proof: {error:#}");
             cx.quit();
         }
@@ -72,8 +91,8 @@ pub fn run(smoke: bool) -> anyhow::Result<()> {
     drop(instance);
     if smoke {
         std::fs::remove_dir_all(data)?;
-        anyhow::ensure!(outcome.get(), "editor smoke test failed");
     }
+    anyhow::ensure!(outcome.get(), "editor startup or verification failed");
     Ok(())
 }
 
@@ -82,6 +101,7 @@ fn initialize(
     paths: Vec<PathBuf>,
     smoke: bool,
     outcome: Rc<Cell<bool>>,
+    campaign: Option<campaign::CampaignModel>,
 ) -> anyhow::Result<()> {
     release_channel::init(semver::Version::new(0, 1, 0), cx);
     cx.set_global(db::AppDatabase::new());
@@ -102,7 +122,16 @@ fn initialize(
     menu::init();
     zed_actions::init();
     feature_flags::FeatureFlagStore::init(cx);
-    project::trusted_worktrees::init(Default::default(), cx);
+    let trusted_fixtures = [(
+        None,
+        paths
+            .iter()
+            .filter_map(|path| path.parent().map(std::path::Path::to_path_buf))
+            .collect(),
+    )]
+    .into_iter()
+    .collect();
+    project::trusted_worktrees::init(trusted_fixtures, cx);
 
     cx.set_http_client(Arc::new(reqwest_client::ReqwestClient::new()));
     let fs: Arc<dyn fs::Fs> = Arc::new(fs::RealFs::new(None, cx.background_executor().clone()));
@@ -157,15 +186,53 @@ fn initialize(
     vim::init(cx);
     markdown_live_preview::init(cx);
     editor_workspace::init(cx)?;
+    encounter::init(cx);
+    navigator::init(cx);
+    cx.bind_keys([gpui::KeyBinding::new(
+        "ctrl-alt-c",
+        navigator::ToggleNavigator,
+        None,
+    )]);
+    cx.observe_new(|workspace: &mut Workspace, _, _cx| {
+        workspace.register_action(|w, _: &navigator::ToggleNavigator, window, cx| {
+            w.toggle_panel_focus::<navigator::Navigator>(window, cx);
+        });
+    })
+    .detach();
+    let campaign = campaign.map(|model| cx.new(|_| model));
+    if let Some(model) = &campaign {
+        cx.set_global(campaign::ActiveCampaign(model.clone()));
+        workspace::register_serializable_item::<encounter::EncounterView>(cx);
+        campaign::watch(model, cx);
+    }
 
     let open = Workspace::new_local(paths, app_state, None, None, None, OpenMode::NewWindow, cx);
     cx.spawn(async move |cx| match open.await {
         Ok(opened) => {
             let workspace = opened.workspace;
             let result = opened.window.update(cx, |_, window, cx| {
-                window.set_window_title("ttrpgui — editor proof");
+                window.set_window_title("ttrpgui — campaign workspace");
+                if let Some(model) = &campaign {
+                    link_completion::init(model, &workspace, cx);
+                    let panel = cx.new(|cx| {
+                        navigator::Navigator::new(model.clone(), workspace.downgrade(), window, cx)
+                    });
+                    workspace.update(cx, |w, cx| w.add_panel(panel, window, cx));
+                    let first = model
+                        .read(cx)
+                        .catalogue
+                        .documents
+                        .keys()
+                        .find(|id| matches!(id, campaign_documents::DocumentId::Note(_)))
+                        .copied();
+                    if let Some(first) =
+                        first.filter(|_| workspace.read(cx).items(cx).next().is_none())
+                    {
+                        campaign::open_document(model, &workspace.downgrade(), first, window, cx);
+                    }
+                }
                 let split = workspace.update(cx, |workspace, cx| {
-                    if workspace.panes().len() == 1 {
+                    if smoke && campaign.is_none() && workspace.panes().len() == 1 {
                         Some(workspace.split_and_clone(
                             workspace.active_pane().clone(),
                             workspace::SplitDirection::Right,
@@ -184,9 +251,16 @@ fn initialize(
                     if let Some(split) = split {
                         split.await;
                     }
+                    if !smoke {
+                        outcome.set(true);
+                    }
                     if smoke {
-                        let verified = opened.window.update(cx, |_, window, cx| {
-                            let result = editor_workspace::verify(&workspace, window, cx);
+                        let verified = cx.update_window(opened.window.into(), |_, window, cx| {
+                            let result = if let Some(model) = &campaign {
+                                encounter::verify(model, &workspace, window, cx)
+                            } else {
+                                editor_workspace::verify(&workspace, window, cx)
+                            };
                             if let Err(error) = &result {
                                 eprintln!("Editor smoke test: {error:#}");
                             }

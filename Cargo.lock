@@ -1126,6 +1126,42 @@ dependencies = [
 ]
 
 [[package]]
+name = "campaign_documents"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "campaign_domain",
+ "campaign_storage",
+ "pathdiff",
+ "percent-encoding",
+ "pulldown-cmark 0.13.0",
+ "serde",
+ "tempfile",
+]
+
+[[package]]
+name = "campaign_domain"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "thiserror 2.0.17",
+ "uuid",
+]
+
+[[package]]
+name = "campaign_storage"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "campaign_domain",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "toml 0.9.8",
+ "uuid",
+]
+
+[[package]]
 name = "cbc"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7654,7 +7690,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e8bbe1a966bd2f362681a44f6edce3c2310ac21e4d5067a6e7ec396297a6ea0"
 dependencies = [
  "bitflags 2.13.1",
+ "getopts",
  "memchr",
+ "pulldown-cmark-escape",
  "unicase",
 ]
 
@@ -10381,6 +10419,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "assets",
+ "campaign_documents",
+ "campaign_domain",
+ "campaign_storage",
  "client",
  "command_palette",
  "db",
@@ -10388,6 +10429,7 @@ dependencies = [
  "feature_flags",
  "file_finder",
  "fs",
+ "futures",
  "gpui",
  "gpui_platform",
  "gpui_tokio",
@@ -10402,11 +10444,14 @@ dependencies = [
  "reqwest_client",
  "search",
  "semver",
+ "serde",
+ "serde_json",
  "session",
  "settings",
  "theme",
  "theme_settings",
  "tree-sitter-md",
+ "ui",
  "util",
  "uuid",
  "vim",
@@ -13225,18 +13270,3 @@ dependencies = [
  "syn 2.0.117",
  "winnow 1.0.2",
 ]
-
-[[patch.unused]]
-name = "libwebrtc"
-version = "0.3.26"
-source = "git+https://github.com/zed-industries/livekit-rust-sdks?rev=d0e27be0cdad89eadab3e36207cda0a2b6e359ee#d0e27be0cdad89eadab3e36207cda0a2b6e359ee"
-
-[[patch.unused]]
-name = "livekit"
-version = "0.7.32"
-source = "git+https://github.com/zed-industries/livekit-rust-sdks?rev=d0e27be0cdad89eadab3e36207cda0a2b6e359ee#d0e27be0cdad89eadab3e36207cda0a2b6e359ee"
-
-[[patch.unused]]
-name = "webrtc-sys"
-version = "0.3.23"
-source = "git+https://github.com/zed-industries/livekit-rust-sdks?rev=d0e27be0cdad89eadab3e36207cda0a2b6e359ee#d0e27be0cdad89eadab3e36207cda0a2b6e359ee"

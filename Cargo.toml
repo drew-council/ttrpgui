@@ -1,5 +1,12 @@
 [dependencies]
+campaign_domain = {path = "crates/domain"}
+campaign_storage = {path = "crates/storage"}
+campaign_documents = {path = "crates/documents"}
+ui = {path = "upstream/zed/crates/ui"}
 anyhow = "1"
+futures = "0.3"
+serde = {version = "1", features = ["derive"]}
+serde_json = "1"
 semver = "1"
 uuid = {version = "1", features = ["v4"]}
 gpui_platform = {path = "upstream/zed/crates/gpui_platform", features = ["wayland", "x11"]}
@@ -46,11 +53,8 @@ async-process = {git = "https://github.com/zed-industries/async-process.git", re
 async-task = {git = "https://github.com/smol-rs/async-task.git", rev = "b4486cd71e4e94fbda54ce6302444de14f4d190e"}
 windows-capture = {git = "https://github.com/zed-industries/windows-capture.git", rev = "f0d6c1b6691db75461b732f6d5ff56eed002eeb9"}
 calloop = {git = "https://github.com/zed-industries/calloop"}
-livekit = {git = "https://github.com/zed-industries/livekit-rust-sdks", rev = "d0e27be0cdad89eadab3e36207cda0a2b6e359ee"}
-libwebrtc = {git = "https://github.com/zed-industries/livekit-rust-sdks", rev = "d0e27be0cdad89eadab3e36207cda0a2b6e359ee"}
 notify = {git = "https://github.com/zed-industries/notify", rev = "0890bbb8ca40a4b5d1f67031698dd7918b37d991"}
 notify-types = {git = "https://github.com/zed-industries/notify", rev = "0890bbb8ca40a4b5d1f67031698dd7918b37d991"}
-webrtc-sys = {git = "https://github.com/zed-industries/livekit-rust-sdks", rev = "d0e27be0cdad89eadab3e36207cda0a2b6e359ee"}
 
 [profile.dev]
 debug = 0
@@ -58,3 +62,8 @@ incremental = true
 
 [profile.test]
 debug = 0
+
+[workspace]
+members = ["crates/domain", "crates/storage", "crates/documents"]
+exclude = ["upstream/zed"]
+resolver = "2"

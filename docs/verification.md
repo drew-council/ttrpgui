@@ -1,19 +1,23 @@
 # Editor gate verification
 
-The gate remains under verification. Passing source tests is not a claim that
-the complete campaign application or rich editing surface is finished.
+The source-on-edit editor foundation has passed its automated integration gate.
+The complete campaign application and performance acceptance remain in progress.
 
 | Check | Observed result |
 | --- | --- |
 | Checksum-verified bootstrap into a fresh directory | Passed |
 | Idempotent bootstrap and reverse patch verification | Passed |
-| Application compilation | Passed before the latest headless-test additions; rechecking |
+| Application compilation | Passed with initial campaign integration |
 | Markdown addon suite | 31 passed, including parent-buffer cell focus |
-| New Vim/Markdown integration tests | 3 passed |
-| Launcher helper, invalid arguments, instance lock | 3 passed before the latest headless-test additions; rechecking |
-| Headless workspace composition | Pending |
-| Full upstream Vim suite | Pending |
-| Neovim comparisons with live Markdown enabled | Pending |
+| New Vim/Markdown integration tests | 5 passed, including clipboard and recorded Neovim cases |
+| Launcher helper, invalid arguments, instance lock | 3 passed for editor foundation; campaign recheck in progress |
+| Headless workspace composition | Passed: two tabs, split buffers, shared edit/undo, Vim/focus |
+| Full upstream Vim suite | 564 passed with final source-display patch, two test threads |
+| Neovim comparisons with live Markdown enabled | 15 live scenarios passed; genuine trace retained |
+| Native rendering | Passed on private offscreen Weston with software rendering; screenshot inspected |
+| Domain rules | 5 regression tests passed |
+| Portable links, backlinks, stale indexing | 5 tests passed |
+| 10,000-page warm fuzzy query | 2.44 ms in unoptimized document-layer test; excludes UI rendering |
 
 Use `nu scripts/verify-editor.nu` in `nix develop` to reproduce the automated
 checks. Add `--neovim` for the live Neovim comparison cases. Neovim is not used by

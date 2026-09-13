@@ -8,6 +8,17 @@
   "auto_update": false,
   "soft_wrap": "editor_width",
   "show_edit_predictions": false,
+  "autosave": {
+    "after_delay": {
+      "milliseconds": 750
+    }
+  },
+  "format_on_save": "off",
+  "formatter": "none",
+  "prettier": {
+    "allowed": false
+  },
+  "language_servers": [],
   "markdown_live_preview": {
     "enabled": true
   },

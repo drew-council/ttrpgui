@@ -1,3 +1,66 @@
+--- a/crates/editor/src/editor.rs
++++ b/crates/editor/src/editor.rs
+@@ -759,6 +759,13 @@
+ 
+ /// Addons allow storing per-editor state in other crates (e.g. Vim)
+ pub trait Addon: 'static {
++    /// Presentation-only replacements may temporarily reveal source while an
++    /// editing engine computes motions. Hooks must preserve the text buffer,
++    /// selections and user folds, and restore presentation before returning.
++    fn source_display_hooks(&self) -> Option<SourceDisplayHooks> {
++        None
++    }
++
+     fn extend_key_context(&self, _: &mut KeyContext, _: &App) {}
+ 
+     fn render_buffer_header_controls(
+@@ -790,6 +797,12 @@
+     fn to_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+         None
+     }
++}
++
++#[derive(Clone, Copy)]
++pub struct SourceDisplayHooks {
++    pub enter: fn(&mut Editor, &mut Context<Editor>),
++    pub exit: fn(&mut Editor, &mut Context<Editor>),
+ }
+ 
+ struct ChangeLocation {
+@@ -10666,6 +10679,20 @@
+             .insert(std::any::TypeId::of::<T>(), Box::new(instance));
+     }
+ 
++    /// Run a buffer-coordinate operation without addon-owned display aliases.
++    /// Other folds and all buffer state retain their ordinary editor semantics.
++    pub fn with_source_display<R>(
++        &mut self,
++        cx: &mut Context<Self>,
++        operation: impl FnOnce(&mut Self, &mut Context<Self>) -> R,
++    ) -> R {
++        let hooks: Vec<_> = self.addons.values().filter_map(|addon| addon.source_display_hooks()).collect();
++        for hook in &hooks { (hook.enter)(self, cx); }
++        let result = operation(self, cx);
++        for hook in hooks.iter().rev() { (hook.exit)(self, cx); }
++        result
++    }
++
+     pub fn unregister_addon<T: Addon>(&mut self) {
+         self.addons.remove(&std::any::TypeId::of::<T>());
+     }
+--- a/crates/vim/src/vim.rs
++++ b/crates/vim/src/vim.rs
+@@ -1642,7 +1642,9 @@
+         update: impl FnOnce(&mut Self, &mut Editor, &mut Context<Editor>) -> S,
+     ) -> Option<S> {
+         let editor = self.editor.upgrade()?;
+-        Some(editor.update(cx, |editor, cx| update(self, editor, cx)))
++        Some(editor.update(cx, |editor, cx| {
++            editor.with_source_display(cx, |editor, cx| update(self, editor, cx))
++        }))
+     }
+ 
+     fn editor_selections(&mut self, _: &mut Window, cx: &mut Context<Self>) -> Vec<Range<Anchor>> {
 --- a/crates/markdown_live_preview/src/markdown_live_preview.rs
 +++ b/crates/markdown_live_preview/src/markdown_live_preview.rs
 @@ -6,8 +6,8 @@
@@ -11,7 +74,13 @@
  
  use std::{any::TypeId, ops::Range, path::PathBuf, sync::Arc};
  
-@@ -139,7 +139,6 @@
+@@ -135,11 +135,12 @@
+     );
+ 
+     editor.register_addon(LivePreviewAddon {
++        source_operation_depth: 0,
++        suspended_blocks: Vec::new(),
+         enabled_override: None,
          markers: None,
          applied_blocks: Vec::new(),
          selected_image: None,
@@ -19,29 +88,110 @@
          selected_table_unit: None,
          drag_source: None,
          drop_boundary: None,
-@@ -168,7 +167,6 @@
+@@ -160,6 +161,8 @@
+ }
+ 
+ struct LivePreviewAddon {
++    source_operation_depth: usize,
++    suspended_blocks: Vec<AppliedBlock>,
+     /// Per-editor override set by the toggle action; falls back to the setting.
+     enabled_override: Option<bool>,
+     markers: Option<Arc<MarkerSet>>,
+@@ -167,8 +170,7 @@
+     /// The image widget currently selected (Obsidian-style click state),
      /// identified by its marker range.
      selected_image: Option<Range<Anchor>>,
-     /// The table cell currently being edited in place.
+-    /// The table cell currently being edited in place.
 -    active_cell: Option<ActiveTableCell>,
++    /// The table row or column selected through its widget handle.
      selected_table_unit: Option<TableUnitSelection>,
      /// Unit being dragged (outlined in place, Obsidian-style) and the unit
      /// the pointer is currently over (gets the insertion line). Rendered
-@@ -346,13 +344,6 @@
- struct TableUnitSelection {
-     table_range: Range<Anchor>,
+@@ -183,8 +185,8 @@
+     /// notify — a re-render between press and move would drop gpui's
+     /// per-frame drag-arming listeners and kill the drag gesture.
+     handle_press: Option<gpui::Point<gpui::Pixels>>,
+-    /// Block explicitly revealed via its `</>` button. Tables and images
+-    /// only show source through this, never from cursor overlap alone.
++    /// Block explicitly revealed by a widget source button or cell click.
++    /// Keyboard selections also reveal source without needing this marker.
+     source_revealed: Option<Range<Anchor>>,
+     /// When a resize drag last wrote a width, so selection isn't cleared by
+     /// the selection refresh that buffer edits trigger mid-drag.
+@@ -193,6 +195,13 @@
+ }
+ 
+ impl Addon for LivePreviewAddon {
++    fn source_display_hooks(&self) -> Option<editor::SourceDisplayHooks> {
++        self.markers.as_ref().map(|_| editor::SourceDisplayHooks {
++            enter: enter_source_operation,
++            exit: exit_source_operation,
++        })
++    }
++
+     fn to_any(&self) -> &dyn std::any::Any {
+         self
+     }
+@@ -200,6 +209,31 @@
+     fn to_any_mut(&mut self) -> Option<&mut dyn std::any::Any> {
+         Some(self)
+     }
++}
++
++fn enter_source_operation(editor: &mut Editor, cx: &mut Context<Editor>) {
++    let Some(addon) = editor.addon_mut::<LivePreviewAddon>() else { return };
++    addon.source_operation_depth += 1;
++    if addon.source_operation_depth != 1 { return; }
++    addon.suspended_blocks = std::mem::take(&mut addon.applied_blocks);
++    let ids: HashSet<_> = addon.suspended_blocks.iter().map(|block| block.block_id).collect();
++    editor.set_concealments(TypeId::of::<LivePreviewFoldTag>(), Vec::new(), cx);
++    if !ids.is_empty() { editor.remove_blocks(ids, None, cx); }
++}
++
++fn exit_source_operation(editor: &mut Editor, cx: &mut Context<Editor>) {
++    let Some(addon) = editor.addon_mut::<LivePreviewAddon>() else { return };
++    addon.source_operation_depth -= 1;
++    if addon.source_operation_depth != 0 { return; }
++    let mut blocks = std::mem::take(&mut addon.suspended_blocks);
++    if !blocks.is_empty() {
++        // Reuse the rendered entities and callbacks; do not reparse every block
++        // just because a motion temporarily needed canonical source coordinates.
++        let ids = editor.insert_blocks(blocks.iter().map(|block| block.properties.clone()), None, cx);
++        for (block, id) in blocks.iter_mut().zip(ids) { block.block_id = id; }
++    }
++    if let Some(addon) = editor.addon_mut::<LivePreviewAddon>() { addon.applied_blocks = blocks; }
++    apply_decorations(editor, cx);
+ }
+ 
+ struct MarkerSet {
+@@ -348,17 +382,11 @@
      unit: TableUnit,
--}
--
+ }
+ 
 -/// The single-line editor mounted over a table cell.
 -struct ActiveTableCell {
 -    cell_range: Range<Anchor>,
 -    editor: Entity<Editor>,
 -    _subscriptions: Vec<Subscription>,
+-}
+-
+ struct AppliedBlock {
+     range: Range<Anchor>,
+     source: String,
+     block_id: CustomBlockId,
++    properties: BlockProperties<Anchor>,
  }
  
- struct AppliedBlock {
-@@ -543,21 +534,9 @@
+ fn is_enabled(addon: &LivePreviewAddon, cx: &App) -> bool {
+@@ -472,6 +500,7 @@
+     let Some(addon) = editor.addon_mut::<LivePreviewAddon>() else {
+         return;
+     };
++    if addon.source_operation_depth > 0 { return; }
+     let markers = addon.markers.clone();
+     let applied_blocks = std::mem::take(&mut addon.applied_blocks);
+ 
+@@ -543,21 +572,9 @@
              continue;
          }
          if rows_intersect(&selection_rows, start.row, end.row) {
@@ -66,7 +216,40 @@
          }
          let start_offset = marker.range.start.to_offset(&snapshot);
          let end_offset = marker.range.end.to_offset(&snapshot);
-@@ -974,141 +953,43 @@
+@@ -700,14 +717,15 @@
+             }
+ 
+         };
+-        blocks_to_insert.push(BlockProperties {
++        let properties = BlockProperties {
+             placement: BlockPlacement::Replace(marker.range.start..=marker.range.end),
+             height: Some(marker.height_estimate),
+             style: BlockStyle::Flex,
+             render,
+             priority: 0,
+-        });
+-        pending_applied.push((marker.range.clone(), source));
++        };
++        blocks_to_insert.push(properties.clone());
++        pending_applied.push((marker.range.clone(), source, properties));
+     }
+ 
+     if !block_ids_to_remove.is_empty() {
+@@ -715,11 +733,12 @@
+     }
+     if !blocks_to_insert.is_empty() {
+         let block_ids = editor.insert_blocks(blocks_to_insert, None, cx);
+-        for ((range, source), block_id) in pending_applied.into_iter().zip(block_ids) {
++        for ((range, source, properties), block_id) in pending_applied.into_iter().zip(block_ids) {
+             new_applied_blocks.push(AppliedBlock {
+                 range,
+                 source,
+                 block_id,
++                properties,
+             });
+         }
+     }
+@@ -974,141 +993,43 @@
      weights
  }
  
@@ -236,7 +419,7 @@
  }
  
  /// Records the insertion boundary the pointer indicates, notifying only on
-@@ -1183,38 +1064,6 @@
+@@ -1183,38 +1104,6 @@
      true
  }
  
@@ -275,7 +458,7 @@
  /// Splits one table row line into cell ranges at unescaped pipes (the GFM
  /// rule). Each range spans the full text between two pipes, padding included,
  /// so a cell edit can rewrite it in place. Segments outside the outer pipes
-@@ -1394,7 +1243,6 @@
+@@ -1394,7 +1283,6 @@
      change: TableStructuralChange,
      cx: &mut Context<Editor>,
  ) {
@@ -283,7 +466,7 @@
      let Some((table_offsets, structure)) = fresh_table_at(editor, stale_table_range, cx) else {
          log::warn!("markdown live preview: no table found at click position; ignoring structural change");
          return;
-@@ -1540,28 +1388,6 @@
+@@ -1540,28 +1428,6 @@
          let max_width = block_cx.max_width;
          let colors = block_cx.app.theme().colors().clone();
  
@@ -312,7 +495,7 @@
          let resolved = editor.upgrade().map(|entity| {
              entity
                  .read(block_cx.app)
-@@ -1628,14 +1454,6 @@
+@@ -1628,14 +1494,6 @@
                  _ => None,
              };
              let weight = column_weights.get(column).copied().unwrap_or(8.);
@@ -327,7 +510,7 @@
              let alignment = structure
                  .alignments
                  .get(column)
-@@ -1710,9 +1528,7 @@
+@@ -1710,9 +1568,7 @@
                      }
                  });
  
@@ -338,7 +521,7 @@
                  // Clicking a cell the source omitted first rewrites the table
                  // in normalized form so the cell exists to edit.
                  let weak = editor.clone();
-@@ -1777,8 +1593,7 @@
+@@ -1777,8 +1633,7 @@
                      if (event.position - press).magnitude() > 4. {
                          return;
                      }
