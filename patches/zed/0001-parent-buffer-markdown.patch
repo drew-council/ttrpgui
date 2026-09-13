@@ -1,0 +1,404 @@
+--- a/crates/markdown_live_preview/src/markdown_live_preview.rs
++++ b/crates/markdown_live_preview/src/markdown_live_preview.rs
+@@ -6,8 +6,8 @@
+ //! with rendered widgets. Raw markdown is revealed for editing per token: an
+ //! inline construct reveals when the selection touches it, and a block
+ //! reveals when the selection reaches its lines, mirroring Obsidian's Live
+-//! Preview mode. Tables and images are the exception: they are edited
+-//! through their widgets and only reveal source via their `</>` button.
++//! Preview mode. Tables and images reveal source when reached by a selection;
++//! cell clicks focus the authoritative parent buffer, preserving Vim and undo.
+ 
+ use std::{any::TypeId, ops::Range, path::PathBuf, sync::Arc};
+ 
+@@ -139,7 +139,6 @@
+         markers: None,
+         applied_blocks: Vec::new(),
+         selected_image: None,
+-        active_cell: None,
+         selected_table_unit: None,
+         drag_source: None,
+         drop_boundary: None,
+@@ -168,7 +167,6 @@
+     /// identified by its marker range.
+     selected_image: Option<Range<Anchor>>,
+     /// The table cell currently being edited in place.
+-    active_cell: Option<ActiveTableCell>,
+     selected_table_unit: Option<TableUnitSelection>,
+     /// Unit being dragged (outlined in place, Obsidian-style) and the unit
+     /// the pointer is currently over (gets the insertion line). Rendered
+@@ -346,13 +344,6 @@
+ struct TableUnitSelection {
+     table_range: Range<Anchor>,
+     unit: TableUnit,
+-}
+-
+-/// The single-line editor mounted over a table cell.
+-struct ActiveTableCell {
+-    cell_range: Range<Anchor>,
+-    editor: Entity<Editor>,
+-    _subscriptions: Vec<Subscription>,
+ }
+ 
+ struct AppliedBlock {
+@@ -543,21 +534,9 @@
+             continue;
+         }
+         if rows_intersect(&selection_rows, start.row, end.row) {
+-            // Casual clicks land the cursor on widget rows constantly, which
+-            // made tables and images explode into source; those two reveal
+-            // only via their explicit `</>` button.
+-            let needs_explicit_reveal = matches!(
+-                marker.kind,
+-                BlockRenderKind::Table(_) | BlockRenderKind::Image { .. }
+-            );
+-            let explicitly_revealed = source_revealed.as_ref().is_some_and(|revealed| {
+-                let revealed_start = revealed.start.to_point(&snapshot).row;
+-                let revealed_end = revealed.end.to_point(&snapshot).row;
+-                revealed_start <= end.row && start.row <= revealed_end
+-            });
+-            if !needs_explicit_reveal || explicitly_revealed {
+-                continue;
+-            }
++            // Source fallback applies equally to mouse and keyboard navigation.
++            // Keeping these blocks concealed traps Vim's display-row motions.
++            continue;
+         }
+         let start_offset = marker.range.start.to_offset(&snapshot);
+         let end_offset = marker.range.end.to_offset(&snapshot);
+@@ -974,141 +953,43 @@
+     weights
+ }
+ 
+-/// Starts editing a table cell: mounts a focused single-line editor over it,
+-/// committing on enter/tab/blur and cancelling on escape.
++/// Reveal the table and focus its cell in the authoritative document. No
++/// secondary buffer, independent undo stack, or blur-time commit is involved.
+ fn start_cell_edit(
+     weak_editor: WeakEntity<Editor>,
+     cell_range: Range<Anchor>,
+     window: &mut Window,
+     cx: &mut App,
+ ) {
+-    let Some(main_editor) = weak_editor.upgrade() else {
+-        return;
+-    };
+-    // Commit any cell already being edited.
+-    main_editor.update(cx, |editor, cx| commit_active_cell(editor, cx));
+-
+-    // Re-resolve the clicked cell from live text: the widget's captured
+-    // ranges go stale whenever an edit lands before the widget refreshes.
+-    let snapshot = main_editor.read(cx).buffer().read(cx).snapshot(cx);
+-    let stale_start = cell_range.start.to_offset(&snapshot);
+-    let Some((_, structure)) = parse_table_at(&snapshot, stale_start) else {
+-        return;
+-    };
+-    let all_cells = structure.cells_in_order();
+-    let Some(cell_range) = all_cells
+-        .iter()
+-        .find(|candidate| {
+-            let start = candidate.start.to_offset(&snapshot);
+-            let end = candidate.end.to_offset(&snapshot);
+-            start <= stale_start && stale_start <= end
+-        })
+-        .cloned()
+-    else {
+-        return;
+-    };
+-    let start = cell_range.start.to_offset(&snapshot);
+-    let end = cell_range.end.to_offset(&snapshot);
+-    let text: String = snapshot.text_for_range(start..end).collect();
+-
+-    let cell_editor = cx.new(|cx| {
+-        let mut editor = Editor::single_line(window, cx);
+-        editor.set_text(text.trim(), window, cx);
+-        editor
+-    });
+-
+-    let mut subscriptions = Vec::new();
+-    main_editor.update(cx, |_, cx| {
+-        subscriptions.push(cx.subscribe(
+-            &cell_editor,
+-            |editor, blurred, event: &EditorEvent, cx| {
+-                // Only commit if this editor is still the active cell: when
+-                // Tab moves editing to the next cell, the old editor's blur
+-                // must not commit (and clear) the new one.
+-                if matches!(event, EditorEvent::Blurred)
+-                    && editor
+-                        .addon::<LivePreviewAddon>()
+-                        .and_then(|addon| addon.active_cell.as_ref())
+-                        .is_some_and(|cell| cell.editor == blurred)
+-                {
+-                    commit_active_cell(editor, cx);
+-                }
+-            },
+-        ));
+-    });
+-
+-    let next_cell = all_cells
+-        .iter()
+-        .position(|candidate| {
+-            candidate.start.to_offset(&snapshot) == start
+-                && candidate.end.to_offset(&snapshot) == end
+-        })
+-        .and_then(|index| all_cells.get(index + 1).cloned());
+-
+-    cell_editor.update(cx, |editor, _| {
+-        let weak = weak_editor.clone();
+-        subscriptions.push(editor.register_action::<editor::actions::Newline>(
+-            move |_, window, cx| {
+-                weak.update(cx, |editor, cx| {
+-                    commit_active_cell(editor, cx);
+-                    refocus_main_editor(editor, window, cx);
+-                })
+-                .log_err();
+-            },
+-        ));
+-        let weak = weak_editor.clone();
+-        subscriptions.push(editor.register_action::<editor::actions::Tab>(
+-            move |_, window, cx| {
+-                let next = next_cell.clone();
+-                weak.update(cx, |editor, cx| {
+-                    commit_active_cell(editor, cx);
+-                })
+-                .log_err();
+-                match next {
+-                    Some(next) => {
+-                        start_cell_edit(weak.clone(), next, window, cx)
+-                    }
+-                    None => {
+-                        weak.update(cx, |editor, cx| refocus_main_editor(editor, window, cx))
+-                            .log_err();
+-                    }
+-                }
+-            },
+-        ));
+-        let weak = weak_editor.clone();
+-        subscriptions.push(editor.register_action::<editor::actions::Cancel>(
+-            move |_, window, cx| {
+-                weak.update(cx, |editor, cx| {
+-                    if let Some(addon) = editor.addon_mut::<LivePreviewAddon>() {
+-                        addon.active_cell = None;
+-                    }
+-                    refocus_main_editor(editor, window, cx);
+-                    cx.notify();
+-                })
+-                .log_err();
+-            },
+-        ));
+-    });
+-
+-    let focus_handle = cell_editor.read(cx).focus_handle(cx);
+-    window.focus(&focus_handle, cx);
+-
+-    main_editor.update(cx, |editor, cx| {
++    weak_editor.update(cx, |editor, cx| {
++        let snapshot = editor.buffer().read(cx).snapshot(cx);
++        let stale_start = cell_range.start.to_offset(&snapshot);
++        let Some((table_range, structure)) = parse_table_at(&snapshot, stale_start) else {
++            return;
++        };
++        let Some(cell) = structure.cells_in_order().into_iter().find(|candidate| {
++            candidate.start.to_offset(&snapshot) <= stale_start
++                && stale_start <= candidate.end.to_offset(&snapshot)
++        }) else {
++            return;
++        };
++        let start = cell.start.to_offset(&snapshot);
++        let end = cell.end.to_offset(&snapshot);
++        let text: String = snapshot.text_for_range(start..end).collect();
++        let offset = MultiBufferOffset(start.0 + text.len() - text.trim_start().len());
+         if let Some(addon) = editor.addon_mut::<LivePreviewAddon>() {
+             addon.selected_table_unit = None;
+-            addon.active_cell = Some(ActiveTableCell {
+-                cell_range,
+-                editor: cell_editor,
+-                _subscriptions: subscriptions,
+-            });
+-        }
++            addon.source_revealed = Some(
++                snapshot.anchor_before(table_range.start)..snapshot.anchor_after(table_range.end),
++            );
++        }
++        editor.change_selections(Default::default(), window, cx, |selections| {
++            selections.select_ranges([offset..offset]);
++        });
++        window.focus(&editor.focus_handle(cx), cx);
++        apply_decorations(editor, cx);
+         cx.notify();
+-    });
+-}
+-
+-fn refocus_main_editor(editor: &Editor, window: &mut Window, cx: &mut Context<Editor>) {
+-    let focus_handle = editor.focus_handle(cx);
+-    window.focus(&focus_handle, cx);
++    }).log_err();
+ }
+ 
+ /// Records the insertion boundary the pointer indicates, notifying only on
+@@ -1183,38 +1064,6 @@
+     true
+ }
+ 
+-/// Writes the active cell editor's text back into the table source.
+-fn commit_active_cell(editor: &mut Editor, cx: &mut Context<Editor>) {
+-    let Some(active) = editor
+-        .addon_mut::<LivePreviewAddon>()
+-        .and_then(|addon| addon.active_cell.take())
+-    else {
+-        return;
+-    };
+-    let text = active
+-        .editor
+-        .read(cx)
+-        .text(cx)
+-        .replace('\n', " ")
+-        .replace('|', "\\|");
+-    let snapshot = editor.buffer().read(cx).snapshot(cx);
+-    let start = active.cell_range.start.to_offset(&snapshot);
+-    let end = active.cell_range.end.to_offset(&snapshot);
+-    if start > end {
+-        return;
+-    }
+-    let current: String = snapshot.text_for_range(start..end).collect();
+-    if current.trim() == text.trim() {
+-        cx.notify();
+-        return;
+-    }
+-    let replacement = format!(" {} ", text.trim());
+-    editor.buffer().update(cx, |multibuffer, cx| {
+-        multibuffer.edit([(start..end, replacement)], None, cx);
+-    });
+-    cx.notify();
+-}
+-
+ /// Splits one table row line into cell ranges at unescaped pipes (the GFM
+ /// rule). Each range spans the full text between two pipes, padding included,
+ /// so a cell edit can rewrite it in place. Segments outside the outer pipes
+@@ -1394,7 +1243,6 @@
+     change: TableStructuralChange,
+     cx: &mut Context<Editor>,
+ ) {
+-    commit_active_cell(editor, cx);
+     let Some((table_offsets, structure)) = fresh_table_at(editor, stale_table_range, cx) else {
+         log::warn!("markdown live preview: no table found at click position; ignoring structural change");
+         return;
+@@ -1540,28 +1388,6 @@
+         let max_width = block_cx.max_width;
+         let colors = block_cx.app.theme().colors().clone();
+ 
+-        let (active_range, active_editor) = editor
+-            .upgrade()
+-            .and_then(|entity| {
+-                let editor_ref = entity.read(block_cx.app);
+-                let snapshot = editor_ref
+-                    .buffer()
+-                    .read(block_cx.app)
+-                    .snapshot(block_cx.app);
+-                editor_ref
+-                    .addon::<LivePreviewAddon>()
+-                    .and_then(|addon| addon.active_cell.as_ref())
+-                    .map(|cell| {
+-                        (
+-                            Some(
+-                                cell.cell_range.start.to_offset(&snapshot).0
+-                                    ..cell.cell_range.end.to_offset(&snapshot).0,
+-                            ),
+-                            Some(cell.editor.clone()),
+-                        )
+-                    })
+-            })
+-            .unwrap_or((None, None));
+         let resolved = editor.upgrade().map(|entity| {
+             entity
+                 .read(block_cx.app)
+@@ -1628,14 +1454,6 @@
+                 _ => None,
+             };
+             let weight = column_weights.get(column).copied().unwrap_or(8.);
+-            let is_active = match (&resolved, &active_range) {
+-                (Some(snapshot), Some(active)) => {
+-                    let start = cell_range.start.to_offset(snapshot).0;
+-                    let end = cell_range.end.to_offset(snapshot).0;
+-                    *active == (start..end)
+-                }
+-                _ => false,
+-            };
+             let alignment = structure
+                 .alignments
+                 .get(column)
+@@ -1710,9 +1528,7 @@
+                     }
+                 });
+ 
+-            if is_active && let Some(active_editor) = active_editor.clone() {
+-                cell = cell.child(div().w_full().child(active_editor));
+-            } else if is_sentinel {
++            if is_sentinel {
+                 // Clicking a cell the source omitted first rewrites the table
+                 // in normalized form so the cell exists to edit.
+                 let weak = editor.clone();
+@@ -1777,8 +1593,7 @@
+                     if (event.position - press).magnitude() > 4. {
+                         return;
+                     }
+-                    commit_active_cell(editor, cx);
+-                    if let Some(addon) = editor.addon_mut::<LivePreviewAddon>() {
++                                    if let Some(addon) = editor.addon_mut::<LivePreviewAddon>() {
+                         let already = addon
+                             .selected_table_unit
+                             .as_ref()
+--- a/crates/markdown_live_preview/src/tests.rs
++++ b/crates/markdown_live_preview/src/tests.rs
+@@ -1041,7 +1041,7 @@
+ }
+ 
+ #[gpui::test]
+-async fn test_table_reveals_only_via_button(cx: &mut TestAppContext) {
++async fn test_table_reveals_when_keyboard_selection_enters(cx: &mut TestAppContext) {
+     let mut cx = markdown_test_context(cx).await;
+     cx.set_state(indoc::indoc! {"
+         ˇplain line
+@@ -1053,7 +1053,7 @@
+     cx.executor().run_until_parked();
+     assert_eq!(applied_block_count(&mut cx), 1);
+ 
+-    // Cursor inside the table does NOT reveal its source.
++    // Keyboard navigation into the table reveals source for Vim editing.
+     cx.set_state(indoc::indoc! {"
+         plain line
+ 
+@@ -1062,7 +1062,7 @@
+         | 1 |ˇ 2 |
+     "});
+     cx.executor().run_until_parked();
+-    assert_eq!(applied_block_count(&mut cx), 1);
++    assert_eq!(applied_block_count(&mut cx), 0);
+ 
+     // Marking the block explicitly revealed (what the `</>` button does)
+     // removes the widget while the cursor stays inside.
+@@ -1464,3 +1464,24 @@
+         "A dropped between B and C: {text:?}"
+     );
+ }
++
++#[gpui::test]
++async fn test_cell_click_uses_parent_buffer_without_mutation(cx: &mut TestAppContext) {
++    let mut cx = markdown_test_context(cx).await;
++    cx.set_state("ˇintro\n\n| Name | HP |\n| --- | --- |\n| Éowyn | 12 |\n");
++    cx.executor().run_until_parked();
++    let before = cx.buffer_text();
++    let (weak, cell) = cx.update_editor(|editor, _, cx| {
++        let snapshot = editor.buffer().read(cx).snapshot(cx);
++        let (_, table) = parse_table_at(&snapshot, MultiBufferOffset(7)).unwrap();
++        (cx.weak_entity(), table.rows[0][0].clone())
++    });
++    cx.update(|window, cx| start_cell_edit(weak, cell, window, cx));
++    cx.executor().run_until_parked();
++    assert_eq!(cx.buffer_text(), before);
++    assert_eq!(applied_block_count(&mut cx), 0);
++    cx.update_editor(|editor, window, cx| {
++        assert!(editor.focus_handle(cx).is_focused(window));
++    });
++    cx.assert_editor_state("intro\n\n| Name | HP |\n| --- | --- |\n| ˇÉowyn | 12 |\n");
++}

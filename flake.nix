@@ -41,11 +41,45 @@
       in
       {
         devShells.default = pkgs.mkShell {
+          inputsFrom = [ pkgs.zed-editor ];
           packages = with pkgs; [
             (aspellWithDicts (ps: with ps; [ en ]))
             nushell
             rustToolchain
+            curl
+            git
+            patch
+            pkg-config
+            cmake
+            protobuf
+            clang
+            lld
+            neovim
           ];
+          LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
+          PROTOC = "${pkgs.protobuf}/bin/protoc";
+          LD_LIBRARY_PATH =
+            pkgs.lib.makeLibraryPath (
+              with pkgs;
+              [
+                libxcb
+                libxkbcommon
+                wayland
+                libglvnd
+                vulkan-loader
+                fontconfig
+                freetype
+                openssl
+                zlib
+                zstd
+                bzip2
+                alsa-lib
+                libgit2
+                libxml2
+                stdenv.cc.cc.lib
+              ]
+            )
+            + ":/run/opengl-driver/lib";
         };
 
         formatter = treefmtEval.config.build.wrapper;

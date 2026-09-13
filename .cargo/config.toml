@@ -1,0 +1,4 @@
+[build]
+jobs = 2
+# Match the upstream editor's Tokio configuration and useful symbol names.
+rustflags = ["-C", "symbol-mangling-version=v0", "--cfg", "tokio_unstable"]

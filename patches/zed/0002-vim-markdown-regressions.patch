@@ -1,0 +1,132 @@
+--- a/crates/vim/Cargo.toml
++++ b/crates/vim/Cargo.toml
+@@ -55,6 +55,8 @@
+ zed_actions.workspace = true
+ 
+ [dev-dependencies]
++markdown_live_preview.workspace = true
++tree-sitter-md.workspace = true
+ command_palette = { workspace = true, features = ["test-support"] }
+ editor = { workspace = true, features = ["test-support"] }
+ git_ui = { workspace = true, features = ["test-support"] }
+--- a/crates/vim/src/test.rs
++++ b/crates/vim/src/test.rs
+@@ -3268,3 +3268,5 @@
+         assert_eq!(vim_mode, Some(Mode::Normal));
+     });
+ }
++
++mod campaign_markdown;
+--- /dev/null
++++ b/crates/vim/src/test/campaign_markdown.rs
+@@ -0,0 +1,92 @@
++//! Campaign editor gate: run the upstream Vim engine with live Markdown active.
++use super::*;
++
++async fn context(cx: &mut TestAppContext) -> VimTestContext {
++    cx.update(markdown_live_preview::init);
++    let mut cx = VimTestContext::new_markdown_with_rust(cx).await;
++    cx.language_registry().add(Arc::new(Language::new(
++        LanguageConfig {
++            name: "Markdown-Inline".into(),
++            hidden: true,
++            ..Default::default()
++        },
++        Some(tree_sitter_md::INLINE_LANGUAGE.into()),
++    )));
++    cx
++}
++
++#[gpui::test]
++async fn test_campaign_markdown_change_word_and_undo(cx: &mut TestAppContext) {
++    let mut cx = context(cx).await;
++    cx.set_state("# Heading\n\nMeet **Éˇowyn** by the river.\n", Mode::Normal);
++    cx.executor().run_until_parked();
++    cx.simulate_keystrokes("c i w A r w e n escape");
++    assert_eq!(cx.buffer_text(), "# Heading\n\nMeet **Arwen** by the river.\n");
++    assert_eq!(cx.mode(), Mode::Normal);
++    cx.simulate_keystrokes("u");
++    assert_eq!(cx.buffer_text(), "# Heading\n\nMeet **Éowyn** by the river.\n");
++}
++
++#[gpui::test]
++async fn test_campaign_markdown_table_parent_undo(cx: &mut TestAppContext) {
++    let mut cx = context(cx).await;
++    let before = "intro\n\n| Name | HP |\n| --- | --- |\n| Éowyn | 12 |\n";
++    cx.set_state("intro\n\n| Name | HP |\n| --- | --- |\n| Éowyn | ˇ12 |\n", Mode::Normal);
++    cx.executor().run_until_parked();
++    // Cell editing stays in the full editor, with the usual Vim transaction.
++    cx.simulate_keystrokes("c i w 9 escape");
++    assert_eq!(cx.buffer_text(), before.replace("12", "9"));
++    cx.simulate_keystrokes("u");
++    assert_eq!(cx.buffer_text(), before);
++    cx.simulate_keystrokes("ctrl-r");
++    assert_eq!(cx.buffer_text(), before.replace("12", "9"));
++}
++
++#[gpui::test]
++async fn test_campaign_markdown_source_toggle_preserves_text_and_vim(cx: &mut TestAppContext) {
++    let mut cx = context(cx).await;
++    cx.set_state("ˇintro\n\n# Heading\n\n**雨** [[Unknown|label]] ![map](missing.png)\n", Mode::Normal);
++    cx.executor().run_until_parked();
++    let original = cx.buffer_text();
++    for _ in 0..4 {
++        cx.dispatch_action(markdown_live_preview::ToggleLivePreview);
++        cx.executor().run_until_parked();
++        assert_eq!(cx.buffer_text(), original);
++        assert_eq!(cx.mode(), Mode::Normal);
++    }
++    cx.simulate_keystrokes("i X escape u");
++    assert_eq!(cx.buffer_text(), original);
++}
++
++// Keep the upstream recording harness intact. These new comparisons need a
++// real Neovim until reviewed recordings have been generated; do not silently
++// run them against missing or invented recordings.
++#[cfg(feature = "neovim")]
++#[gpui::test]
++async fn test_campaign_markdown_neovim_commands(cx: &mut TestAppContext) {
++    cx.update(markdown_live_preview::init);
++    let mut cx = NeovimBackedTestContext::new_markdown_with_rust(cx).await;
++    cx.language_registry().add(Arc::new(Language::new(
++        LanguageConfig {
++            name: "Markdown-Inline".into(),
++            hidden: true,
++            ..Default::default()
++        },
++        Some(tree_sitter_md::INLINE_LANGUAGE.into()),
++    )));
++    for (state, commands) in [
++        ("ˇalpha beta gamma\n\n**bold** and *italic*\n", "2 d w u ctrl-r"),
++        ("ˇalpha beta\n\n**bold** and *italic*\n", "m a w backtick a"),
++        ("ˇalpha beta\n\n**bold** and *italic*\n", "\" a y i w w \" a p"),
++        ("ˇalpha beta gamma\n\n**bold**\n", "d w . u u"),
++        ("ˇalpha beta gamma\n\n**bold**\n", "q a x q @ a"),
++        ("ˇintro\n\n**bold** and *italic*\nend\n", "shift-v 3 j d u"),
++        ("ˇintro\n\n**bold** and *italic*\nend\n", "/ b o l d enter n"),
++        ("ˇintro\n\n# Heading\n\n| HP |\n| --- |\n| 12 |\n", "shift-g k 0 w c i w 9 escape u"),
++    ] {
++        cx.set_shared_state(state).await;
++        cx.executor().run_until_parked();
++        cx.simulate_shared_keystrokes(commands).await;
++        cx.shared_state().await.assert_matches();
++    }
++}
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -20337,6 +20337,7 @@
+  "language",
+  "log",
+  "lsp",
++ "markdown_live_preview",
+  "markdown_preview",
+  "menu",
+  "multi_buffer",
+@@ -20361,6 +20362,7 @@
+  "theme",
+  "theme_settings",
+  "tokio",
++ "tree-sitter-md",
+  "ui",
+  "util",
+  "util_macros",

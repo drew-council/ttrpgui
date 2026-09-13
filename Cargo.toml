@@ -1,6 +1,60 @@
 [dependencies]
+anyhow = "1"
+semver = "1"
+uuid = {version = "1", features = ["v4"]}
+gpui_platform = {path = "upstream/zed/crates/gpui_platform", features = ["wayland", "x11"]}
+assets = {path = "upstream/zed/crates/assets"}
+client = {path = "upstream/zed/crates/client"}
+command_palette = {path = "upstream/zed/crates/command_palette"}
+db = {path = "upstream/zed/crates/db"}
+editor = {path = "upstream/zed/crates/editor"}
+feature_flags = {path = "upstream/zed/crates/feature_flags"}
+file_finder = {path = "upstream/zed/crates/file_finder"}
+fs = {path = "upstream/zed/crates/fs"}
+gpui = {path = "upstream/zed/crates/gpui", default-features = false}
+gpui_tokio = {path = "upstream/zed/crates/gpui_tokio"}
+language = {path = "upstream/zed/crates/language"}
+grammars = {path = "upstream/zed/crates/grammars"}
+tree-sitter-md = {git = "https://github.com/zed-industries/tree-sitter-markdown", rev = "b596e737286780d7bfa9fcddceaeeb754574b352"}
+zlog = {path = "upstream/zed/crates/zlog"}
+markdown_live_preview = {path = "upstream/zed/crates/markdown_live_preview"}
+menu = {path = "upstream/zed/crates/menu"}
+node_runtime = {path = "upstream/zed/crates/node_runtime"}
+paths = {path = "upstream/zed/crates/paths"}
+project = {path = "upstream/zed/crates/project"}
+release_channel = {path = "upstream/zed/crates/release_channel"}
+reqwest_client = {path = "upstream/zed/crates/reqwest_client"}
+search = {path = "upstream/zed/crates/search"}
+session = {path = "upstream/zed/crates/session"}
+settings = {path = "upstream/zed/crates/settings"}
+theme = {path = "upstream/zed/crates/theme"}
+theme_settings = {path = "upstream/zed/crates/theme_settings"}
+util = {path = "upstream/zed/crates/util"}
+vim = {path = "upstream/zed/crates/vim"}
+workspace = {path = "upstream/zed/crates/workspace"}
+zed_actions = {path = "upstream/zed/crates/zed_actions"}
 
 [package]
 name = "ttrpgui"
 version = "0.1.0"
 edition = "2024"
+license = "GPL-3.0-or-later"
+publish = false
+
+[patch.crates-io]
+async-process = {git = "https://github.com/zed-industries/async-process.git", rev = "0b6d6713570af61806e1e5cb40e0f757cb93fd9d"}
+async-task = {git = "https://github.com/smol-rs/async-task.git", rev = "b4486cd71e4e94fbda54ce6302444de14f4d190e"}
+windows-capture = {git = "https://github.com/zed-industries/windows-capture.git", rev = "f0d6c1b6691db75461b732f6d5ff56eed002eeb9"}
+calloop = {git = "https://github.com/zed-industries/calloop"}
+livekit = {git = "https://github.com/zed-industries/livekit-rust-sdks", rev = "d0e27be0cdad89eadab3e36207cda0a2b6e359ee"}
+libwebrtc = {git = "https://github.com/zed-industries/livekit-rust-sdks", rev = "d0e27be0cdad89eadab3e36207cda0a2b6e359ee"}
+notify = {git = "https://github.com/zed-industries/notify", rev = "0890bbb8ca40a4b5d1f67031698dd7918b37d991"}
+notify-types = {git = "https://github.com/zed-industries/notify", rev = "0890bbb8ca40a4b5d1f67031698dd7918b37d991"}
+webrtc-sys = {git = "https://github.com/zed-industries/livekit-rust-sdks", rev = "d0e27be0cdad89eadab3e36207cda0a2b6e359ee"}
+
+[profile.dev]
+debug = 0
+incremental = true
+
+[profile.test]
+debug = 0

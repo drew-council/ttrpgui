@@ -34,7 +34,10 @@
   };
 
   settings = {
-    excludes = [ ];
+    excludes = [
+      "upstream/zed/**"
+      ".editor-proof/**"
+    ];
     formatter = { };
   };
 }

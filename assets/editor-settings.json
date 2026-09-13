@@ -1,0 +1,20 @@
+{
+  "vim_mode": true,
+  "theme": "Catppuccin Mocha",
+  "telemetry": {
+    "diagnostics": false,
+    "metrics": false
+  },
+  "auto_update": false,
+  "soft_wrap": "editor_width",
+  "show_edit_predictions": false,
+  "markdown_live_preview": {
+    "enabled": true
+  },
+  "preview_tabs": {
+    "enabled": false
+  },
+  "session": {
+    "trust_all_worktrees": false
+  }
+}
