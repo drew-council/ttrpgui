@@ -4,15 +4,51 @@ use gpui::{App, AppContext, Context, Entity, Focusable, Window};
 
 pub struct Fields {
     pub inputs: Vec<(&'static str, Entity<Editor>)>,
+    pub multiline: bool,
 }
 impl Fields {
     pub fn new(values: &[(&'static str, String)], window: &mut Window, cx: &mut App) -> Self {
+        Self::build(values, false, window, cx)
+    }
+    pub fn multiline(
+        label: &'static str,
+        value: String,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self {
+        Self::build(&[(label, value)], true, window, cx)
+    }
+    fn build(
+        values: &[(&'static str, String)],
+        multiline: bool,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> Self {
         Self {
+            multiline,
             inputs: values
                 .iter()
                 .map(|(label, value)| {
-                    let editor = cx.new(|cx| Editor::single_line(window, cx));
-                    editor.update(cx, |e, cx| e.set_text(value.as_str(), window, cx));
+                    let editor = cx.new(|cx| {
+                        if multiline {
+                            Editor::multi_line(window, cx)
+                        } else {
+                            Editor::single_line(window, cx)
+                        }
+                    });
+                    editor.update(cx, |e, cx| {
+                        e.set_text(value.as_str(), window, cx);
+                        // Prefill is the draft's initial state, never an edit
+                        // that can merge with the user's first Vim transaction.
+                        if let Some(buffer) = e.buffer().read(cx).as_singleton() {
+                            buffer.update(cx, |buffer, _| {
+                                buffer.finalize_last_transaction();
+                                if let Some(entry) = buffer.peek_undo_stack() {
+                                    buffer.forget_transaction(entry.transaction_id());
+                                }
+                            });
+                        }
+                    });
                     (*label, editor)
                 })
                 .collect(),
@@ -43,20 +79,17 @@ impl Fields {
             window.focus(&e.read(cx).focus_handle(cx), cx);
         }
     }
-    pub fn render<T: 'static>(&self, _cx: &mut Context<T>) -> gpui::Div {
+    pub fn render<T: 'static>(&self, _cx: &mut Context<T>) -> gpui_component::form::Form {
         use gpui::{div, prelude::*};
-        div()
-            .flex()
-            .flex_col()
-            .gap_2()
-            .children(self.inputs.iter().map(|(label, input)| {
-                div().flex().flex_col().gap_1().child(*label).child(
-                    div()
-                        .p_2()
-                        .bg(gpui::rgb(palette::SURFACE))
-                        .rounded_md()
-                        .child(input.clone()),
-                )
-            }))
+        gpui_component::form::v_form().children(self.inputs.iter().map(|(label, input)| {
+            gpui_component::form::field().label(*label).child(
+                div()
+                    .p_2()
+                    .bg(gpui::rgb(palette::SURFACE))
+                    .rounded_md()
+                    .when(self.multiline, |frame| frame.h(gpui::px(220.)))
+                    .child(input.clone()),
+            )
+        }))
     }
 }

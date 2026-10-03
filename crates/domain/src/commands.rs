@@ -93,6 +93,25 @@ pub enum Command {
     },
 }
 
+impl Command {
+    fn affects_documents(&self) -> bool {
+        matches!(
+            self,
+            Self::CreateCreature(_)
+                | Self::UpdateCreature(_)
+                | Self::CreateLocation(_)
+                | Self::UpdateLocation(_)
+                | Self::CreateSession(_)
+                | Self::UpdateSession(_)
+                | Self::CreateNote(_)
+                | Self::UpdateNote(_)
+                | Self::CreateEncounter { .. }
+                | Self::RenameEncounter { .. }
+                | Self::SaveToLibrary { .. }
+        )
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Change {
     pub revision: u64,
@@ -105,8 +124,9 @@ pub struct Change {
 pub struct CampaignEngine {
     state: Campaign,
     revision: u64,
-    undo: Vec<Campaign>,
-    redo: Vec<Campaign>,
+    documents_revision: u64,
+    undo: Vec<(Campaign, bool)>,
+    redo: Vec<(Campaign, bool)>,
 }
 impl CampaignEngine {
     pub fn new(state: Campaign) -> Result<Self> {
@@ -114,6 +134,7 @@ impl CampaignEngine {
         Ok(Self {
             state,
             revision: 0,
+            documents_revision: 0,
             undo: vec![],
             redo: vec![],
         })
@@ -124,6 +145,10 @@ impl CampaignEngine {
     pub fn revision(&self) -> u64 {
         self.revision
     }
+    /// Changes to page metadata and paths, independent of combat state.
+    pub fn documents_revision(&self) -> u64 {
+        self.documents_revision
+    }
     pub fn can_undo(&self) -> bool {
         !self.undo.is_empty()
     }
@@ -131,18 +156,24 @@ impl CampaignEngine {
         !self.redo.is_empty()
     }
     pub fn execute(&mut self, command: Command) -> Result<Change> {
+        let affects_documents = command.affects_documents();
         let mut candidate = self.state.clone();
         let added_participants = candidate.apply(command)?;
         candidate.validate()?;
         let changed = candidate != self.state;
         if changed {
-            self.undo
-                .push(std::mem::replace(&mut self.state, candidate));
+            self.undo.push((
+                std::mem::replace(&mut self.state, candidate),
+                affects_documents,
+            ));
             if self.undo.len() > 100 {
                 self.undo.remove(0);
             }
             self.redo.clear();
             self.revision += 1;
+            if affects_documents {
+                self.documents_revision += 1;
+            }
         }
         Ok(Change {
             revision: self.revision,
@@ -151,19 +182,29 @@ impl CampaignEngine {
         })
     }
     pub fn undo(&mut self) -> bool {
-        let Some(previous) = self.undo.pop() else {
+        let Some((previous, affects_documents)) = self.undo.pop() else {
             return false;
         };
-        self.redo.push(std::mem::replace(&mut self.state, previous));
+        self.redo.push((
+            std::mem::replace(&mut self.state, previous),
+            affects_documents,
+        ));
         self.revision += 1;
+        if affects_documents {
+            self.documents_revision += 1;
+        }
         true
     }
     pub fn redo(&mut self) -> bool {
-        let Some(next) = self.redo.pop() else {
+        let Some((next, affects_documents)) = self.redo.pop() else {
             return false;
         };
-        self.undo.push(std::mem::replace(&mut self.state, next));
+        self.undo
+            .push((std::mem::replace(&mut self.state, next), affects_documents));
         self.revision += 1;
+        if affects_documents {
+            self.documents_revision += 1;
+        }
         true
     }
 }

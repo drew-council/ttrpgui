@@ -1,6 +1,28 @@
 use gpui::{prelude::*, *};
 use std::{path::PathBuf, sync::Arc};
 
+pub fn init_controls(cx: &mut App) {
+    gpui_component::init(cx);
+    gpui_component::Theme::change(gpui_component::ThemeMode::Dark, None, cx);
+    let theme = gpui_component::Theme::global_mut(cx);
+    theme.background = rgb(palette::BASE).into();
+    theme.foreground = rgb(palette::TEXT).into();
+    theme.secondary = rgb(palette::SURFACE).into();
+    theme.secondary_foreground = rgb(palette::TEXT).into();
+    theme.secondary_hover = rgb(palette::SELECTED_SURFACE).into();
+    theme.secondary_active = rgb(palette::SELECTED_SURFACE).into();
+    theme.primary = rgb(palette::ACCENT).into();
+    theme.primary_foreground = rgb(palette::BASE).into();
+    theme.primary_hover = rgb(palette::ACCENT).into();
+    theme.primary_active = rgb(palette::ACCENT).into();
+    theme.ring = rgb(palette::ACCENT).into();
+    theme.link = rgb(palette::LINK).into();
+    theme.link_hover = rgb(palette::LINK).into();
+    theme.link_active = rgb(palette::LINK).into();
+    theme.border = rgb(palette::SELECTED_SURFACE).into();
+    theme.shadow = false;
+}
+
 pub fn portrait(path: Option<PathBuf>, name: &str) -> AnyElement {
     let initials = name
         .split_whitespace()

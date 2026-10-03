@@ -14,7 +14,7 @@ def main [--release] {
   let binary = ($root | path join target $profile ttrpgui)
   mkdir dist
   let source = ($root | path join dist source.tar.gz)
-  checked tar --exclude=./target --exclude=./upstream/zed --exclude=./.git --exclude=./.editor-proof --exclude=./dist --exclude=./.direnv -czf $source . | ignore
+  checked tar --exclude=./target --exclude=./upstream/zed --exclude=./upstream/gpui-component --exclude=./.git --exclude=./.editor-proof --exclude=./dist --exclude=./.direnv -czf $source . | ignore
   let runtime = (checked nix build .#runtime --no-link --print-out-paths)
   let system = (checked nix eval --impure --raw --expr builtins.currentSystem)
   let nixpkgs = (checked nix eval --raw $".#legacyPackages.($system).path")

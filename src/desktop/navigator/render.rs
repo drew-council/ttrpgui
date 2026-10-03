@@ -2,7 +2,7 @@ use super::*;
 use crate::desktop::visuals::palette;
 
 impl Render for Navigator {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let model = self.model.read(cx);
         let title = model.engine.state().config.name.clone();
         let status = model
@@ -10,7 +10,7 @@ impl Render for Navigator {
             .clone()
             .or_else(|| self.error.clone())
             .unwrap_or_else(|| {
-                if model.saves_pending > 0 {
+                if model.saves_pending > 0 || model.link_updates_pending > 0 {
                     "Saving…".into()
                 } else if model.dirty {
                     "Unsaved changes".into()
@@ -37,6 +37,8 @@ impl Render for Navigator {
             .track_focus(&self.focus)
             .key_context(if self.form.is_some() {
                 "CampaignField"
+            } else if self.focus.is_focused(window) {
+                "CampaignBrowser"
             } else {
                 "CampaignPicker"
             })
@@ -79,6 +81,21 @@ impl Render for Navigator {
             .child(div().text_lg().child(title))
             .child(div().text_xs().child(status));
         content = content
+            .on_action(
+                cx.listener(|this, _: &CollapseSession, _, cx| this.expand_session(false, cx)),
+            )
+            .on_action(cx.listener(|this, _: &ExpandSession, _, cx| this.expand_session(true, cx)))
+            .on_action(cx.listener(|this, _: &CreateSession, window, cx| {
+                this.create(Create::Session, window, cx)
+            }))
+            .on_action(cx.listener(|this, _: &CreateEncounter, window, cx| {
+                if let Some(session) = this.selected_session(cx) {
+                    this.create(Create::Encounter(session), window, cx);
+                }
+            }))
+            .on_action(cx.listener(|this, _: &FocusPageFilter, window, cx| {
+                window.focus(&this.filter.read(cx).focus_handle(cx), cx);
+            }))
             .on_action(cx.listener(
                 |this, _: &crate::desktop::encounter::SubmitField, window, cx| {
                     this.submit(window, cx)
@@ -251,7 +268,8 @@ impl Render for Navigator {
                             .flex_col()
                             .border_1()
                             .border_color(rgb(
-                                if this.filter.read(cx).focus_handle(cx).is_focused(window)
+                                if (this.filter.read(cx).focus_handle(cx).is_focused(window)
+                                    || this.focus.is_focused(window))
                                     && this.picker_cursor == index
                                 {
                                     palette::ACCENT
@@ -282,13 +300,31 @@ impl Render for Navigator {
                             row = row.pl_4();
                         }
                         if let DocumentId::Session(session) = id {
-                            row = row.child(button(
-                                format!("encounter-{session}"),
-                                "+ Encounter",
-                                cx.listener(move |this, _, window, cx| {
-                                    this.create(Create::Encounter(session), window, cx)
-                                }),
-                            ));
+                            let expanded = !this.collapsed_sessions.contains(&session);
+                            row = row.child(
+                                div()
+                                    .flex()
+                                    .gap_1()
+                                    .child(button(
+                                        format!("expand-{session}"),
+                                        if expanded { "Collapse" } else { "Expand" },
+                                        cx.listener(move |this, _, _, cx| {
+                                            if expanded {
+                                                this.collapsed_sessions.insert(session);
+                                            } else {
+                                                this.collapsed_sessions.remove(&session);
+                                            }
+                                            cx.notify();
+                                        }),
+                                    ))
+                                    .child(button(
+                                        format!("encounter-{session}"),
+                                        "+ Encounter",
+                                        cx.listener(move |this, _, window, cx| {
+                                            this.create(Create::Encounter(session), window, cx)
+                                        }),
+                                    )),
+                            );
                         }
                         row.into_any_element()
                     })
@@ -305,7 +341,7 @@ impl Render for Navigator {
                 cx.listener(|this, _, _, cx| this.model.update(cx, |m, cx| m.restore_unsaved(cx))),
             ));
         }
-        content.child(list).child(button(
+        content.child(list).child(div().text_xs().child("Esc: browse · j/k: move · h/l: collapse/expand · n: encounter · s: session · /: find")).child(button(
             "retry-save",
             "Retry save",
             cx.listener(|this, _, _, cx| this.model.update(cx, |m, cx| m.save(cx))),

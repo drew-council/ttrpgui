@@ -2,6 +2,7 @@
 campaign_domain = {path = "crates/domain"}
 campaign_storage = {path = "crates/storage"}
 campaign_documents = {path = "crates/documents"}
+gpui-component = {path = "upstream/gpui-component"}
 ui = {path = "upstream/zed/crates/ui"}
 anyhow = "1"
 futures = "0.3"
@@ -49,6 +50,7 @@ license = "GPL-3.0-or-later"
 publish = false
 
 [patch.crates-io]
+gpui = {path = "upstream/zed/crates/gpui"}
 async-process = {git = "https://github.com/zed-industries/async-process.git", rev = "0b6d6713570af61806e1e5cb40e0f757cb93fd9d"}
 async-task = {git = "https://github.com/smol-rs/async-task.git", rev = "b4486cd71e4e94fbda54ce6302444de14f4d190e"}
 windows-capture = {git = "https://github.com/zed-industries/windows-capture.git", rev = "f0d6c1b6691db75461b732f6d5ff56eed002eeb9"}
@@ -65,5 +67,5 @@ debug = 0
 
 [workspace]
 members = ["crates/domain", "crates/storage", "crates/documents"]
-exclude = ["upstream/zed"]
+exclude = ["upstream/zed", "upstream/gpui-component"]
 resolver = "2"

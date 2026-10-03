@@ -1,7 +1,9 @@
 mod persistence;
 mod rehearsal;
 mod render;
-pub use rehearsal::verify;
+mod session_rehearsal;
+pub use rehearsal::{verify, verify_description};
+pub use session_rehearsal::verify_session;
 
 use super::{
     campaign::{CampaignModel, open_document},
@@ -28,10 +30,15 @@ actions!(
         CombatRename,
         CombatDescription,
         CombatAdd,
+        CombatCreate,
         CombatUndo,
         CombatRedo,
         CombatCancel,
         CombatMenu,
+        StartEncounter,
+        CompleteEncounter,
+        ResetEncounterHealth,
+        SaveParticipantToLibrary,
         LibraryNext,
         LibraryPrevious,
         LibraryChoose,
@@ -45,8 +52,35 @@ actions!(
 );
 pub fn init(cx: &mut App) {
     macro_rules! bind { ($($key:literal=>$action:ident),* $(,)?)=> { cx.bind_keys([$(KeyBinding::new($key,$action,Some("CampaignEncounter"))),*]); }; }
-    bind!("space"=>CombatSelect,"j"=>CombatDown,"down"=>CombatDown,"k"=>CombatUp,"up"=>CombatUp,"g"=>CombatFirst,"shift-g"=>CombatLast,"home"=>CombatFirst,"end"=>CombatLast,"+"=>CombatHeal,"="=>CombatHeal,"-"=>CombatDamage,"i"=>CombatInitiative,"n"=>CombatRename,"d"=>CombatDescription,"a"=>CombatAdd,"u"=>CombatUndo,"ctrl-r"=>CombatRedo,"escape"=>CombatCancel);
+    bind!("space"=>CombatSelect,"j"=>CombatDown,"down"=>CombatDown,"k"=>CombatUp,"up"=>CombatUp,"g"=>CombatFirst,"shift-g"=>CombatLast,"home"=>CombatFirst,"end"=>CombatLast,"+"=>CombatHeal,"="=>CombatHeal,"-"=>CombatDamage,"_"=>CombatDamage,"i"=>CombatInitiative,"r"=>CombatRename,"n"=>CombatCreate,"d"=>CombatDescription,"a"=>CombatAdd,"u"=>CombatUndo,"ctrl-r"=>CombatRedo,"escape"=>CombatCancel);
     cx.bind_keys([
+        KeyBinding::new("ctrl-shift-s", StartEncounter, Some("CampaignEncounter")),
+        KeyBinding::new("ctrl-shift-c", CompleteEncounter, Some("CampaignEncounter")),
+        KeyBinding::new(
+            "ctrl-shift-h",
+            ResetEncounterHealth,
+            Some("CampaignEncounter"),
+        ),
+        KeyBinding::new(
+            "ctrl-shift-l",
+            SaveParticipantToLibrary,
+            Some("CampaignEncounter"),
+        ),
+        KeyBinding::new(
+            "enter",
+            SubmitField,
+            Some("CampaignDescription > Editor && vim_mode == normal"),
+        ),
+        KeyBinding::new(
+            "escape",
+            CancelField,
+            Some("CampaignDescription > Editor && vim_mode == normal"),
+        ),
+        KeyBinding::new(
+            "ctrl-enter",
+            SubmitField,
+            Some("CampaignDescription > Editor"),
+        ),
         KeyBinding::new("down", LibraryNext, Some("CampaignLibrary > Editor")),
         KeyBinding::new("up", LibraryPrevious, Some("CampaignLibrary > Editor")),
         KeyBinding::new("enter", LibraryChoose, Some("CampaignLibrary > Editor")),
@@ -226,7 +260,11 @@ impl EncounterView {
                 .action_disabled_when(completed, "Heal", Box::new(CombatHeal))
                 .action_disabled_when(completed, "Damage", Box::new(CombatDamage))
                 .action_disabled_when(completed, "Set initiative", Box::new(CombatInitiative))
-                .action_disabled_when(completed, "Rename", Box::new(CombatRename))
+                .action_disabled_when(
+                    completed || !self.selected.is_empty(),
+                    "Rename",
+                    Box::new(CombatRename),
+                )
                 .action_disabled_when(
                     completed,
                     "Encounter description",
@@ -258,8 +296,34 @@ impl EncounterView {
         self.reconcile(cx);
         cx.notify();
     }
+    fn save_participant_to_library(&mut self, cx: &mut Context<Self>) {
+        if let Some(participant) = self.cursor {
+            self.command(
+                Command::SaveToLibrary {
+                    encounter: self.id,
+                    participant,
+                    id: CreatureId::new(),
+                },
+                cx,
+            );
+        }
+    }
     fn begin(&mut self, kind: Edit, window: &mut Window, cx: &mut Context<Self>) {
-        let participant = self.cursor.and_then(|id| {
+        if matches!(kind, Edit::Rename) && !self.selected.is_empty() {
+            self.error = Some("Clear selection before renaming a participant".into());
+            cx.notify();
+            return;
+        }
+        let participant_id = if matches!(kind, Edit::Description) && !self.selected.is_empty() {
+            self.model.read(cx).engine.state().encounters[&self.id]
+                .sorted_participants()
+                .into_iter()
+                .find(|p| self.selected.contains(&p.id))
+                .map(|p| p.id)
+        } else {
+            self.cursor
+        };
+        let participant = participant_id.and_then(|id| {
             self.model
                 .read(cx)
                 .engine
@@ -309,7 +373,11 @@ impl EncounterView {
                 ("Initiative (optional)", String::new()),
             ],
         };
-        let fields = Fields::new(&values, window, cx);
+        let fields = if matches!(kind, Edit::Description) {
+            Fields::multiline(values[0].0, values[0].1.clone(), window, cx)
+        } else {
+            Fields::new(&values, window, cx)
+        };
         fields.focus(window, cx);
         self.edit = Some((kind, fields));
         self.library = false;
@@ -418,6 +486,22 @@ impl EncounterView {
     }
     fn key(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
         let key = event.keystroke.key.as_str();
+        if let Some((Edit::Description, fields)) = &self.edit {
+            if key == "enter" && event.keystroke.modifiers.control {
+                self.submit(window, cx);
+                cx.stop_propagation();
+                return;
+            }
+            if key == "tab" {
+                return;
+            }
+            let mode = fields.inputs[0].1.update(cx, |e, cx| {
+                e.key_context(window, cx).get("vim_mode").cloned()
+            });
+            if mode.as_deref() != Some("normal") {
+                return;
+            }
+        }
         if key == "tab" {
             if let Some((_, fields)) = &self.edit {
                 fields.cycle(event.keystroke.modifiers.shift, window, cx);
@@ -457,8 +541,8 @@ impl EncounterView {
                     .position(|p| Some(p.id) == self.cursor)
                     .unwrap_or(0);
                 let next = match key {
-                    "j" | "down" => (current + 1).min(rows.len() - 1),
-                    "k" | "up" => current.saturating_sub(1),
+                    "j" | "down" => (current + 1) % rows.len(),
+                    "k" | "up" => (current + rows.len() - 1) % rows.len(),
                     "end" => rows.len() - 1,
                     "g" if event.keystroke.modifiers.shift => rows.len() - 1,
                     _ => 0,
@@ -474,13 +558,14 @@ impl EncounterView {
                 }
             }
             "+" | "=" => self.begin(Edit::Health(1), window, cx),
-            "-" => self.begin(Edit::Health(-1), window, cx),
+            "-" | "_" => self.begin(Edit::Health(-1), window, cx),
             "i" => self.begin(Edit::Initiative, window, cx),
-            "n" => self.begin(Edit::Rename, window, cx),
+            "r" if event.keystroke.modifiers.control => self.model.update(cx, |m, cx| m.redo(cx)),
+            "r" => self.begin(Edit::Rename, window, cx),
+            "n" => self.begin(Edit::Local, window, cx),
             "d" => self.begin(Edit::Description, window, cx),
             "a" => self.open_library(window, cx),
             "u" => self.model.update(cx, |m, cx| m.undo(cx)),
-            "r" if event.keystroke.modifiers.control => self.model.update(cx, |m, cx| m.redo(cx)),
             "escape" => {
                 self.selected.clear();
                 self.library = false;

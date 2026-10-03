@@ -11,6 +11,7 @@ def main [--destination: path] {
   let root = ($env.FILE_PWD | path dirname)
   let pin = (open ($root | path join upstream zed.lock.toml))
   let target = ($destination | default ($root | path join upstream zed))
+  checked nu ($root | path join scripts bootstrap-controls.nu) --destination ($target | path dirname | path join gpui-component)
   let patches = ($pin.patches | each {|p| $root | path join $p })
   let fingerprint = ([$pin.revision $pin.sha256 ...($patches | each {|p| open --raw $p })] | str join "\n" | hash sha256)
   let marker = ($target | path join .ttrpgui-source)

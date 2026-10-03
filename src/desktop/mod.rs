@@ -4,20 +4,30 @@ mod editor_workspace;
 mod encounter;
 mod fields;
 mod link_completion;
+mod link_maintenance;
+mod markdown_actions;
 mod navigator;
+mod performance;
 mod persistence;
 mod rehearsal;
 mod visuals;
+mod watcher;
 
 use std::{cell::Cell, path::PathBuf, rc::Rc, sync::Arc, time::Duration};
 
 use anyhow::Context as _;
 use gpui::{App, AppContext as _, UpdateGlobal};
 use settings::SettingsStore;
+use theme::ActiveTheme as _;
 use workspace::{AppState, OpenMode, Workspace};
 
 /// Compose the native campaign app using one Zed/GPUI dependency graph.
-pub fn run(smoke: bool, campaign_root: Option<PathBuf>) -> anyhow::Result<()> {
+pub fn run(
+    smoke: bool,
+    campaign_root: Option<PathBuf>,
+    session_probe: Option<bool>,
+    performance_probe: bool,
+) -> anyhow::Result<()> {
     zlog::init();
     zlog::init_output_stderr();
     let root = if let Some(path) = std::env::var_os("TTRPGUI_DATA_DIR") {
@@ -40,7 +50,9 @@ pub fn run(smoke: bool, campaign_root: Option<PathBuf>) -> anyhow::Result<()> {
     instance
         .try_lock()
         .context("a ttrpgui instance is already running")?;
-    let data = if smoke {
+    let data = if session_probe.is_some() {
+        root.join("session-rehearsal")
+    } else if smoke {
         root.join(format!("smoke-{}", uuid::Uuid::new_v4()))
     } else {
         root.clone()
@@ -70,6 +82,9 @@ pub fn run(smoke: bool, campaign_root: Option<PathBuf>) -> anyhow::Result<()> {
         paths.push(path);
     }
 
+    if performance_probe {
+        performance::seed(&data.join("campaign"))?;
+    }
     let campaign = if smoke && campaign_root.is_none() {
         None
     } else {
@@ -93,18 +108,28 @@ pub fn run(smoke: bool, campaign_root: Option<PathBuf>) -> anyhow::Result<()> {
     };
     application.with_assets(assets::Assets).run(move |cx| {
         if smoke {
-            cx.spawn(async |cx| {
+            let deadline_outcome = result.clone();
+            cx.spawn(async move |cx| {
                 cx.background_executor()
                     .timer(Duration::from_secs(15))
                     .await;
                 cx.update(|cx| {
+                    deadline_outcome.set(false);
                     eprintln!("Editor smoke test exceeded its 15-second deadline");
                     cx.quit();
                 });
             })
             .detach();
         }
-        if let Err(error) = initialize(cx, paths, smoke, result, campaign) {
+        if let Err(error) = initialize(
+            cx,
+            paths,
+            smoke,
+            result,
+            campaign,
+            session_probe,
+            performance_probe,
+        ) {
             eprintln!("Failed to start editor proof: {error:#}");
             cx.quit();
         }
@@ -113,7 +138,7 @@ pub fn run(smoke: bool, campaign_root: Option<PathBuf>) -> anyhow::Result<()> {
         persistence.finish()?;
     }
     drop(instance);
-    if smoke {
+    if smoke && session_probe.is_none() {
         std::fs::remove_dir_all(data)?;
     }
     anyhow::ensure!(outcome.get(), "editor startup or verification failed");
@@ -126,6 +151,8 @@ fn initialize(
     smoke: bool,
     outcome: Rc<Cell<bool>>,
     campaign: Option<campaign::CampaignModel>,
+    session_probe: Option<bool>,
+    performance_probe: bool,
 ) -> anyhow::Result<()> {
     release_channel::init(semver::Version::new(0, 1, 0), cx);
     cx.set_global(db::AppDatabase::new());
@@ -142,6 +169,7 @@ fn initialize(
         include_bytes!("../../assets/themes/catppuccin-mauve.json"),
     )?;
     theme_settings::reload_theme(cx);
+    visuals::init_controls(cx);
     assets::Assets.load_fonts(cx)?;
     menu::init();
     zed_actions::init();
@@ -186,6 +214,12 @@ fn initialize(
                 .with_queries(grammars::load_queries(name))?,
         ));
     }
+    languages.set_theme(cx.theme().clone());
+    cx.observe_global::<theme::GlobalTheme>({
+        let languages = languages.clone();
+        move |cx| languages.set_theme(cx.theme().clone())
+    })
+    .detach();
     let user_store = cx.new(|cx| client::UserStore::new(client.clone(), cx));
     let workspace_store = cx.new(|cx| workspace::WorkspaceStore::new(client.clone(), cx));
     let session = gpui::block_on(session::Session::new(
@@ -216,6 +250,7 @@ fn initialize(
     vim::init(cx);
     markdown_live_preview::init(cx);
     editor_workspace::init(cx)?;
+    markdown_actions::init(cx);
     encounter::init(cx);
     navigator::init(cx);
     cx.bind_keys([gpui::KeyBinding::new(
@@ -244,7 +279,8 @@ fn initialize(
                 app_session::init(campaign.clone(), &workspace, window, cx);
                 if let Some(model) = &campaign {
                     link_completion::init(model, &workspace, window, cx);
-                    campaign::watch(model, &workspace, cx);
+                    link_maintenance::init(model, &workspace, cx);
+                    watcher::watch(model, &workspace, cx);
                     let panel = cx.new(|cx| {
                         navigator::Navigator::new(model.clone(), workspace.downgrade(), window, cx)
                     });
@@ -264,9 +300,9 @@ fn initialize(
                                 .active_encounter()
                                 .map(|e| campaign_documents::DocumentId::Encounter(e.id))
                         });
-                    if let Some(first) =
-                        first.filter(|_| workspace.read(cx).items(cx).next().is_none())
-                    {
+                    if let Some(first) = first.filter(|_| {
+                        session_probe.is_none() && workspace.read(cx).items(cx).next().is_none()
+                    }) {
                         campaign::open_document(model, &workspace.downgrade(), first, window, cx);
                     }
                 }
@@ -292,8 +328,72 @@ fn initialize(
                     }
                     if !smoke {
                         outcome.set(true);
+                        if std::env::var_os("TTRPGUI_NATIVE_CHECK").is_some() {
+                            let workspace = workspace.clone();
+                            let window = opened.window.into();
+                            cx.spawn(async move |cx| {
+                                if let Err(error) =
+                                    rehearsal::native_note(&workspace, window, cx).await
+                                {
+                                    eprintln!("Native editor check failed: {error:#}");
+                                }
+                            })
+                            .detach();
+                        }
+                    }
+                    if performance_probe {
+                        let result = performance::verify(
+                            campaign.as_ref().unwrap(),
+                            &workspace,
+                            opened.window.into(),
+                            cx,
+                        )
+                        .await;
+                        if let Err(error) = &result {
+                            eprintln!("Performance rehearsal failed: {error:#}");
+                        }
+                        outcome.set(result.is_ok());
+                        cx.update(|cx| cx.quit());
+                        return;
+                    }
+                    if let Some(restoring) = session_probe {
+                        let verified = rehearsal::session(
+                            restoring,
+                            campaign.as_ref().unwrap(),
+                            &workspace,
+                            opened.window.into(),
+                            cx,
+                        )
+                        .await;
+                        match verified {
+                            Ok(()) => {
+                                outcome.set(true);
+                                let _ = cx.update_window(opened.window.into(), |_, window, cx| {
+                                    window.dispatch_keystroke(
+                                        gpui::Keystroke::parse("ctrl-shift-q").unwrap(),
+                                        cx,
+                                    );
+                                });
+                            }
+                            Err(error) => {
+                                eprintln!("Session rehearsal failed: {error:#}");
+                                cx.update(|cx| cx.quit());
+                            }
+                        }
+                        return;
                     }
                     if smoke {
+                        let parsing = workspace.read_with(cx, |w, cx| {
+                            w.items_of_type::<editor::Editor>(cx)
+                                .filter_map(|e| e.read(cx).buffer().read(cx).as_singleton())
+                                .map(|b| b.read(cx).parsing_idle())
+                                .collect::<Vec<_>>()
+                        });
+                        futures::future::join_all(parsing).await;
+                        // Deliver parse events to editor addons before drawing.
+                        cx.background_executor()
+                            .timer(Duration::from_millis(1))
+                            .await;
                         if let Some(model) = &campaign {
                             if let Err(error) =
                                 rehearsal::links(model, &workspace, opened.window.into(), cx).await
@@ -307,7 +407,8 @@ fn initialize(
                             let result = if let Some(model) = &campaign {
                                 encounter::verify(model, &workspace, window, cx)
                             } else {
-                                editor_workspace::verify(&workspace, window, cx)
+                                editor_workspace::verify(&workspace, window, cx)?;
+                                markdown_actions::verify(&workspace, window, cx)
                             };
                             if let Err(error) = &result {
                                 eprintln!("Editor smoke test: {error:#}");
@@ -317,7 +418,16 @@ fn initialize(
                         let mut verified = verified.and_then(|result| result);
                         if verified.is_ok() {
                             if let Some(model) = &campaign {
-                                verified = campaign::wait_saved(model, cx).await;
+                                verified = encounter::verify_description(
+                                    model,
+                                    &workspace,
+                                    opened.window.into(),
+                                    cx,
+                                )
+                                .await;
+                                if verified.is_ok() {
+                                    verified = campaign::wait_saved(model, cx).await;
+                                }
                             }
                         }
                         if verified.is_ok() && campaign.is_some() {
@@ -326,7 +436,34 @@ fn initialize(
                         }
                         if verified.is_ok() {
                             if let Some(model) = &campaign {
-                                verified = rehearsal::external_changes(model, cx).await;
+                                verified = rehearsal::rename_links(
+                                    model,
+                                    &workspace,
+                                    opened.window.into(),
+                                    cx,
+                                )
+                                .await;
+                                if verified.is_ok() {
+                                    verified = navigator::verify(
+                                        model,
+                                        &workspace,
+                                        opened.window.into(),
+                                        cx,
+                                    )
+                                    .await;
+                                    if verified.is_ok() {
+                                        verified = encounter::verify_session(
+                                            model,
+                                            &workspace,
+                                            opened.window.into(),
+                                            cx,
+                                        )
+                                        .await;
+                                    }
+                                    if verified.is_ok() {
+                                        verified = rehearsal::external_changes(model, cx).await;
+                                    }
+                                }
                             }
                         }
                         if let Err(error) = &verified {

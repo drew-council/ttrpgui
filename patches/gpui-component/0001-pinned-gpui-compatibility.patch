@@ -1,0 +1,1209 @@
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -172,7 +172,7 @@
+ version = "0.1.41"
+ 
+ [dependencies.tree-sitter]
+-version = "0.25.4"
++version = "0.26.9"
+ 
+ [dependencies.tree-sitter-bash]
+ version = "0.23.3"
+--- a/src/button/button.rs
++++ b/src/button/button.rs
+@@ -227,7 +227,12 @@
+             selected: false,
+             variant: ButtonVariant::default(),
+             rounded: ButtonRounded::Medium,
+-            border_corners: Corners::all(true),
++            border_corners: Corners {
++                top_left: true,
++                top_right: true,
++                bottom_left: true,
++                bottom_right: true,
++            },
+             border_edges: Edges::all(true),
+             size: Size::Medium,
+             tooltip: None,
+--- a/src/button/button_group.rs
++++ b/src/button/button_group.rs
+@@ -207,7 +207,12 @@
+                         } else {
+                             // Middle
+                             child
+-                                .border_corners(Corners::all(false))
++                                .border_corners(Corners {
++                                    top_left: false,
++                                    top_right: false,
++                                    bottom_left: false,
++                                    bottom_right: false,
++                                })
+                                 .border_edges(Edges {
+                                     left: vertical,
+                                     top: !vertical,
+--- a/src/button/dropdown_button.rs
++++ b/src/button/dropdown_button.rs
+@@ -1,12 +1,11 @@
+ use gpui::{
+-    div, prelude::FluentBuilder, App, Context, Corner, Corners, Edges, ElementId,
+-    InteractiveElement as _, IntoElement, ParentElement, RenderOnce, StyleRefinement, Styled,
+-    Window,
++    Anchor, App, Context, Corners, Edges, ElementId, InteractiveElement as _, IntoElement,
++    ParentElement, RenderOnce, StyleRefinement, Styled, Window, div, prelude::FluentBuilder,
+ };
+ 
+ use crate::{
++    Disableable, Selectable, Sizable, Size, StyledExt as _,
+     menu::{DropdownMenu, PopupMenu},
+-    Disableable, Selectable, Sizable, Size, StyledExt as _,
+ };
+ 
+ use super::{Button, ButtonRounded, ButtonVariant, ButtonVariants};
+@@ -27,7 +26,7 @@
+     variant: ButtonVariant,
+     size: Size,
+     rounded: ButtonRounded,
+-    anchor: Corner,
++    anchor: Anchor,
+ }
+ 
+ impl DropdownButton {
+@@ -46,7 +45,7 @@
+             variant: ButtonVariant::default(),
+             size: Size::default(),
+             rounded: ButtonRounded::default(),
+-            anchor: Corner::TopRight,
++            anchor: Anchor::TopRight,
+         }
+     }
+ 
+@@ -68,7 +67,7 @@
+     /// Set the dropdown menu of the button with anchor corner.
+     pub fn dropdown_menu_with_anchor(
+         mut self,
+-        anchor: impl Into<Corner>,
++        anchor: impl Into<Anchor>,
+         menu: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+     ) -> Self {
+         self.menu = Some(Box::new(menu));
+--- a/src/color_picker.rs
++++ b/src/color_picker.rs
+@@ -1,5 +1,5 @@
+ use gpui::{
+-    App, AppContext, Bounds, ClickEvent, Context, Corner, Div, ElementId, Entity, EventEmitter,
++    Anchor, App, AppContext, Bounds, ClickEvent, Context, Div, ElementId, Entity, EventEmitter,
+     FocusHandle, Focusable, Hsla, InteractiveElement as _, IntoElement, KeyBinding, MouseButton,
+     ParentElement, Pixels, Point, Render, RenderOnce, SharedString, Stateful,
+     StatefulInteractiveElement as _, StyleRefinement, Styled, Subscription, Window, anchored,
+@@ -201,7 +201,7 @@
+     label: Option<SharedString>,
+     icon: Option<Icon>,
+     size: Size,
+-    anchor: Corner,
++    anchor: Anchor,
+ }
+ 
+ impl ColorPicker {
+@@ -215,7 +215,7 @@
+             size: Size::Medium,
+             label: None,
+             icon: None,
+-            anchor: Corner::TopLeft,
++            anchor: Anchor::TopLeft,
+         }
+     }
+ 
+@@ -247,8 +247,8 @@
+ 
+     /// Set the anchor corner of the color picker.
+     ///
+-    /// Default is `Corner::TopLeft`.
+-    pub fn anchor(mut self, anchor: Corner) -> Self {
++    /// Default is `Anchor::TopLeft`.
++    pub fn anchor(mut self, anchor: Anchor) -> Self {
+         self.anchor = anchor;
+         self
+     }
+@@ -365,10 +365,14 @@
+ 
+     fn resolved_corner(&self, bounds: Bounds<Pixels>) -> Point<Pixels> {
+         bounds.corner(match self.anchor {
+-            Corner::TopLeft => Corner::BottomLeft,
+-            Corner::TopRight => Corner::BottomRight,
+-            Corner::BottomLeft => Corner::TopLeft,
+-            Corner::BottomRight => Corner::TopRight,
++            Anchor::TopLeft => Anchor::BottomLeft,
++            Anchor::TopRight => Anchor::BottomRight,
++            Anchor::BottomLeft => Anchor::TopLeft,
++            Anchor::BottomRight => Anchor::TopRight,
++            Anchor::TopCenter => Anchor::BottomCenter,
++            Anchor::BottomCenter => Anchor::TopCenter,
++            Anchor::LeftCenter => Anchor::RightCenter,
++            Anchor::RightCenter => Anchor::LeftCenter,
+         })
+     }
+ }
+@@ -481,8 +485,14 @@
+                                 div()
+                                     .occlude()
+                                     .map(|this| match self.anchor {
+-                                        Corner::TopLeft | Corner::TopRight => this.mt_1p5(),
+-                                        Corner::BottomLeft | Corner::BottomRight => this.mb_1p5(),
++                                        Anchor::TopLeft | Anchor::TopRight | Anchor::TopCenter => {
++                                            this.mt_1p5()
++                                        }
++                                        Anchor::BottomLeft
++                                        | Anchor::BottomRight
++                                        | Anchor::BottomCenter
++                                        | Anchor::LeftCenter
++                                        | Anchor::RightCenter => this.mb_1p5(),
+                                     })
+                                     .w_72()
+                                     .overflow_hidden()
+--- a/src/dialog.rs
++++ b/src/dialog.rs
+@@ -530,12 +530,14 @@
+                                 // This is equivalent to `shadow_xl` with an extra opacity.
+                                 let shadow = vec![
+                                     BoxShadow {
++                                        inset: false,
+                                         color: hsla(0., 0., 0., 0.1 * delta),
+                                         offset: point(px(0.), px(20.)),
+                                         blur_radius: px(25.),
+                                         spread_radius: px(-5.),
+                                     },
+                                     BoxShadow {
++                                        inset: false,
+                                         color: hsla(0., 0., 0., 0.1 * delta),
+                                         offset: point(px(0.), px(8.)),
+                                         blur_radius: px(10.),
+--- a/src/dock/tab_panel.rs
++++ b/src/dock/tab_panel.rs
+@@ -1,7 +1,7 @@
+ use std::sync::Arc;
+ 
+ use gpui::{
+-    App, AppContext, Context, Corner, DismissEvent, Div, DragMoveEvent, Empty, Entity,
++    Anchor, App, AppContext, Context, DismissEvent, Div, DragMoveEvent, Empty, Entity,
+     EventEmitter, FocusHandle, Focusable, InteractiveElement as _, IntoElement, ParentElement,
+     Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, StyleRefinement,
+     Styled, WeakEntity, Window, div, prelude::FluentBuilder, px, relative, rems,
+@@ -510,7 +510,7 @@
+                             })
+                         }
+                     })
+-                    .anchor(Corner::TopRight),
++                    .anchor(Anchor::TopRight),
+             )
+     }
+ 
+@@ -782,7 +782,7 @@
+                 div()
+                     .id("tab-bar-empty-space")
+                     .h_full()
+-                    .flex_grow()
++                    .flex_grow(1.)
+                     .min_w_16()
+                     .when(state.droppable, |this| {
+                         this.drag_over::<DragPanel>(|this, _, _, cx| {
+@@ -1092,7 +1092,7 @@
+ 
+     fn focus_active_panel(&self, window: &mut Window, cx: &mut Context<Self>) {
+         if let Some(active_panel) = self.active_panel(cx) {
+-            active_panel.focus_handle(cx).focus(window);
++            active_panel.focus_handle(cx).focus(window, cx);
+         }
+     }
+ 
+--- a/src/dock/tiles.rs
++++ b/src/dock/tiles.rs
+@@ -869,7 +869,7 @@
+                 .into_any_element(),
+         );
+ 
+-        // Corner resize handle
++        // Anchor resize handle
+         elements.push(
+             div()
+                 .child(
+--- a/src/form/field.rs
++++ b/src/form/field.rs
+@@ -53,7 +53,7 @@
+         match self {
+             FieldBuilder::String(value) => value.into_any_element(),
+             FieldBuilder::Element(builder) => builder(window, cx),
+-            FieldBuilder::View(view) => view.into_any(),
++            FieldBuilder::View(view) => view.into_any_element(),
+         }
+     }
+ }
+--- a/src/input/blink_cursor.rs
++++ b/src/input/blink_cursor.rs
+@@ -1,6 +1,7 @@
++use smol::Timer;
+ use std::time::Duration;
+ 
+-use gpui::{px, Context, Pixels, Task, Timer};
++use gpui::{Context, Pixels, Task, px};
+ 
+ static INTERVAL: Duration = Duration::from_millis(500);
+ static PAUSE_DELAY: Duration = Duration::from_millis(300);
+@@ -59,7 +60,7 @@
+         self._task = cx.spawn(async move |this, cx| {
+             Timer::after(INTERVAL).await;
+             if let Some(this) = this.upgrade() {
+-                this.update(cx, |this, cx| this.blink(epoch, cx)).ok();
++                this.update(cx, |this, cx| this.blink(epoch, cx));
+             }
+         });
+     }
+@@ -84,8 +85,7 @@
+                 this.update(cx, |this, cx| {
+                     this.paused = false;
+                     this.blink(epoch, cx);
+-                })
+-                .ok();
++                });
+             }
+         });
+     }
+--- a/src/input/element.rs
++++ b/src/input/element.rs
+@@ -1394,7 +1394,14 @@
+                     window.paint_quad(fill(ghost_bounds, cx.theme().editor_background()));
+ 
+                     // Paint ghost line text
+-                    _ = ghost_line.paint(ghost_p, line_height, window, cx);
++                    _ = ghost_line.paint(
++                        ghost_p,
++                        line_height,
++                        gpui::TextAlign::Left,
++                        None,
++                        window,
++                        cx,
++                    );
+                     offset_y += line_height;
+                 }
+             }
+@@ -1442,7 +1449,7 @@
+                 }
+ 
+                 for line in lines {
+-                    _ = line.paint(p, line_height, window, cx);
++                    _ = line.paint(p, line_height, gpui::TextAlign::Left, None, window, cx);
+                     offset_y += line_height;
+                 }
+ 
+@@ -1482,7 +1489,7 @@
+                     window.paint_quad(fill(bg_bounds, cx.theme().editor_background()));
+ 
+                     // Paint first line completion text
+-                    _ = first_line.paint(p, line_height, window, cx);
++                    _ = first_line.paint(p, line_height, gpui::TextAlign::Left, None, window, cx);
+                 }
+             }
+         }
+--- a/src/input/otp_input.rs
++++ b/src/input/otp_input.rs
+@@ -86,17 +86,17 @@
+     }
+ 
+     /// Focus the OTP Input.
+-    pub fn focus(&self, window: &mut Window, _: &mut Context<Self>) {
+-        self.focus_handle.focus(window);
++    pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
++        self.focus_handle.focus(window, cx);
+     }
+ 
+     fn on_input_mouse_down(
+         &mut self,
+         _: &MouseDownEvent,
+         window: &mut Window,
+-        _: &mut Context<Self>,
++        cx: &mut Context<Self>,
+     ) {
+-        window.focus(&self.focus_handle);
++        window.focus(&self.focus_handle, cx);
+     }
+ 
+     fn on_key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<Self>) {
+--- a/src/input/popovers/context_menu.rs
++++ b/src/input/popovers/context_menu.rs
+@@ -1,5 +1,5 @@
+ use gpui::{
+-    App, AppContext as _, Context, Corner, DismissEvent, Entity, IntoElement, MouseDownEvent,
++    Anchor, App, AppContext as _, Context, DismissEvent, Entity, IntoElement, MouseDownEvent,
+     ParentElement as _, Pixels, Point, Render, Styled, Subscription, Window, anchored, deferred,
+     div, prelude::FluentBuilder as _, px,
+ };
+@@ -134,7 +134,7 @@
+         deferred(
+             anchored()
+                 .snap_to_window_with_margin(px(8.))
+-                .anchor(Corner::TopLeft)
++                .anchor(Anchor::TopLeft)
+                 .position(self.mouse_position)
+                 .child(
+                     div()
+--- a/src/input/search.rs
++++ b/src/input/search.rs
+@@ -258,7 +258,11 @@
+         cx: &mut Context<Self>,
+     ) {
+         self.open = true;
+-        self.search_input.read(cx).focus_handle.focus(window);
++        self.search_input
++            .read(cx)
++            .focus_handle
++            .clone()
++            .focus(window, cx);
+ 
+         self.search_input.update(cx, |this, cx| {
+             if selected_text.len() > 0 {
+@@ -290,7 +294,7 @@
+ 
+     pub(super) fn hide(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+         self.open = false;
+-        self.editor.read(cx).focus_handle.focus(window);
++        self.editor.read(cx).focus_handle.clone().focus(window, cx);
+         cx.notify();
+     }
+ 
+@@ -307,7 +311,7 @@
+     }
+ 
+     fn on_action_tab(&mut self, _: &IndentInline, window: &mut Window, cx: &mut Context<Self>) {
+-        self.editor.focus_handle(cx).focus(window);
++        self.editor.focus_handle(cx).focus(window, cx);
+     }
+ 
+     fn prev(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+@@ -481,9 +485,17 @@
+                             .on_click(cx.listener(|this, _, window, cx| {
+                                 this.replace_mode = !this.replace_mode;
+                                 if this.replace_mode {
+-                                    this.replace_input.read(cx).focus_handle.focus(window);
++                                    this.replace_input
++                                        .read(cx)
++                                        .focus_handle
++                                        .clone()
++                                        .focus(window, cx);
+                                 } else {
+-                                    this.search_input.read(cx).focus_handle.focus(window);
++                                    this.search_input
++                                        .read(cx)
++                                        .focus_handle
++                                        .clone()
++                                        .focus(window, cx);
+                                 }
+                                 cx.notify();
+                             })),
+--- a/src/input/state.rs
++++ b/src/input/state.rs
+@@ -823,7 +823,7 @@
+ 
+     /// Focus the input field.
+     pub fn focus(&self, window: &mut Window, cx: &mut Context<Self>) {
+-        self.focus_handle.focus(window);
++        self.focus_handle.focus(window, cx);
+         self.blink_cursor.update(cx, |cursor, cx| {
+             cursor.start(cx);
+         });
+@@ -2168,7 +2168,7 @@
+             .id("input-state")
+             .flex_1()
+             .when(self.mode.is_multi_line(), |this| this.h_full())
+-            .flex_grow()
++            .flex_grow(1.)
+             .overflow_x_hidden()
+             .child(TextElement::new(cx.entity().clone()).placeholder(self.placeholder.clone()))
+             .children(self.diagnostic_popover.clone())
+--- a/src/input/text_wrapper.rs
++++ b/src/input/text_wrapper.rs
+@@ -490,6 +490,8 @@
+             _ = line.paint(
+                 pos + point(px(0.), ix * line_height),
+                 line_height,
++                gpui::TextAlign::Left,
++                None,
+                 window,
+                 cx,
+             );
+--- a/src/inspector.rs
++++ b/src/inspector.rs
+@@ -14,6 +14,7 @@
+ use ropey::Rope;
+ 
+ use crate::{
++    ActiveTheme, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT,
+     alert::Alert,
+     button::{Button, ButtonVariants},
+     clipboard::Clipboard,
+@@ -21,7 +22,7 @@
+     h_flex,
+     input::{CompletionProvider, Input, InputEvent, InputState, RopeExt, TabSize},
+     link::Link,
+-    v_flex, ActiveTheme, IconName, Selectable, Sizable, TITLE_BAR_HEIGHT,
++    v_flex,
+ };
+ 
+ actions!(inspector, [ToggleInspector]);
+--- a/src/list/list.rs
++++ b/src/list/list.rs
+@@ -155,7 +155,7 @@
+ 
+     /// Focus the list, if the list is searchable, focus the search input.
+     pub fn focus(&mut self, window: &mut Window, cx: &mut App) {
+-        self.focus_handle(cx).focus(window);
++        self.focus_handle(cx).focus(window, cx);
+     }
+ 
+     /// Return true if either the list or the search input is focused.
+@@ -488,7 +488,7 @@
+         let scroll_handle = self.scroll_handle.clone();
+ 
+         v_flex()
+-            .flex_grow()
++            .flex_grow(1.)
+             .relative()
+             .size_full()
+             .when_some(self.options.max_height, |this, h| this.max_h(h))
+--- a/src/menu/app_menu_bar.rs
++++ b/src/menu/app_menu_bar.rs
+@@ -147,7 +147,7 @@
+                     })
+                     .with_menu_items(items, window, cx)
+                 });
+-                popup_menu.read(cx).focus_handle(cx).focus(window);
++                popup_menu.read(cx).focus_handle(cx).focus(window, cx);
+                 self._subscription =
+                     Some(cx.subscribe_in(&popup_menu, window, Self::handle_dismiss));
+                 self.popup_menu = Some(popup_menu.clone());
+@@ -159,7 +159,7 @@
+ 
+         let focus_handle = popup_menu.read(cx).focus_handle(cx);
+         if !focus_handle.contains_focused(window, cx) {
+-            focus_handle.focus(window);
++            focus_handle.focus(window, cx);
+         }
+ 
+         popup_menu
+@@ -236,7 +236,7 @@
+             .when(is_selected, |this| {
+                 this.child(deferred(
+                     anchored()
+-                        .anchor(gpui::Corner::TopLeft)
++                        .anchor(gpui::Anchor::TopLeft)
+                         .snap_to_window_with_margin(px(8.))
+                         .child(
+                             div()
+--- a/src/menu/context_menu.rs
++++ b/src/menu/context_menu.rs
+@@ -1,7 +1,7 @@
+ use std::{cell::RefCell, rc::Rc};
+ 
+ use gpui::{
+-    AnyElement, App, Context, Corner, DismissEvent, Element, ElementId, Entity, Focusable,
++    Anchor, AnyElement, App, Context, DismissEvent, Element, ElementId, Entity, Focusable,
+     GlobalElementId, InspectorElementId, InteractiveElement, IntoElement, MouseButton,
+     MouseDownEvent, ParentElement, Pixels, Point, StyleRefinement, Styled, Subscription, Window,
+     anchored, deferred, div, prelude::FluentBuilder, px,
+@@ -32,7 +32,7 @@
+     menu: Option<Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>>,
+     // This is not in use, just for style refinement forwarding.
+     _ignore_style: StyleRefinement,
+-    anchor: Corner,
++    anchor: Anchor,
+ }
+ 
+ impl<E: ParentElement + Styled> ContextMenu<E> {
+@@ -42,7 +42,7 @@
+             id: id.into(),
+             element: Some(element),
+             menu: None,
+-            anchor: Corner::TopLeft,
++            anchor: Anchor::TopLeft,
+             _ignore_style: StyleRefinement::default(),
+         }
+     }
+@@ -184,7 +184,7 @@
+                                                         .focus_handle(cx)
+                                                         .contains_focused(window, cx)
+                                                     {
+-                                                        menu.focus_handle(cx).focus(window);
++                                                        menu.focus_handle(cx).focus(window, cx);
+                                                     }
+ 
+                                                     this.child(menu.clone())
+--- a/src/menu/dropdown_menu.rs
++++ b/src/menu/dropdown_menu.rs
+@@ -1,11 +1,11 @@
+ use std::rc::Rc;
+ 
+ use gpui::{
+-    Context, Corner, DismissEvent, ElementId, Entity, Focusable, InteractiveElement, IntoElement,
++    Anchor, Context, DismissEvent, ElementId, Entity, Focusable, InteractiveElement, IntoElement,
+     RenderOnce, SharedString, StyleRefinement, Styled, Window,
+ };
+ 
+-use crate::{button::Button, menu::PopupMenu, popover::Popover, Selectable};
++use crate::{Selectable, button::Button, menu::PopupMenu, popover::Popover};
+ 
+ /// A dropdown menu trait for buttons and other interactive elements
+ pub trait DropdownMenu: Styled + Selectable + InteractiveElement + IntoElement + 'static {
+@@ -14,13 +14,13 @@
+         self,
+         f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+     ) -> DropdownMenuPopover<Self> {
+-        self.dropdown_menu_with_anchor(Corner::TopLeft, f)
++        self.dropdown_menu_with_anchor(Anchor::TopLeft, f)
+     }
+ 
+     /// Create a dropdown menu with the given items, anchored to the given corner
+     fn dropdown_menu_with_anchor(
+         mut self,
+-        anchor: impl Into<Corner>,
++        anchor: impl Into<Anchor>,
+         f: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+     ) -> DropdownMenuPopover<Self> {
+         let style = self.style().clone();
+@@ -36,7 +36,7 @@
+ pub struct DropdownMenuPopover<T: Selectable + IntoElement + 'static> {
+     id: ElementId,
+     style: StyleRefinement,
+-    anchor: Corner,
++    anchor: Anchor,
+     trigger: T,
+     builder: Rc<dyn Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu>,
+ }
+@@ -47,7 +47,7 @@
+ {
+     fn new(
+         id: ElementId,
+-        anchor: impl Into<Corner>,
++        anchor: impl Into<Anchor>,
+         trigger: T,
+         builder: impl Fn(PopupMenu, &mut Window, &mut Context<PopupMenu>) -> PopupMenu + 'static,
+     ) -> Self {
+@@ -61,7 +61,7 @@
+     }
+ 
+     /// Set the anchor corner for the dropdown menu popover.
+-    pub fn anchor(mut self, anchor: impl Into<Corner>) -> Self {
++    pub fn anchor(mut self, anchor: impl Into<Anchor>) -> Self {
+         self.anchor = anchor.into();
+         self
+     }
+@@ -110,7 +110,7 @@
+                         menu_state.update(cx, |state, _| {
+                             state.menu = Some(menu.clone());
+                         });
+-                        menu.focus_handle(cx).focus(window);
++                        menu.focus_handle(cx).focus(window, cx);
+ 
+                         // Listen for dismiss events from the PopupMenu to close the popover.
+                         let popover_state = cx.entity();
+--- a/src/menu/popup_menu.rs
++++ b/src/menu/popup_menu.rs
+@@ -5,7 +5,7 @@
+ use crate::{ActiveTheme, Icon, IconName, Sizable as _, h_flex, v_flex};
+ use crate::{Side, Size, StyledExt, kbd::Kbd};
+ use gpui::{
+-    Action, AnyElement, App, AppContext, Bounds, Context, Corner, DismissEvent, Edges, Entity,
++    Action, Anchor, AnyElement, App, AppContext, Bounds, Context, DismissEvent, Edges, Entity,
+     EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyBinding,
+     ParentElement, Pixels, Render, ScrollHandle, SharedString, StatefulInteractiveElement, Styled,
+     WeakEntity, Window, anchored, canvas, div, prelude::FluentBuilder, px, rems,
+@@ -288,7 +288,7 @@
+     external_link_icon: bool,
+     scroll_handle: ScrollHandle,
+     // This will update on render
+-    submenu_anchor: (Corner, Pixels),
++    submenu_anchor: (Anchor, Pixels),
+ 
+     _subscriptions: Vec<Subscription>,
+ }
+@@ -310,7 +310,7 @@
+             scroll_handle: ScrollHandle::default(),
+             external_link_icon: true,
+             size: Size::default(),
+-            submenu_anchor: (Corner::TopLeft, Pixels::ZERO),
++            submenu_anchor: (Anchor::TopLeft, Pixels::ZERO),
+             _subscriptions: vec![],
+         }
+     }
+@@ -767,7 +767,7 @@
+         cx: &mut Context<Self>,
+     ) {
+         if let Some(context) = self.action_context.as_ref() {
+-            context.focus(window);
++            context.focus(window, cx);
+         }
+ 
+         window.dispatch_action(action.boxed_clone(), cx);
+@@ -821,7 +821,7 @@
+     }
+ 
+     fn select_left(&mut self, _: &SelectLeft, window: &mut Window, cx: &mut Context<Self>) {
+-        let handled = if matches!(self.submenu_anchor.0, Corner::TopLeft | Corner::BottomLeft) {
++        let handled = if matches!(self.submenu_anchor.0, Anchor::TopLeft | Anchor::BottomLeft) {
+             self._unselect_submenu(window, cx)
+         } else {
+             self._select_submenu(window, cx)
+@@ -842,7 +842,7 @@
+     }
+ 
+     fn select_right(&mut self, _: &SelectRight, window: &mut Window, cx: &mut Context<Self>) {
+-        let handled = if matches!(self.submenu_anchor.0, Corner::TopLeft | Corner::BottomLeft) {
++        let handled = if matches!(self.submenu_anchor.0, Anchor::TopLeft | Anchor::BottomLeft) {
+             self._select_submenu(window, cx)
+         } else {
+             self._unselect_submenu(window, cx)
+@@ -867,7 +867,7 @@
+             // Focus the submenu, so that can be handle the action.
+             active_submenu.update(cx, |view, cx| {
+                 view.set_selected_index(0, cx);
+-                view.focus_handle.focus(window);
++                view.focus_handle.focus(window, cx);
+             });
+             cx.notify();
+             return true;
+@@ -898,7 +898,7 @@
+ 
+         self.selected_index = None;
+         parent.update(cx, |view, cx| {
+-            view.focus_handle.focus(window);
++            view.focus_handle.focus(window, cx);
+             cx.notify();
+         });
+     }
+@@ -913,8 +913,9 @@
+         };
+ 
+         match parent.read(cx).submenu_anchor.0 {
+-            Corner::TopLeft | Corner::BottomLeft => Side::Left,
+-            Corner::TopRight | Corner::BottomRight => Side::Right,
++            Anchor::TopLeft | Anchor::BottomLeft => Side::Left,
++            Anchor::TopRight | Anchor::BottomRight | Anchor::RightCenter => Side::Right,
++            Anchor::TopCenter | Anchor::BottomCenter | Anchor::LeftCenter => Side::Left,
+         }
+     }
+ 
+@@ -927,7 +928,7 @@
+ 
+         // Focus back to the previous focused handle.
+         if let Some(action_context) = self.action_context.as_ref() {
+-            window.focus(action_context);
++            window.focus(action_context, cx);
+         }
+ 
+         let Some(parent_menu) = self.parent_menu.clone() else {
+@@ -998,14 +999,14 @@
+         let bounds = self.bounds;
+         let max_width = self.max_width();
+         let (anchor, left) = if max_width + bounds.origin.x > window.bounds().size.width {
+-            (Corner::TopRight, -px(16.))
++            (Anchor::TopRight, -px(16.))
+         } else {
+-            (Corner::TopLeft, bounds.size.width - px(8.))
++            (Anchor::TopLeft, bounds.size.width - px(8.))
+         };
+ 
+         let is_bottom_pos = bounds.origin.y + bounds.size.height > window.bounds().size.height;
+         self.submenu_anchor = if is_bottom_pos {
+-            (anchor.other_side_corner_along(gpui::Axis::Vertical), left)
++            (anchor.other_side_along(gpui::Axis::Vertical), left)
+         } else {
+             (anchor, left)
+         };
+@@ -1191,7 +1192,7 @@
+                     this.child({
+                         let (anchor, left) = self.submenu_anchor;
+                         let is_bottom_pos =
+-                            matches!(anchor, Corner::BottomLeft | Corner::BottomRight);
++                            matches!(anchor, Anchor::BottomLeft | Anchor::BottomRight);
+                         anchored()
+                             .anchor(anchor)
+                             .child(
+--- a/src/notification.rs
++++ b/src/notification.rs
+@@ -308,13 +308,9 @@
+                     .when_some(self.message.clone(), |this, message| {
+                         this.child(div().text_sm().child(message))
+                     })
+-                    .when_some(content, |this, content| {
+-                        this.child(content)
+-                    }),
++                    .when_some(content, |this, content| this.child(content)),
+             )
+-            .when_some(action, |this, action| {
+-                this.child(action)
+-            })
++            .when_some(action, |this, action| this.child(action))
+             .when_some(self.on_click.clone(), |this, on_click| {
+                 this.on_click(cx.listener(move |view, event, window, cx| {
+                     view.dismiss(window, cx);
+--- a/src/popover.rs
++++ b/src/popover.rs
+@@ -1,5 +1,5 @@
+ use gpui::{
+-    AnyElement, App, Bounds, Context, Corner, DismissEvent, ElementId, EventEmitter, FocusHandle,
++    Anchor, AnyElement, App, Bounds, Context, DismissEvent, ElementId, EventEmitter, FocusHandle,
+     Focusable, InteractiveElement as _, IntoElement, KeyBinding, MouseButton, ParentElement,
+     Pixels, Point, Render, RenderOnce, StyleRefinement, Styled, Subscription, Window, anchored,
+     canvas, deferred, div, prelude::FluentBuilder as _, px,
+@@ -18,7 +18,7 @@
+ pub struct Popover {
+     id: ElementId,
+     style: StyleRefinement,
+-    anchor: Corner,
++    anchor: Anchor,
+     default_open: bool,
+     open: Option<bool>,
+     tracked_focus_handle: Option<FocusHandle>,
+@@ -45,7 +45,7 @@
+         Self {
+             id: id.into(),
+             style: StyleRefinement::default(),
+-            anchor: Corner::TopLeft,
++            anchor: Anchor::TopLeft,
+             trigger: None,
+             trigger_style: None,
+             content: None,
+@@ -60,8 +60,8 @@
+         }
+     }
+ 
+-    /// Set the anchor corner of the popover, default is `Corner::TopLeft`.
+-    pub fn anchor(mut self, anchor: Corner) -> Self {
++    /// Set the anchor corner of the popover, default is `Anchor::TopLeft`.
++    pub fn anchor(mut self, anchor: Anchor) -> Self {
+         self.anchor = anchor;
+         self
+     }
+@@ -164,12 +164,16 @@
+         self
+     }
+ 
+-    fn resolved_corner(anchor: Corner, bounds: Bounds<Pixels>) -> Point<Pixels> {
++    fn resolved_corner(anchor: Anchor, bounds: Bounds<Pixels>) -> Point<Pixels> {
+         bounds.corner(match anchor {
+-            Corner::TopLeft => Corner::BottomLeft,
+-            Corner::TopRight => Corner::BottomRight,
+-            Corner::BottomLeft => Corner::TopLeft,
+-            Corner::BottomRight => Corner::TopRight,
++            Anchor::TopLeft => Anchor::BottomLeft,
++            Anchor::TopRight => Anchor::BottomRight,
++            Anchor::BottomLeft => Anchor::TopLeft,
++            Anchor::BottomRight => Anchor::TopRight,
++            Anchor::TopCenter => Anchor::BottomCenter,
++            Anchor::BottomCenter => Anchor::TopCenter,
++            Anchor::LeftCenter => Anchor::RightCenter,
++            Anchor::RightCenter => Anchor::LeftCenter,
+         }) + Point {
+             x: px(0.),
+             y: -bounds.size.height,
+@@ -240,7 +244,7 @@
+             } else {
+                 self.focus_handle.clone()
+             };
+-            focus_handle.focus(window);
++            focus_handle.focus(window, cx);
+ 
+             self._dismiss_subscription =
+                 Some(
+@@ -363,8 +367,14 @@
+                             .tab_group()
+                             .when(self.appearance, |this| this.popover_style(cx).p_3())
+                             .map(|this| match self.anchor {
+-                                Corner::TopLeft | Corner::TopRight => this.top_1(),
+-                                Corner::BottomLeft | Corner::BottomRight => this.bottom_1(),
++                                Anchor::TopLeft | Anchor::TopRight | Anchor::TopCenter => {
++                                    this.top_1()
++                                }
++                                Anchor::BottomLeft
++                                | Anchor::BottomRight
++                                | Anchor::BottomCenter
++                                | Anchor::LeftCenter
++                                | Anchor::RightCenter => this.bottom_1(),
+                             })
+                             .when_some(self.content, |this, content| {
+                                 this.child(
+--- a/src/resizable/panel.rs
++++ b/src/resizable/panel.rs
+@@ -258,7 +258,7 @@
+         div()
+             .id(("resizable-panel", self.panel_ix))
+             .flex()
+-            .flex_grow()
++            .flex_grow(1.)
+             .size_full()
+             .relative()
+             .when(self.axis.is_vertical(), |this| {
+@@ -270,7 +270,7 @@
+             // 1. initial_size is None, to use auto size.
+             // 2. initial_size is Some and size is none, to use the initial size of the panel for first time render.
+             // 3. initial_size is Some and size is Some, use `size`.
+-            .when(self.initial_size.is_none(), |this| this.flex_shrink())
++            .when(self.initial_size.is_none(), |this| this.flex_shrink(1.))
+             .when_some(self.initial_size, |this, initial_size| {
+                 // The `self.size` is None, that mean the initial size for the panel,
+                 // so we need set `flex_shrink_0` To let it keep the initial size.
+--- a/src/root.rs
++++ b/src/root.rs
+@@ -91,7 +91,7 @@
+             }
+ 
+             let focus_handle = cx.focus_handle();
+-            focus_handle.focus(window);
++            focus_handle.focus(window, cx);
+ 
+             root.active_sheet = Some(ActiveSheet {
+                 focus_handle,
+@@ -127,7 +127,7 @@
+             }
+ 
+             let focus_handle = cx.focus_handle();
+-            focus_handle.focus(window);
++            focus_handle.focus(window, cx);
+ 
+             root.active_dialogs.push(ActiveDialog {
+                 focus_handle,
+@@ -148,7 +148,7 @@
+ 
+             if let Some(top_dialog) = root.active_dialogs.last() {
+                 // Focus the next dialog.
+-                top_dialog.focus_handle.focus(window);
++                top_dialog.focus_handle.focus(window, cx);
+             } else {
+                 // Restore focus if there are no more dialogs.
+                 root.focus_back(window, cx);
+@@ -269,9 +269,9 @@
+             .read(cx)
+     }
+ 
+-    fn focus_back(&mut self, window: &mut Window, _: &mut App) {
++    fn focus_back(&mut self, window: &mut Window, cx: &mut App) {
+         if let Some(handle) = self.previous_focus_handle.clone() {
+-            window.focus(&handle);
++            window.focus(&handle, cx);
+         }
+     }
+ 
+@@ -384,12 +384,12 @@
+         &self.view
+     }
+ 
+-    fn on_action_tab(&mut self, _: &Tab, window: &mut Window, _: &mut Context<Self>) {
+-        window.focus_next();
+-    }
+-
+-    fn on_action_tab_prev(&mut self, _: &TabPrev, window: &mut Window, _: &mut Context<Self>) {
+-        window.focus_prev();
++    fn on_action_tab(&mut self, _: &Tab, window: &mut Window, cx: &mut Context<Self>) {
++        window.focus_next(cx);
++    }
++
++    fn on_action_tab_prev(&mut self, _: &TabPrev, window: &mut Window, cx: &mut Context<Self>) {
++        window.focus_prev(cx);
+     }
+ }
+ 
+--- a/src/scroll/scrollbar.rs
++++ b/src/scroll/scrollbar.rs
+@@ -1,3 +1,4 @@
++use smol::Timer;
+ use std::{
+     cell::Cell,
+     ops::Deref,
+@@ -8,11 +9,11 @@
+ 
+ use crate::{ActiveTheme, AxisExt};
+ use gpui::{
+-    App, Axis, BorderStyle, Bounds, ContentMask, Corner, CursorStyle, Edges, Element, ElementId,
++    Anchor, App, Axis, BorderStyle, Bounds, ContentMask, CursorStyle, Edges, Element, ElementId,
+     GlobalElementId, Hitbox, HitboxBehavior, Hsla, InspectorElementId, IntoElement, IsZero,
+     LayoutId, ListState, MouseDownEvent, MouseMoveEvent, MouseUpEvent, PaintQuad, Pixels, Point,
+-    Position, ScrollHandle, ScrollWheelEvent, Size, Style, Timer, UniformListScrollHandle, Window,
+-    fill, point, px, relative, size,
++    Position, ScrollHandle, ScrollWheelEvent, Size, Style, UniformListScrollHandle, Window, fill,
++    point, px, relative, size,
+ };
+ use schemars::JsonSchema;
+ use serde::{Deserialize, Serialize};
+@@ -78,7 +79,7 @@
+     }
+ 
+     fn content_size(&self) -> Size<Pixels> {
+-        self.max_offset() + self.bounds().size
++        (self.max_offset() + self.bounds().size.into()).into()
+     }
+ }
+ 
+@@ -93,7 +94,7 @@
+ 
+     fn content_size(&self) -> Size<Pixels> {
+         let base_handle = &self.0.borrow().base_handle;
+-        base_handle.max_offset() + base_handle.bounds().size
++        (base_handle.max_offset() + base_handle.bounds().size.into()).into()
+     }
+ }
+ 
+@@ -107,7 +108,7 @@
+     }
+ 
+     fn content_size(&self) -> Size<Pixels> {
+-        self.viewport_bounds().size + self.max_offset_for_scrollbar()
++        self.viewport_bounds().size + self.max_offset_for_scrollbar().into()
+     }
+ 
+     fn start_drag(&self) {
+@@ -670,14 +671,14 @@
+             // The clickable area of the thumb
+             let thumb_length = thumb_end - thumb_start - inset * 2;
+             let thumb_bounds = if is_vertical {
+-                Bounds::from_corner_and_size(
+-                    Corner::TopRight,
++                Bounds::from_anchor_and_size(
++                    Anchor::TopRight,
+                     bounds.top_right() + point(-inset, inset + thumb_start),
+                     size(WIDTH, thumb_length),
+                 )
+             } else {
+-                Bounds::from_corner_and_size(
+-                    Corner::BottomLeft,
++                Bounds::from_anchor_and_size(
++                    Anchor::BottomLeft,
+                     bounds.bottom_left() + point(inset + thumb_start, -inset),
+                     size(thumb_length, WIDTH),
+                 )
+@@ -685,14 +686,14 @@
+ 
+             // The actual render area of the thumb
+             let thumb_fill_bounds = if is_vertical {
+-                Bounds::from_corner_and_size(
+-                    Corner::TopRight,
++                Bounds::from_anchor_and_size(
++                    Anchor::TopRight,
+                     bounds.top_right() + point(-inset, inset + thumb_start),
+                     size(thumb_width, thumb_length),
+                 )
+             } else {
+-                Bounds::from_corner_and_size(
+-                    Corner::BottomLeft,
++                Bounds::from_anchor_and_size(
++                    Anchor::BottomLeft,
+                     bounds.bottom_left() + point(inset + thumb_start, -inset),
+                     size(thumb_length, thumb_width),
+                 )
+--- a/src/select.rs
++++ b/src/select.rs
+@@ -644,8 +644,8 @@
+     }
+ 
+     /// Focus the select input.
+-    pub fn focus(&self, window: &mut Window, _: &mut App) {
+-        self.focus_handle.focus(window);
++    pub fn focus(&self, window: &mut Window, cx: &mut App) {
++        self.focus_handle.focus(window, cx);
+     }
+ 
+     fn update_selected_value(&mut self, _: &Window, cx: &App) {
+@@ -679,7 +679,7 @@
+             self.open = true;
+         }
+ 
+-        self.list.focus_handle(cx).focus(window);
++        self.list.focus_handle(cx).focus(window, cx);
+         cx.propagate();
+     }
+ 
+@@ -688,7 +688,7 @@
+             self.open = true;
+         }
+ 
+-        self.list.focus_handle(cx).focus(window);
++        self.list.focus_handle(cx).focus(window, cx);
+         cx.propagate();
+     }
+ 
+@@ -701,7 +701,7 @@
+             cx.notify();
+         }
+ 
+-        self.list.focus_handle(cx).focus(window);
++        self.list.focus_handle(cx).focus(window, cx);
+     }
+ 
+     fn toggle_menu(&mut self, _: &ClickEvent, window: &mut Window, cx: &mut Context<Self>) {
+@@ -709,7 +709,7 @@
+ 
+         self.open = !self.open;
+         if self.open {
+-            self.list.focus_handle(cx).focus(window);
++            self.list.focus_handle(cx).focus(window, cx);
+         }
+         cx.notify();
+     }
+--- a/src/setting/fields/dropdown.rs
++++ b/src/setting/fields/dropdown.rs
+@@ -1,18 +1,18 @@
+ use std::rc::Rc;
+ 
+ use gpui::{
+-    prelude::FluentBuilder as _, AnyElement, App, Corner, IntoElement, SharedString,
+-    StyleRefinement, Styled, Window,
++    Anchor, AnyElement, App, IntoElement, SharedString, StyleRefinement, Styled, Window,
++    prelude::FluentBuilder as _,
+ };
+ 
+ use crate::{
++    AxisExt, Sizable, StyledExt,
+     button::Button,
+     menu::{DropdownMenu, PopupMenuItem},
+     setting::{
+-        fields::{get_value, set_value, SettingFieldRender},
+         AnySettingField, RenderOptions,
++        fields::{SettingFieldRender, get_value, set_value},
+     },
+-    AxisExt, Sizable, StyledExt,
+ };
+ 
+ pub(crate) struct DropdownField<T> {
+@@ -58,7 +58,7 @@
+             .outline()
+             .with_size(options.size)
+             .refine_style(style)
+-            .dropdown_menu_with_anchor(Corner::TopRight, move |menu, _, _| {
++            .dropdown_menu_with_anchor(Anchor::TopRight, move |menu, _, _| {
+                 let set_value = set_value.clone();
+                 let menu = dropdown_options.iter().fold(menu, |menu, (value, label)| {
+                     let old_value: SharedString = old_value.clone().into();
+--- a/src/slider.rs
++++ b/src/slider.rs
+@@ -518,8 +518,7 @@
+         let thumb_color = self
+             .style
+             .text
+-            .clone()
+-            .and_then(|text| text.color)
++            .color
+             .unwrap_or_else(|| cx.theme().slider_thumb);
+         let corner_radii = self.style.corner_radii.clone();
+         let default_radius = px(999.);
+--- a/src/styled.rs
++++ b/src/styled.rs
+@@ -33,6 +33,7 @@
+     color: Hsla,
+ ) -> BoxShadow {
+     BoxShadow {
++        inset: false,
+         offset: point(x.into(), y.into()),
+         blur_radius: blur.into(),
+         spread_radius: spread.into(),
+--- a/src/tab/tab_bar.rs
++++ b/src/tab/tab_bar.rs
+@@ -1,7 +1,7 @@
+ use gpui::{
+-    div, prelude::FluentBuilder as _, px, AnyElement, App, Corner, Div, Edges, ElementId,
+-    InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce, ScrollHandle, Stateful,
+-    StatefulInteractiveElement as _, StyleRefinement, Styled, Window,
++    Anchor, AnyElement, App, Div, Edges, ElementId, InteractiveElement, IntoElement, ParentElement,
++    Pixels, RenderOnce, ScrollHandle, Stateful, StatefulInteractiveElement as _, StyleRefinement,
++    Styled, Window, div, prelude::FluentBuilder as _, px,
+ };
+ use smallvec::SmallVec;
+ use std::rc::Rc;
+@@ -289,7 +289,7 @@
+ 
+                             this
+                         })
+-                        .anchor(Corner::TopRight),
++                        .anchor(Anchor::TopRight),
+                 )
+             })
+             .when_some(self.suffix, |this, suffix| this.child(suffix))
+--- a/src/table/state.rs
++++ b/src/table/state.rs
+@@ -1321,7 +1321,7 @@
+                     this.children(empty_view)
+                 } else {
+                     this.child(
+-                        h_flex().id("table-body").flex_grow().size_full().child(
++                        h_flex().id("table-body").flex_grow(1.).size_full().child(
+                             uniform_list(
+                                 "table-uniform-list",
+                                 render_rows_count,
+@@ -1384,10 +1384,10 @@
+                                     },
+                                 ),
+                             )
+-                            .flex_grow()
++                            .flex_grow(1.)
+                             .size_full()
+                             .with_sizing_behavior(ListSizingBehavior::Auto)
+-                            .track_scroll(self.vertical_scroll_handle.clone())
++                            .track_scroll(&self.vertical_scroll_handle)
+                             .into_any_element(),
+                         ),
+                     )
+--- a/src/text/text_view.rs
++++ b/src/text/text_view.rs
+@@ -1,3 +1,4 @@
++use smol::Timer;
+ use std::future::Future;
+ use std::pin::Pin;
+ use std::sync::Arc;
+@@ -9,7 +10,7 @@
+     AnyElement, App, AppContext, Bounds, ClipboardItem, Context, Element, ElementId, Entity,
+     EntityId, FocusHandle, GlobalElementId, InspectorElementId, InteractiveElement, IntoElement,
+     KeyBinding, LayoutId, ListState, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
+-    Pixels, Point, RenderOnce, SharedString, Size, StyleRefinement, Styled, Timer, Window, div, px,
++    Pixels, Point, RenderOnce, SharedString, Size, StyleRefinement, Styled, Window, div, px,
+ };
+ use smol::stream::StreamExt;
+ 
+--- a/src/time/date_picker.rs
++++ b/src/time/date_picker.rs
+@@ -116,7 +116,7 @@
+             |this, _, ev: &CalendarEvent, window, cx| match ev {
+                 CalendarEvent::Selected(date) => {
+                     this.update_date(*date, true, window, cx);
+-                    this.focus_handle.focus(window);
++                    this.focus_handle.focus(window, cx);
+                 }
+             },
+         )];
+@@ -216,7 +216,7 @@
+ 
+         if let Some(focused) = window.focused(cx) {
+             if focused.contains(&self.focus_handle, window) {
+-                self.focus_handle.focus(window);
++                self.focus_handle.focus(window, cx);
+             }
+         }
+     }
+--- a/src/tree.rs
++++ b/src/tree.rs
+@@ -376,9 +376,9 @@
+                     items
+                 })
+             })
+-            .flex_grow()
++            .flex_grow(1.)
+             .size_full()
+-            .track_scroll(self.scroll_handle.clone())
++            .track_scroll(&self.scroll_handle)
+             .with_sizing_behavior(ListSizingBehavior::Auto)
+             .into_any_element(),
+         )
+--- a/src/window_border.rs
++++ b/src/window_border.rs
+@@ -153,6 +153,7 @@
+                             .when(!tiling.right, |div| div.border_r(BORDER_SIZE))
+                             .when(!tiling.is_tiled(), |div| {
+                                 div.shadow(vec![gpui::BoxShadow {
++                                    inset: false,
+                                     color: Hsla {
+                                         h: 0.,
+                                         s: 0.,

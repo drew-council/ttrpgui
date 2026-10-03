@@ -11,6 +11,11 @@ undoable bulk changes, portable TOML/Markdown storage, and native tabs/splits.
 See [verification](docs/verification.md) for measured results and outstanding
 release acceptance work.
 
+For the current stopping point, known failing checks and next-agent instructions,
+read [the handoff](docs/handoff.md). The [original requirements](docs/original-requirements.md)
+and [baseline audit](docs/baseline.md) distinguish the intended release from
+what has been verified.
+
 ## Build and run
 
 ```sh
@@ -25,6 +30,10 @@ Bootstrap verifies the pinned upstream archive and applies the documented patch
 series. The first build is substantial; Cargo concurrency is capped at two jobs.
 The Nix shell supplies build/runtime libraries. All linked GPUI crates use the
 same dependency graph.
+
+Buttons and form layouts use [GPUI Kit](https://gpui-kit.com/)'s
+`gpui-component` layer. Its pinned 0.5.1 source is adapted to the same GPUI
+revision as Zed; bootstrap verifies both source archives and patches.
 
 By default, campaign data is under `$XDG_DATA_HOME/ttrpgui/campaign` (normally
 `~/.local/share/ttrpgui/campaign`). Application settings and workspace state use
@@ -42,11 +51,13 @@ A new campaign starts with Session 1 and a Welcome note.
 - Ctrl+Shift+P: command palette, including pane splits and tab movement.
   Ctrl+P: file picker. Use the Search command for full-text workspace search.
 - Encounter focus: j/k, g/G, Space selection; +/- health, i initiative,
-  n rename, d description, a add creature; u/Ctrl+R undo/redo.
+  r rename, n create creature, d description, a add from library; u/Ctrl+R undo/redo.
 - Creature picker: type a name or alias, arrows/Enter choose, then enter quantity
   and optional initiative. Ctrl+N creates an encounter-only creature.
 - Shift+F10: encounter context menu. Escape cancels interactions or clears
   selection. Quitting is an explicit application action.
+- Ctrl+Shift+Q: quit after saving campaign work and preserving workspace state.
+  Ctrl+Q retains its Vim meaning inside editors.
 
 Completed encounters retain snapshots. Persistent characters carry health into
 new encounters; monster copies have independent health. Reset health is undoable.
@@ -75,5 +86,6 @@ The package is available at `dist/ttrpgui/bin/ttrpgui`; packaging opens no windo
 Use `--release` with the packaging script for an optimized build.
 
 [Architecture](docs/architecture.md) describes the supported editing surface and
-module boundaries. GPL-3.0-or-later; [third-party notices](THIRD_PARTY_NOTICES.md)
+module boundaries. The [baseline audit](docs/baseline.md) tracks the original
+release requirements. GPL-3.0-or-later; [third-party notices](THIRD_PARTY_NOTICES.md)
 retain upstream attribution and license information.

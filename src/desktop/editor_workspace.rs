@@ -82,6 +82,28 @@ pub fn verify(
         );
     }
     let text = left.read(cx).text(cx);
+    let presentation = markdown_live_preview::presentation_status(left.read(cx), cx)
+        .context("Markdown presentation addon was not attached")?;
+    let language = left_buffer
+        .read(cx)
+        .language()
+        .map(|language| language.name());
+    ensure!(
+        language
+            .as_ref()
+            .is_some_and(|name| name.as_ref() == "Markdown"),
+        "Document language was {language:?}, expected Markdown"
+    );
+    ensure!(
+        presentation.enabled && presentation.rendered_blocks > 0,
+        "Live Markdown did not render the regression fixture: {presentation:?}; grammar={}, parsing={:?}, syntax_layers={}",
+        left_buffer
+            .read(cx)
+            .language()
+            .is_some_and(|l| l.grammar().is_some()),
+        *left_buffer.read(cx).parse_status().borrow(),
+        left_buffer.read(cx).snapshot().syntax_layers().count()
+    );
     window.focus(&right.read(cx).focus_handle(cx), cx);
     ensure!(
         right.read(cx).focus_handle(cx).is_focused(window),

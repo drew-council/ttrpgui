@@ -122,6 +122,52 @@ fn persistent_health_lifecycle_reset_and_history() {
 }
 
 #[test]
+fn combat_and_undo_invalidate_only_their_affected_documents() {
+    let (mut engine, _, encounter) = setup();
+    let revision = engine.documents_revision();
+    engine.execute(Command::Start(encounter)).unwrap();
+    engine
+        .execute(Command::AdjustHealth {
+            encounter,
+            participants: participants(&engine, encounter),
+            delta: -1,
+        })
+        .unwrap();
+    assert!(engine.undo());
+    assert!(engine.redo());
+    assert_eq!(engine.documents_revision(), revision);
+    engine
+        .execute(Command::RenameEncounter {
+            id: encounter,
+            name: "New page name".into(),
+        })
+        .unwrap();
+    assert_eq!(engine.documents_revision(), revision + 1);
+    assert!(engine.undo());
+    assert_eq!(engine.documents_revision(), revision + 2);
+    assert!(engine.redo());
+    assert_eq!(engine.documents_revision(), revision + 3);
+    let before = engine.documents_revision();
+    assert!(
+        engine
+            .execute(Command::RenameEncounter {
+                id: encounter,
+                name: "".into()
+            })
+            .is_err()
+    );
+    assert_eq!(engine.documents_revision(), before);
+    let change = engine
+        .execute(Command::RenameEncounter {
+            id: encounter,
+            name: "New page name".into(),
+        })
+        .unwrap();
+    assert!(!change.changed);
+    assert_eq!(engine.documents_revision(), before);
+}
+
+#[test]
 fn copies_bulk_undo_caps_and_independent_health() {
     let (mut engine, _, encounter) = setup();
     let goblin = Creature::new("Goblin", 7, Some(13), CreatureKind::Template);

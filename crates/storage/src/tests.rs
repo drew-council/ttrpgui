@@ -1,5 +1,38 @@
 use super::*;
 
+#[test]
+fn image_import_is_portable_and_preserves_original_and_unrelated_files() {
+    let root = std::env::temp_dir().join(format!("ttrpgui-image-test-{}", uuid::Uuid::new_v4()));
+    let campaign = example();
+    let mut store = CampaignStore::create(&root, &campaign).unwrap();
+    let creature = campaign.creatures.keys().next().unwrap();
+    let page = PathBuf::from(format!("creatures/{creature}/notes.md"));
+    let source = root.join("original image.png");
+    fs::write(&source, b"original bytes").unwrap();
+    let imported = store.import_image(&page, &source).unwrap();
+    assert!(imported.starts_with("assets/"));
+    assert_eq!(
+        fs::read(root.join(page.parent().unwrap()).join(&imported)).unwrap(),
+        b"original bytes"
+    );
+    assert_eq!(fs::read(&source).unwrap(), b"original bytes");
+    assert!(
+        store
+            .import_image(Path::new("../notes.md"), &source)
+            .is_err()
+    );
+    let unknown = root.join("unknown.txt");
+    fs::write(&unknown, b"unsupported image").unwrap();
+    assert!(store.import_image(&page, &unknown).is_err());
+    store.save(&campaign).unwrap();
+    assert_eq!(
+        fs::read(root.join(page.parent().unwrap()).join(imported)).unwrap(),
+        b"original bytes"
+    );
+    drop(store);
+    fs::remove_dir_all(root).unwrap();
+}
+
 fn example() -> Campaign {
     let mut engine = CampaignEngine::new(Campaign::new("Test campaign")).unwrap();
     let hero = Creature::new("Éowyn", 20, None, CreatureKind::Persistent);

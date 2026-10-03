@@ -1,0 +1,73 @@
+--- a/crates/editor/src/items.rs
++++ b/crates/editor/src/items.rs
+@@ -24,7 +24,7 @@
+     proto::serialize_anchor as serialize_text_anchor,
+ };
+ use lsp::DiagnosticSeverity;
+-use multi_buffer::{BufferOffset, MultiBufferOffset, PathKey};
++use multi_buffer::{BufferOffset, MultiBufferOffset, PathKey, ToOffset as _};
+ use project::{
+     File, Project, ProjectItem as _, ProjectPath, git_store::GitStore, lsp_store::FormatTrigger,
+     project_settings::ProjectSettings, search::SearchQuery,
+@@ -1262,6 +1262,35 @@
+     }
+ }
+ 
++impl Editor {
++    /// Persist view metadata immediately after the serialized item exists.
++    /// Quit callers must await this rather than relying on throttled selection
++    /// and scroll writes, which can otherwise be cancelled during shutdown.
++    pub fn flush_view_state(
++        &mut self,
++        workspace_id: WorkspaceId,
++        _window: &mut Window,
++        cx: &mut Context<Self>,
++    ) -> Task<Result<()>> {
++        self.serialize_selections = Task::ready(());
++        let snapshot = self.buffer().read(cx).snapshot(cx);
++        let selections = self.selections.disjoint_anchors_arc().iter()
++            .map(|selection| (selection.start.to_offset(&snapshot).0, selection.end.to_offset(&snapshot).0))
++            .collect();
++        self.scroll_manager.cancel_pending_serialization();
++        let display = self.display_map.update(cx, |map, cx| map.snapshot(cx));
++        let anchor = self.scroll_manager.native_anchor(&display, cx);
++        let top_row = anchor.anchor.to_point(&snapshot).row;
++        let item_id = cx.entity().entity_id().as_u64();
++        let db = EditorDb::global(cx);
++        cx.background_spawn(async move {
++            db.save_editor_selections(item_id, workspace_id, selections).await?;
++            db.save_scroll_position(item_id, workspace_id, top_row, anchor.offset.x, anchor.offset.y).await?;
++            Ok(())
++        })
++    }
++}
++
+ impl SerializableItem for Editor {
+     fn serialized_item_kind() -> &'static str {
+         "Editor"
+@@ -2301,6 +2330,12 @@
+     mtime: Option<MTime>,
+     cx: &mut Context<Buffer>,
+ ) {
++    // Split views open the same project buffer. Replaying identical contents
++    // would replace its text again and move already-restored views' anchors.
++    // It would also incorrectly mark the shared dirty buffer as reloaded.
++    if buffer.text() == contents {
++        return;
++    }
+     // If we did restore an mtime, store it on the buffer so that
+     // the next edit will mark the buffer as dirty/conflicted.
+     if mtime.is_some() {
+--- a/crates/editor/src/scroll.rs
++++ b/crates/editor/src/scroll.rs
+@@ -167,6 +167,10 @@
+ }
+ 
+ impl ScrollManager {
++    pub(super) fn cancel_pending_serialization(&mut self) {
++        self._save_scroll_position_task = Task::ready(());
++    }
++
+     pub fn new(cx: &mut Context<Editor>) -> Self {
+         let anchor = cx.new(|_| SharedScrollAnchor {
+             scroll_anchor: ScrollAnchor::new(),

@@ -2,6 +2,9 @@
 
 Status: source-on-edit editor foundation accepted for campaign integration.
 The complete campaign release and performance gates remain under verification.
+Implementation stopped for user-requested handoff on 2026-10-03; see
+[handoff.md](handoff.md) for the failing formatting/bootstrap checks and remaining
+work. The original brief is in [original-requirements.md](original-requirements.md).
 
 The desktop composes Zed's `Workspace`, `Project`, `Editor`, `vim`, search,
 command palette, and the live Markdown addon from **one source revision**.
@@ -51,7 +54,10 @@ temporarily suspending only the Markdown addon's decorations, then restores
 cached presentation before the next frame. This preserves upstream source
 coordinates without replacing Vim's operators or the document engine. Tests
 cover commands crossing bold text, tables, images, quotes, and headings. All
-564 upstream Vim tests and 31 Markdown-addon tests pass with this patch.
+564 upstream Vim tests and 32 Markdown-addon tests passed with the current
+viewport patch series; the live Neovim comparisons also pass. These do not
+substitute for the currently failing application formatting proof. See
+verification.md for current checks and historical results.
 
 ## Prior art decision
 
@@ -88,6 +94,12 @@ The implemented workspace boundaries are:
   fields, links, and shared semantic Catppuccin colors. Encounter rendering,
   persistence, and rehearsal code have separate modules.
 
+Campaign buttons and form layouts use GPUI Kit's `gpui-component` layer. Version
+0.5.1 is pinned with an Apache-2.0 notice and a compatibility patch for the Zed
+GPUI revision. Newer Kit releases require a different GPUI graph. Kit supplies
+controls; Zed retains workspace items, panes, editors and action dispatch. Draft
+descriptions use a full Zed editor so multiline Vim undo remains available.
+
 ## Campaign state and persistence
 
 Campaign directories are portable. Creature, location, session, and note UUID
@@ -110,6 +122,14 @@ The Linux watcher registers subdirectories and scans newly created directories;
 clean structured changes reload, while dirty changes preserve both versions.
 Open prose buffers remain authoritative when updating the derived index.
 
+One dedicated storage worker owns the campaign lock and executes queued writes
+in order. Dropping the caller's future does not cancel an authorized save. The
+UI shows queued, saved and failed state; recovery status reflects whether a
+copy actually exists. Quit waits for pending campaign writes, serializes every
+open item, flushes independent editor cursor/scroll state, and saves the pane
+layout. Split restoration applies identical unsaved text only once to avoid
+moving already-restored anchors in other views.
+
 Renames retain old names as aliases and rewrite resolvable links. Open files
 receive editor transactions; closed files receive a recoverable compare-before-
 write batch. Metadata and link edits are separate transactions, with retained
@@ -124,6 +144,6 @@ lock. Packaging includes runtime library paths, attribution, and application
 source with the pinned upstream bootstrap recipe.
 
 See `verification.md` for release acceptance still requiring work, including
-large-campaign persistence and end-to-end rendering measurements. Current
-structured persistence is synchronous; a fast fuzzy query does not establish
-smooth large-campaign interaction.
+large-campaign persistence and end-to-end rendering measurements. Moving disk
+writes off the UI thread does not by itself establish smooth large-campaign
+interaction. The original requirements are tracked in baseline.md.

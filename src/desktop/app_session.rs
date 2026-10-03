@@ -8,6 +8,13 @@ pub fn init(
     window: &Window,
     cx: &mut App,
 ) {
+    // Ctrl-Q is a Vim command inside editors. Give application quit a distinct
+    // shortcut so modal editing retains the upstream keymap.
+    cx.bind_keys([gpui::KeyBinding::new(
+        "ctrl-shift-q",
+        zed_actions::Quit,
+        None,
+    )]);
     let workspace = workspace.downgrade();
     let window = window.window_handle();
     let pending = std::rc::Rc::new(std::cell::Cell::new(false));
@@ -19,19 +26,58 @@ pub fn init(
         let model = model.clone();
         let workspace = workspace.clone();
         cx.spawn(async move |cx| {
-            let result = async {
+            let result: anyhow::Result<bool> = async {
                 if let Some(model) = &model {
                     wait_saved(model, cx).await?;
                 }
                 let Some(workspace) = workspace.upgrade() else {
                     return Ok(true);
                 };
-                cx.update_window(window, |_, window, cx| {
-                    workspace.update(cx, |w, cx| {
-                        w.prepare_to_close(workspace::CloseIntent::Quit, window, cx)
-                    })
-                })?
-                .await
+                let approved = cx
+                    .update_window(window, |_, window, cx| {
+                        workspace.update(cx, |w, cx| {
+                            w.prepare_to_close(workspace::CloseIntent::Quit, window, cx)
+                        })
+                    })?
+                    .await?;
+                if approved {
+                    let items = cx.update_window(window, |_, window, cx| {
+                        workspace.update(cx, |w, cx| {
+                            let items = w
+                                .items(cx)
+                                .filter_map(|item| item.to_serializable_item_handle(cx))
+                                .collect::<Vec<_>>();
+                            items
+                                .into_iter()
+                                .filter_map(|item| item.serialize(w, false, window, cx))
+                                .collect::<Vec<_>>()
+                        })
+                    })?;
+                    for item in items {
+                        item.await?;
+                    }
+                    let views = cx.update_window(window, |_, window, cx| {
+                        let w = workspace.read(cx);
+                        let workspace_id = w.database_id();
+                        let editors = w.items_of_type::<editor::Editor>(cx).collect::<Vec<_>>();
+                        editors
+                            .into_iter()
+                            .filter_map(|editor| {
+                                workspace_id.map(|id| {
+                                    editor.update(cx, |e, cx| e.flush_view_state(id, window, cx))
+                                })
+                            })
+                            .collect::<Vec<_>>()
+                    })?;
+                    for view in views {
+                        view.await?;
+                    }
+                    cx.update_window(window, |_, window, cx| {
+                        workspace.update(cx, |w, cx| w.flush_serialization(window, cx))
+                    })?
+                    .await;
+                }
+                Ok(approved)
             }
             .await;
             pending.set(false);

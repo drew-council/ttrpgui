@@ -7,17 +7,21 @@ def --wrapped checked [...command: string] {
   }
 }
 
-def main [--neovim] {
+def main [--neovim --performance] {
   cd ($env.FILE_PWD | path dirname)
   checked nu scripts/bootstrap.nu
   checked cargo check --locked
-  checked cargo test --locked -p campaign_domain -p campaign_storage -p campaign_documents
-  checked cargo test --locked --test launcher
+  checked cargo test --locked --workspace
   let data = (mktemp -d | str trim)
   try {
     with-env {TTRPGUI_DATA_DIR: $data} {
       checked cargo run --locked -- --smoke-test
       checked cargo run --locked -- --campaign-smoke-test
+      checked cargo run --locked -- --session-smoke-test prepare
+      checked cargo run --locked -- --session-smoke-test restore
+      if $performance {
+        checked cargo run --release --locked -- --performance-smoke-test
+      }
     }
   } catch {|error| rm -rf $data; error make {msg: $error.msg} }
   rm -rf $data

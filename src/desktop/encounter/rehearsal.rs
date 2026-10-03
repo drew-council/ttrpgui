@@ -52,11 +52,11 @@ pub fn verify(
     });
     window.focus(&view.read(cx).focus_handle(cx), cx);
     window.refresh();
-    let _ = window.draw(cx);
+    window.draw(cx).clear(cx);
     let press = |key: &str, window: &mut Window, cx: &mut App| {
         window.dispatch_keystroke(Keystroke::parse(key).unwrap(), cx);
         window.refresh();
-        let _ = window.draw(cx);
+        window.draw(cx).clear(cx);
     };
     press("space", window, cx);
     let target = view.read(cx).cursor.unwrap();
@@ -95,7 +95,7 @@ pub fn verify(
         view.read(cx).cursor == Some(target) && view.read(cx).selected.contains(&target),
         "Initiative sort lost focus or selection"
     );
-    press("d", window, cx);
+    press("-", window, cx);
     let revision = model.read(cx).engine.revision();
     press("j", window, cx);
     ensure!(
@@ -167,14 +167,132 @@ pub fn verify(
         model.read(cx).error.is_none(),
         "Rehearsal reported a persistence error"
     );
-    let begin = std::time::Instant::now();
-    for _ in 0..10 {
-        window.refresh();
-        let _ = window.draw(cx);
-    }
     println!(
-        "Campaign smoke test passed: 100 participants, keyboard selection, damage, undo/redo, stable initiative focus, field cancellation, queued automatic save. Ten headless layout frames: {:?}",
-        begin.elapsed()
+        "Campaign smoke test passed: 100 participants, keyboard selection, damage, undo/redo, stable initiative focus, field cancellation and queued automatic save."
+    );
+    Ok(())
+}
+
+/// Yield to GPUI between field creation and typing, so upstream Vim observers
+/// install the draft's addon just as they do in a real event loop.
+pub async fn verify_description(
+    model: &Entity<CampaignModel>,
+    workspace: &Entity<Workspace>,
+    window: AnyWindowHandle,
+    cx: &mut AsyncApp,
+) -> anyhow::Result<()> {
+    use crate::desktop::rehearsal::press as key;
+    use anyhow::{Context, ensure};
+    let view = workspace
+        .read_with(cx, |w, cx| w.item_of_type::<EncounterView>(cx))
+        .context("Description rehearsal needs an encounter")?;
+    let encounter = view.read_with(cx, |v, _| v.id);
+    let (targets, first, draft) = window.update(cx, |_, window, cx| {
+        let targets = model.read(cx).engine.state().encounters[&encounter]
+            .sorted_participants()
+            .into_iter()
+            .take(2)
+            .map(|p| p.id)
+            .collect::<BTreeSet<_>>();
+        let first = model.read(cx).engine.state().encounters[&encounter]
+            .sorted_participants()
+            .into_iter()
+            .find(|p| targets.contains(&p.id))
+            .unwrap()
+            .id;
+        model.update(cx, |m, cx| {
+            m.execute(
+                Command::SetDescription {
+                    encounter,
+                    participants: [first].into(),
+                    description: "First line\nSecond line".into(),
+                },
+                cx,
+            );
+        });
+        let draft = view.update(cx, |v, cx| {
+            v.selected = targets.clone();
+            v.cursor = targets.iter().copied().find(|id| *id != first);
+            v.begin(Edit::Description, window, cx);
+            v.edit.as_ref().unwrap().1.inputs[0].1.clone()
+        });
+        (targets, first, draft)
+    })?;
+    cx.background_executor()
+        .timer(std::time::Duration::from_millis(20))
+        .await;
+    ensure!(
+        draft.read_with(cx, |e, cx| e.text(cx)) == "First line\nSecond line",
+        "Bulk description did not prefill the first selected row"
+    );
+    let revision = model.read_with(cx, |m, _| m.engine.revision());
+    for stroke in ["i", "x", "enter", "y", "escape"] {
+        key(window, stroke, cx)?;
+    }
+    ensure!(
+        view.read_with(cx, |v, _| v.edit.is_some()),
+        "Insert-mode Escape cancelled the description draft"
+    );
+    ensure!(
+        draft.read_with(cx, |e, cx| e.text(cx)).contains("x\ny"),
+        "Insert-mode Enter did not enter a newline"
+    );
+    key(window, "u", cx)?;
+    ensure!(
+        draft.read_with(cx, |e, cx| e.text(cx)) == "First line\nSecond line",
+        "Vim draft undo failed"
+    );
+    ensure!(
+        model.read_with(cx, |m, _| m.engine.revision()) == revision,
+        "Draft typing or undo changed encounter state"
+    );
+    window.update(cx, |_, window, cx| {
+        draft.update(cx, |e, cx| {
+            e.set_text("Shared\nencounter notes", window, cx)
+        })
+    })?;
+    key(window, "enter", cx)?;
+    ensure!(
+        view.read_with(cx, |v, _| v.edit.is_none())
+            && model.read_with(cx, |m, _| targets.iter().all(|id| m
+                .engine
+                .state()
+                .encounters[&encounter]
+                .participants[id]
+                .description
+                == "Shared\nencounter notes")),
+        "Description did not commit to all selected participants"
+    );
+    key(window, "u", cx)?;
+    ensure!(
+        model.read_with(cx, |m, _| m.engine.state().encounters[&encounter]
+            .participants[&first]
+            .description
+            .clone())
+            == "First line\nSecond line",
+        "Bulk description was not one undoable mutation"
+    );
+    key(window, "escape", cx)?;
+    key(window, "r", cx)?;
+    ensure!(
+        view.read_with(cx, |v, _| matches!(
+            v.edit.as_ref().map(|(edit, _)| edit),
+            Some(Edit::Rename)
+        )),
+        "Rename shortcut did not open its field"
+    );
+    key(window, "escape", cx)?;
+    key(window, "n", cx)?;
+    ensure!(
+        view.read_with(cx, |v, _| matches!(
+            v.edit.as_ref().map(|(edit, _)| edit),
+            Some(Edit::Local)
+        )),
+        "Create shortcut did not open creature creation"
+    );
+    key(window, "escape", cx)?;
+    println!(
+        "Description rehearsal passed: multiline Vim input, draft undo, mode-aware Escape, first-selected prefill and one-step bulk commit/undo; n/r shortcuts retained."
     );
     Ok(())
 }

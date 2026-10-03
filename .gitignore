@@ -8,3 +8,5 @@ dist/
 # Reproducible upstream checkout and local editor-proof state
 upstream/zed/
 .editor-proof/
+
+upstream/gpui-component/

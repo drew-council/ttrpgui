@@ -26,5 +26,18 @@ MIT and Apache license texts remain as historical notices.
 - Copyright Catppuccin contributors; MIT license, preserved alongside the asset.
 - The official Mauve-accent theme is loaded unchanged; Mocha is the app default.
 
+## GPUI Kit components
+
+- Source: https://github.com/longbridge/gpui-kit (formerly gpui-component).
+- Package: `gpui-component` 0.5.1, revision `0f0ab35233212f8f3277028995caf0c41e13ee6c`.
+- Copyright Longbridge and contributors; Apache-2.0. The checksum-verified
+  upstream package preserves its license notices.
+- Local compatibility changes are in
+  `patches/gpui-component/0001-pinned-gpui-compatibility.patch`: use the editor's
+  Tree-sitter version and GPUI APIs for anchors, focus, geometry and text paint.
+- The campaign uses its buttons and form layout; Zed owns workspace docking
+  and document editing. Component overlays requiring a Kit window root are
+  not enabled in the campaign workspace.
+
 Velotype and other projects in the design plan are research references only;
 no source from those projects is included.

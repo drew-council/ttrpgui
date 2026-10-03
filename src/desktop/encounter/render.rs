@@ -21,15 +21,22 @@ impl Render for EncounterView {
             .id("encounter")
             .relative()
             .track_focus(&self.focus)
-            .key_context(if self.edit.is_some() {
-                "CampaignField"
-            } else if self.library {
-                "CampaignLibrary"
-            } else if self.focus.is_focused(window) {
-                "CampaignEncounter"
-            } else {
-                "CampaignControls"
-            })
+            .key_context(
+                if matches!(
+                    self.edit.as_ref().map(|(kind, _)| kind),
+                    Some(Edit::Description)
+                ) {
+                    "CampaignDescription"
+                } else if self.edit.is_some() {
+                    "CampaignField"
+                } else if self.library {
+                    "CampaignLibrary"
+                } else if self.focus.is_focused(window) {
+                    "CampaignEncounter"
+                } else {
+                    "CampaignControls"
+                },
+            )
             .tab_group()
             .size_full()
             .flex()
@@ -81,7 +88,26 @@ impl Render for EncounterView {
                 }),
             ));
         macro_rules! handler { ($($action:ident=>$key:literal),* $(,)?)=> { $(root=root.on_action(cx.listener(|this,_:&$action,window,cx|this.key(&KeyDownEvent { keystroke:Keystroke::parse($key).unwrap(),is_held:false,prefer_character_input:false },window,cx)));)* }; }
-        handler!(CombatSelect=>"space",CombatDown=>"j",CombatUp=>"k",CombatFirst=>"g",CombatLast=>"end",CombatHeal=>"+",CombatDamage=>"-",CombatInitiative=>"i",CombatRename=>"n",CombatDescription=>"d",CombatAdd=>"a",CombatUndo=>"u",CombatRedo=>"ctrl-r",CombatCancel=>"escape",SubmitField=>"enter",CancelField=>"escape",NextField=>"tab",PreviousField=>"shift-tab");
+        handler!(CombatSelect=>"space",CombatDown=>"j",CombatUp=>"k",CombatFirst=>"g",CombatLast=>"end",CombatHeal=>"+",CombatDamage=>"-",CombatInitiative=>"i",CombatRename=>"r",CombatCreate=>"n",CombatDescription=>"d",CombatAdd=>"a",CombatUndo=>"u",CombatRedo=>"ctrl-r",CombatCancel=>"escape",SubmitField=>"enter",CancelField=>"escape",NextField=>"tab",PreviousField=>"shift-tab");
+        root = root
+            .on_action(cx.listener(|this, _: &StartEncounter, _, cx| {
+                this.command(Command::Start(this.id), cx)
+            }))
+            .on_action(cx.listener(|this, _: &CompleteEncounter, _, cx| {
+                this.command(Command::Complete(this.id), cx)
+            }))
+            .on_action(cx.listener(|this, _: &ResetEncounterHealth, _, cx| {
+                this.command(
+                    Command::ResetHealth {
+                        encounter: this.id,
+                        participants: this.targets(),
+                    },
+                    cx,
+                )
+            }))
+            .on_action(cx.listener(|this, _: &SaveParticipantToLibrary, _, cx| {
+                this.save_participant_to_library(cx)
+            }));
         root = root.on_action(cx.listener(|this, _: &CombatMenu, window, cx| {
             this.show_context_menu(
                 point(window.viewport_size().width * 0.5, px(280.)),
@@ -135,7 +161,7 @@ impl Render for EncounterView {
                 .child(fields.render(cx))
                 .child(primary_button(
                     "apply",
-                    "Apply · Enter",
+                    if fields.multiline { "Apply · Ctrl+Enter" } else { "Apply · Enter" },
                     cx.listener(|this, _, window, cx| this.submit(window, cx)),
                 ))
                 .child(button(
@@ -146,6 +172,10 @@ impl Render for EncounterView {
                         window.focus(&this.focus, cx);
                         cx.notify();
                     }),
+                ))
+                .when(fields.multiline, |panel| panel.child(
+                    div().text_xs().text_color(rgb(palette::TEXT))
+                        .child("Insert: Enter adds a line; Esc returns to Normal. Normal: Enter applies; Esc cancels.")
                 ))
         });
         if self.library {
@@ -219,14 +249,14 @@ impl Render for EncounterView {
         if encounter.status == EncounterStatus::Planned {
             toolbar = toolbar.child(primary_button(
                 "start",
-                "Start encounter",
+                "Start · Ctrl+Shift+S",
                 cx.listener(|this, _, _, cx| this.command(Command::Start(this.id), cx)),
             ));
         }
         if encounter.status == EncounterStatus::Active {
             toolbar = toolbar.child(button(
                 "complete",
-                "Complete encounter",
+                "Complete · Ctrl+Shift+C",
                 cx.listener(|this, _, _, cx| this.command(Command::Complete(this.id), cx)),
             ));
         }
@@ -253,7 +283,7 @@ impl Render for EncounterView {
                 ("Heal +", Edit::Health(1)),
                 ("Damage −", Edit::Health(-1)),
                 ("Initiative · i", Edit::Initiative),
-                ("Rename · n", Edit::Rename),
+                ("Rename · r", Edit::Rename),
                 ("Description · d", Edit::Description),
             ]
             .into_iter()
@@ -268,7 +298,7 @@ impl Render for EncounterView {
             toolbar = toolbar
                 .child(button(
                     "reset",
-                    "Reset health",
+                    "Reset health · Ctrl+Shift+H",
                     cx.listener(|this, _, _, cx| {
                         this.command(
                             Command::ResetHealth {

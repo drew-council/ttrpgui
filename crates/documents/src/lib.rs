@@ -217,6 +217,9 @@ pub struct TextMatch {
     pub excerpt: String,
 }
 impl SearchIndex {
+    pub fn contains(&self, id: DocumentId) -> bool {
+        self.entries.contains_key(&id)
+    }
     pub fn update(&mut self, id: DocumentId, revision: u64, text: String) -> bool {
         self.apply(PreparedDocument::new(id, revision, text))
     }

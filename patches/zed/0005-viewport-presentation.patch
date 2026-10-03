@@ -1,0 +1,234 @@
+--- a/crates/markdown_live_preview/src/markdown_live_preview.rs
++++ b/crates/markdown_live_preview/src/markdown_live_preview.rs
+@@ -79,9 +79,15 @@
+     let addon = editor.addon::<LivePreviewAddon>()?;
+     Some(PresentationStatus {
+         enabled: is_enabled(addon, cx),
+-        parsed_blocks: addon.markers.as_ref().map_or(0, |markers| markers.blocks.len()),
++        parsed_blocks: addon
++            .markers
++            .as_ref()
++            .map_or(0, |markers| markers.blocks.len()),
+         rendered_blocks: addon.applied_blocks.len(),
+-        inline_markers: addon.markers.as_ref().map_or(0, |markers| markers.inline.len()),
++        inline_markers: addon
++            .markers
++            .as_ref()
++            .map_or(0, |markers| markers.inline.len()),
+     })
+ }
+ 
+@@ -108,6 +114,7 @@
+                 }
+                 apply_decorations(editor, cx);
+             }
++            EditorEvent::ScrollPositionChanged { .. } => apply_decorations(editor, cx),
+             _ => {}
+         }),
+     );
+@@ -281,6 +288,9 @@
+ 
+ struct MarkerSet {
+     inline: Vec<InlineMarker>,
++    // Sorted starts and prefix maximum ends permit viewport queries without
++    // visiting every token. Prefix ends also include overlapping constructs.
++    inline_max_ends: Vec<Anchor>,
+     blocks: Vec<BlockMarker>,
+     /// Ranges that get an always-on strikethrough text decoration: themes
+     /// color `~~struck~~` spans but do not apply the actual line-through, and
+@@ -577,14 +587,44 @@
+         addon.source_revealed = source_revealed.clone();
+     }
+     let selection_offsets = selection_offset_ranges(editor, &snapshot);
++    // Large notes need presentation near the viewport, rather than thousands
++    // of offscreen concealments rebuilt around each Vim source operation.
++    // Anchors and Markdown remain authoritative throughout the document.
++    let presentation_rows = if markers.inline.len() > 2_000 || markers.blocks.len() > 100 {
++        let display = editor.display_snapshot(cx);
++        let visible = editor.multi_buffer_visible_range(&display, cx);
++        Some(visible.start.row.saturating_sub(60)..visible.end.row.saturating_add(60))
++    } else {
++        None
++    };
+ 
+     // --- Inline concealments ---
+ 
+     let weak_editor = cx.weak_entity();
+     let mut concealments = Vec::new();
+-    for marker in &markers.inline {
++    let inline = if let Some(rows) = &presentation_rows {
++        let start = snapshot.anchor_before(Point::new(rows.start, 0).min(snapshot.max_point()));
++        let end = snapshot
++            .anchor_after(Point::new(rows.end.saturating_add(1), 0).min(snapshot.max_point()));
++        let first = markers
++            .inline_max_ends
++            .partition_point(|anchor| anchor.cmp(&start, &snapshot).is_lt());
++        let last = markers
++            .inline
++            .partition_point(|marker| !marker.range.start.cmp(&end, &snapshot).is_gt());
++        &markers.inline[first.min(last)..last]
++    } else {
++        &markers.inline[..]
++    };
++    for marker in inline {
+         let start = marker.range.start.to_point(&snapshot);
+         let end = marker.range.end.to_point(&snapshot);
++        if presentation_rows
++            .as_ref()
++            .is_some_and(|rows| end.row < rows.start || start.row > rows.end)
++        {
++            continue;
++        }
+         if start >= end {
+             continue;
+         }
+@@ -616,6 +656,12 @@
+     for marker in &markers.blocks {
+         let start = marker.range.start.to_point(&snapshot);
+         let end = marker.range.end.to_point(&snapshot);
++        if presentation_rows
++            .as_ref()
++            .is_some_and(|rows| end.row < rows.start || start.row > rows.end)
++        {
++            continue;
++        }
+         if start > end {
+             continue;
+         }
+@@ -808,6 +854,14 @@
+         return;
+     };
+     let snapshot = editor.buffer().read(cx).snapshot(cx);
++    let display_snapshot = editor.display_snapshot(cx);
++    let untagged: Vec<_> = display_snapshot
++        .folds_in_range(MultiBufferOffset(0)..snapshot.len())
++        .filter(|fold| fold.placeholder.type_tag.is_none())
++        .collect();
++    if untagged.is_empty() {
++        return;
++    }
+     let marker_offsets: HashSet<(usize, usize)> = markers
+         .inline
+         .iter()
+@@ -819,10 +873,8 @@
+         })
+         .collect();
+ 
+-    let display_snapshot = editor.display_snapshot(cx);
+-    let stale: Vec<Range<MultiBufferOffset>> = display_snapshot
+-        .folds_in_range(MultiBufferOffset(0)..snapshot.len())
+-        .filter(|fold| fold.placeholder.type_tag.is_none())
++    let stale: Vec<Range<MultiBufferOffset>> = untagged
++        .into_iter()
+         .filter_map(|fold| {
+             let start = fold.range.start.to_offset(&snapshot);
+             let end = fold.range.end.to_offset(&snapshot);
+@@ -2681,7 +2733,7 @@
+     extraction.scan_wikilinks();
+ 
+     let Extraction {
+-        inline,
++        mut inline,
+         mut blocks,
+         strikethrough,
+         italic,
+@@ -2717,8 +2769,24 @@
+         }
+     });
+ 
++    inline.sort_by(|a, b| a.range.start.cmp(&b.range.start, &multibuffer_snapshot));
++    let mut maximum_end = Anchor::Min;
++    let inline_max_ends = inline
++        .iter()
++        .map(|marker| {
++            if maximum_end
++                .cmp(&marker.range.end, &multibuffer_snapshot)
++                .is_lt()
++            {
++                maximum_end = marker.range.end;
++            }
++            maximum_end
++        })
++        .collect();
++
+     Some(MarkerSet {
+         inline,
++        inline_max_ends,
+         blocks,
+         strikethrough,
+         italic,
+--- a/crates/markdown_live_preview/src/tests.rs
++++ b/crates/markdown_live_preview/src/tests.rs
+@@ -504,6 +504,52 @@
+     cx.set_state("editedˇ\nsome **bold** text\n");
+     cx.executor().run_until_parked();
+     pretty_assertions::assert_eq!(cx.display_text(), "edited\nsome bold text\n");
++}
++
++#[gpui::test]
++async fn test_large_note_presentation_follows_scroll_and_source_scope(cx: &mut TestAppContext) {
++    let mut cx = markdown_test_context(cx).await;
++    let text = (0..500)
++        .map(|row| format!("row {row} **bold** *italic* [link](relative.md)\n"))
++        .collect::<String>();
++    cx.set_state(&format!("ˇ{text}"));
++    cx.executor().run_until_parked();
++    assert!(cx.display_text().contains("row 1 bold italic link"));
++    assert!(cx.display_text().contains("row 400 **bold**"));
++
++    // Scrolling without changing the selection must decorate the newly
++    // visible source rows. Distant tokens stay out of the display maps.
++    cx.update_editor(|editor, window, cx| {
++        let snapshot = editor.buffer().read(cx).snapshot(cx);
++        editor.set_scroll_anchor(
++            editor::scroll::ScrollAnchor {
++                anchor: snapshot.anchor_before(Point::new(400, 0)),
++                offset: Default::default(),
++            },
++            window,
++            cx,
++        );
++    });
++    cx.executor().run_until_parked();
++    assert!(cx.display_text().contains("row 400 bold italic link"));
++    assert!(cx.display_text().contains("row 1 **bold**"));
++
++    cx.update_editor(|editor, _, cx| {
++        editor.with_source_display(cx, |editor, cx| {
++            let snapshot = editor.display_snapshot(cx);
++            assert_eq!(snapshot.text(), text);
++        });
++    });
++    cx.executor().run_until_parked();
++    assert_eq!(cx.buffer_text(), text);
++    assert!(cx.display_text().contains("row 400 bold italic link"));
++
++    cx.dispatch_action(ToggleLivePreview);
++    cx.executor().run_until_parked();
++    assert_eq!(cx.display_text(), text);
++    cx.dispatch_action(ToggleLivePreview);
++    cx.executor().run_until_parked();
++    assert!(cx.display_text().contains("row 400 bold italic link"));
+ }
+ 
+ #[gpui::test]
+--- a/crates/vim/src/vim.rs
++++ b/crates/vim/src/vim.rs
+@@ -2276,9 +2276,14 @@
+ 
+     fn sync_vim_settings(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+         let state = self.state_for_editor_settings(cx);
+-        self.update_editor(cx, |_, editor, cx| {
+-            Vim::sync_vim_settings_to_editor(&state, editor, window, cx);
+-        });
++        // These settings do not interpret display coordinates. Suspending
++        // Markdown for cursor shape/input flags would rewrap the document a
++        // second time after every motion without affecting Vim semantics.
++        if let Some(editor) = self.editor.upgrade() {
++            editor.update(cx, |editor, cx| {
++                Vim::sync_vim_settings_to_editor(&state, editor, window, cx);
++            });
++        }
+         cx.notify()
+     }
+ 

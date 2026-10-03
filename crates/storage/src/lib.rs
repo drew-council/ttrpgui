@@ -157,6 +157,50 @@ impl CampaignStore {
         transaction::commit(&self.root, &before, &after)
     }
 
+    /// Copy an image into a page's portable assets directory. The original is
+    /// read only; the unique destination participates in journal recovery.
+    pub fn import_image(&mut self, document: &Path, source: &Path) -> Result<String> {
+        ensure!(
+            read_structured(&self.root)? == self.expected,
+            "Campaign metadata changed externally; resolve the conflict before importing an image"
+        );
+        ensure!(
+            document.file_name().is_some_and(|name| name == "notes.md"),
+            "Image destination must be a campaign page"
+        );
+        let directory = document.parent().context("Page directory missing")?;
+        let metadata = directory.join("metadata.toml");
+        ensure!(
+            self.expected
+                .contains_key(metadata.to_str().context("Non-UTF-8 page path")?),
+            "Image destination page is missing"
+        );
+        let extension = source
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or_default()
+            .to_ascii_lowercase();
+        ensure!(
+            matches!(
+                extension.as_str(),
+                "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg"
+            ),
+            "Choose a PNG, JPEG, GIF, WebP or SVG image"
+        );
+        let relative = format!("assets/{}.{}", uuid::Uuid::new_v4(), extension);
+        let path = directory
+            .join(&relative)
+            .to_str()
+            .context("Non-UTF-8 asset path")?
+            .to_owned();
+        let destination = transaction::safe_path(&self.root, &path)?;
+        ensure!(!destination.exists(), "Image destination already exists");
+        let bytes = fs::read(source).context("Could not read the selected image")?;
+        ensure!(!bytes.is_empty(), "Selected image is empty");
+        transaction::commit(&self.root, &Files::new(), &[(path, bytes)].into())?;
+        Ok(relative)
+    }
+
     pub fn has_external_changes(&self) -> Result<bool> {
         Ok(read_structured(&self.root)? != self.expected)
     }

@@ -1,5 +1,6 @@
-use crate::desktop::visuals::palette;
+mod rehearsal;
 mod render;
+pub use rehearsal::verify;
 
 use super::{
     campaign::{CampaignModel, open_document},
@@ -20,11 +21,33 @@ actions!(
         PickerNext,
         PickerPrevious,
         PickerConfirm,
-        PickerCancel
+        PickerCancel,
+        CollapseSession,
+        ExpandSession,
+        CreateSession,
+        CreateEncounter,
+        FocusPageFilter
     ]
 );
 pub fn init(cx: &mut App) {
     cx.bind_keys([
+        KeyBinding::new("j", PickerNext, Some("CampaignBrowser")),
+        KeyBinding::new("down", PickerNext, Some("CampaignBrowser")),
+        KeyBinding::new("k", PickerPrevious, Some("CampaignBrowser")),
+        KeyBinding::new("up", PickerPrevious, Some("CampaignBrowser")),
+        KeyBinding::new("enter", PickerConfirm, Some("CampaignBrowser")),
+        KeyBinding::new("h", CollapseSession, Some("CampaignBrowser")),
+        KeyBinding::new("left", CollapseSession, Some("CampaignBrowser")),
+        KeyBinding::new("l", ExpandSession, Some("CampaignBrowser")),
+        KeyBinding::new("right", ExpandSession, Some("CampaignBrowser")),
+        KeyBinding::new("n", CreateEncounter, Some("CampaignBrowser")),
+        KeyBinding::new("s", CreateSession, Some("CampaignBrowser")),
+        KeyBinding::new("/", FocusPageFilter, Some("CampaignBrowser")),
+        KeyBinding::new(
+            "ctrl-o",
+            ToggleNavigator,
+            Some("CampaignBrowser || CampaignPicker"),
+        ),
         KeyBinding::new("down", PickerNext, Some("CampaignPicker > Editor")),
         KeyBinding::new("up", PickerPrevious, Some("CampaignPicker > Editor")),
         KeyBinding::new("enter", PickerConfirm, Some("CampaignPicker > Editor")),
@@ -54,8 +77,29 @@ pub struct Navigator {
     pending_link: Option<super::link_completion::PendingLink>,
     restricted: Option<std::collections::BTreeSet<DocumentId>>,
     heading: Option<String>,
+    collapsed_sessions: std::collections::BTreeSet<SessionId>,
 }
 impl Navigator {
+    pub(super) fn focus_session(
+        &mut self,
+        session: SessionId,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.filter.update(cx, |e, cx| e.set_text("", window, cx));
+        self.picker_cursor = self
+            .pages(cx)
+            .iter()
+            .position(|(id, _)| *id == DocumentId::Session(session))
+            .unwrap_or(0);
+        self.selected = Some(DocumentId::Session(session));
+        window.focus(&self.focus, cx);
+        cx.notify();
+    }
+    pub(super) fn filter_handle(&self) -> Entity<editor::Editor> {
+        self.filter.clone()
+    }
+
     pub fn show_related(&mut self, id: DocumentId, cx: &mut Context<Self>) {
         self.selected = Some(id);
         cx.notify();
@@ -89,6 +133,7 @@ impl Navigator {
             pending_link: None,
             restricted: None,
             heading: None,
+            collapsed_sessions: Default::default(),
         }
     }
     fn picker_move(&mut self, backwards: bool, cx: &mut Context<Self>) {
@@ -102,20 +147,48 @@ impl Navigator {
             .min(self.pages(cx).len().saturating_sub(1));
         self.scroll
             .scroll_to_item(self.picker_cursor, ScrollStrategy::Nearest);
+        self.selected = self.pages(cx).get(self.picker_cursor).map(|(id, _)| *id);
         cx.notify();
+    }
+    fn selected_session(&self, cx: &App) -> Option<SessionId> {
+        match self.pages(cx).get(self.picker_cursor).map(|(id, _)| *id) {
+            Some(DocumentId::Session(id)) => Some(id),
+            Some(DocumentId::Encounter(id)) => {
+                Some(self.model.read(cx).engine.state().encounters[&id].session)
+            }
+            _ => None,
+        }
+    }
+    fn expand_session(&mut self, expanded: bool, cx: &mut Context<Self>) {
+        if let Some(session) = self.selected_session(cx) {
+            if expanded {
+                self.collapsed_sessions.remove(&session);
+            } else {
+                self.collapsed_sessions.insert(session);
+                self.picker_cursor = self
+                    .pages(cx)
+                    .iter()
+                    .position(|(id, _)| *id == DocumentId::Session(session))
+                    .unwrap_or(0);
+            }
+            self.selected = Some(DocumentId::Session(session));
+            cx.notify();
+        }
     }
     fn pages(&self, cx: &App) -> Vec<(DocumentId, String)> {
         let model = self.model.read(cx);
         let query = self.filter.read(cx).text(cx);
         let mut pages = model
             .catalogue
-            .search(&query, usize::MAX)
+            .search(&query, if query.is_empty() || self.restricted.is_some() { usize::MAX } else { 200 })
             .into_iter()
             .filter(|d| {
                 self.restricted
                     .as_ref()
                     .is_none_or(|ids| ids.contains(&d.id))
             })
+            .filter(|d| !(query.is_empty() && self.restricted.is_none()
+                && matches!(d.id, DocumentId::Encounter(id) if self.collapsed_sessions.contains(&model.engine.state().encounters[&id].session))))
             .map(|d| (d.id, d.name.clone()))
             .collect::<Vec<_>>();
         if query.is_empty() && self.restricted.is_none() {
@@ -259,9 +332,6 @@ impl Navigator {
             return;
         };
         let name = fields.value(0, cx);
-        let before = matches!(kind, Create::Edit(_)).then(|| {
-            campaign_documents::Catalogue::from_campaign(self.model.read(cx).engine.state())
-        });
         let template = if matches!(kind, Create::Note | Create::Session | Create::Location)
             && !fields.value(1, cx).trim().is_empty()
         {
@@ -369,18 +439,6 @@ impl Navigator {
                     .update(cx, |m, cx| m.execute(command, cx))
                     .is_some()
                 {
-                    if let Some(before) = before {
-                        if let Err(error) = super::link_completion::update_renamed_links(
-                            before,
-                            &self.model,
-                            &self.workspace,
-                            cx,
-                        ) {
-                            self.error = Some(format!(
-                                "Page saved, but link updates need attention: {error:#}"
-                            ));
-                        }
-                    }
                     if let (Some(id), Some(text)) = (created, template) {
                         let result = self.model.update(cx, |m, _| {
                             let path = m.catalogue.documents[&id]
@@ -404,6 +462,11 @@ impl Navigator {
                     }
                     if let Some(id) = created {
                         self.selected = Some(id);
+                        self.picker_cursor = self
+                            .pages(cx)
+                            .iter()
+                            .position(|(page, _)| *page == id)
+                            .unwrap_or(0);
                         self.choose(id, window, cx);
                     }
                     self.form = None;
@@ -475,22 +538,12 @@ pub fn button(
     id: impl Into<SharedString>,
     label: &str,
     click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-) -> Stateful<Div> {
-    div()
-        .id(ElementId::Name(id.into()))
+) -> gpui_component::button::Button {
+    use gpui_component::Sizable;
+    gpui_component::button::Button::new(ElementId::Name(id.into()))
+        .label(label.to_owned())
+        .small()
         .tab_index(0)
-        .focus(|style| style.border_1().border_color(rgb(palette::ACCENT)))
-        .px_2()
-        .py_1()
-        .rounded_sm()
-        .min_w_0()
-        .cursor_pointer()
-        .bg(rgb(palette::SURFACE))
-        .hover(|s| {
-            s.bg(rgb(palette::SELECTED_SURFACE))
-                .text_color(rgb(palette::TEXT))
-        })
-        .child(div().text_ellipsis().child(label.to_owned()))
         .on_click(click)
 }
 
@@ -498,16 +551,16 @@ pub fn primary_button(
     id: impl Into<SharedString>,
     label: &str,
     click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-) -> Stateful<Div> {
-    button(id, label, click)
-        .bg(rgb(palette::ACCENT))
-        .text_color(rgb(palette::BASE))
+) -> gpui_component::button::Button {
+    use gpui_component::button::ButtonVariants;
+    button(id, label, click).primary()
 }
 
 pub fn link_button(
     id: impl Into<SharedString>,
     label: &str,
     click: impl Fn(&ClickEvent, &mut Window, &mut App) + 'static,
-) -> Stateful<Div> {
-    button(id, label, click).text_color(rgb(palette::LINK))
+) -> gpui_component::button::Button {
+    use gpui_component::button::ButtonVariants;
+    button(id, label, click).link()
 }

@@ -1,0 +1,28 @@
+--- a/crates/markdown_live_preview/src/markdown_live_preview.rs
++++ b/crates/markdown_live_preview/src/markdown_live_preview.rs
+@@ -64,6 +64,25 @@
+ 
+ pub fn init(cx: &mut App) {
+     cx.observe_new(register_editor).detach();
++}
++
++/// Presentation state for application mode indicators and integration checks.
++#[derive(Debug, Clone, Copy)]
++pub struct PresentationStatus {
++    pub enabled: bool,
++    pub parsed_blocks: usize,
++    pub rendered_blocks: usize,
++    pub inline_markers: usize,
++}
++
++pub fn presentation_status(editor: &Editor, cx: &App) -> Option<PresentationStatus> {
++    let addon = editor.addon::<LivePreviewAddon>()?;
++    Some(PresentationStatus {
++        enabled: is_enabled(addon, cx),
++        parsed_blocks: addon.markers.as_ref().map_or(0, |markers| markers.blocks.len()),
++        rendered_blocks: addon.applied_blocks.len(),
++        inline_markers: addon.markers.as_ref().map_or(0, |markers| markers.inline.len()),
++    })
+ }
+ 
+ fn register_editor(editor: &mut Editor, window: Option<&mut Window>, cx: &mut Context<Editor>) {

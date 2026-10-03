@@ -82,6 +82,8 @@
           ];
           LIBCLANG_PATH = "${pkgs.libclang.lib}/lib";
           PROTOC = "${pkgs.protobuf}/bin/protoc";
+          # Keep offscreen checks on the same libc/LLVM graph as the binary.
+          TTRPGUI_SOFTWARE_ICD = "${pkgs.mesa}/share/vulkan/icd.d/lvp_icd.${pkgs.stdenv.hostPlatform.parsed.cpu.name}.json";
           LD_LIBRARY_PATH =
             pkgs.lib.makeLibraryPath (
               with pkgs;
