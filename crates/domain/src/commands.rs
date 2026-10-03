@@ -268,6 +268,13 @@ impl Campaign {
                     let id = p
                         .creature
                         .ok_or(DomainError::Missing("Persistent creature"))?;
+                    if e.status != EncounterStatus::Completed
+                        && self.creatures[&id].kind != CreatureKind::Persistent
+                    {
+                        return Err(DomainError::Invalid(
+                            "Persistent participants require a persistent character".into(),
+                        ));
+                    }
                     if !persistent.insert(id) {
                         return Err(DomainError::Invalid(
                             "A persistent character can participate only once".into(),

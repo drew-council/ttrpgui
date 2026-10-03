@@ -19,7 +19,7 @@
 +mod campaign_markdown;
 --- /dev/null
 +++ b/crates/vim/src/test/campaign_markdown.rs
-@@ -0,0 +1,111 @@
+@@ -0,0 +1,146 @@
 +//! Campaign editor gate: run the upstream Vim engine with live Markdown active.
 +use super::*;
 +
@@ -43,17 +43,26 @@
 +    cx.set_state("# Heading\n\nMeet **Éˇowyn** by the river.\n", Mode::Normal);
 +    cx.executor().run_until_parked();
 +    cx.simulate_keystrokes("c i w A r w e n escape");
-+    assert_eq!(cx.buffer_text(), "# Heading\n\nMeet **Arwen** by the river.\n");
++    assert_eq!(
++        cx.buffer_text(),
++        "# Heading\n\nMeet **Arwen** by the river.\n"
++    );
 +    assert_eq!(cx.mode(), Mode::Normal);
 +    cx.simulate_keystrokes("u");
-+    assert_eq!(cx.buffer_text(), "# Heading\n\nMeet **Éowyn** by the river.\n");
++    assert_eq!(
++        cx.buffer_text(),
++        "# Heading\n\nMeet **Éowyn** by the river.\n"
++    );
 +}
 +
 +#[gpui::test]
 +async fn test_campaign_markdown_table_parent_undo(cx: &mut TestAppContext) {
 +    let mut cx = context(cx).await;
 +    let before = "intro\n\n| Name | HP |\n| --- | --- |\n| Éowyn | 12 |\n";
-+    cx.set_state("intro\n\n| Name | HP |\n| --- | --- |\n| Éowyn | ˇ12 |\n", Mode::Normal);
++    cx.set_state(
++        "intro\n\n| Name | HP |\n| --- | --- |\n| Éowyn | ˇ12 |\n",
++        Mode::Normal,
++    );
 +    cx.executor().run_until_parked();
 +    // Cell editing stays in the full editor, with the usual Vim transaction.
 +    cx.simulate_keystrokes("c i w 9 escape");
@@ -67,7 +76,10 @@
 +#[gpui::test]
 +async fn test_campaign_markdown_source_toggle_preserves_text_and_vim(cx: &mut TestAppContext) {
 +    let mut cx = context(cx).await;
-+    cx.set_state("ˇintro\n\n# Heading\n\n**雨** [[Unknown|label]] ![map](missing.png)\n", Mode::Normal);
++    cx.set_state(
++        "ˇintro\n\n# Heading\n\n**雨** [[Unknown|label]] ![map](missing.png)\n",
++        Mode::Normal,
++    );
 +    cx.executor().run_until_parked();
 +    let original = cx.buffer_text();
 +    for _ in 0..4 {
@@ -95,21 +107,42 @@
 +        Some(tree_sitter_md::INLINE_LANGUAGE.into()),
 +    )));
 +    for (state, commands) in [
-+        ("ˇalpha beta gamma\n\n**bold** and *italic*\n", "2 d w u ctrl-r"),
++        (
++            "ˇalpha beta gamma\n\n**bold** and *italic*\n",
++            "2 d w u ctrl-r",
++        ),
 +        ("ˇalpha beta\n\n**bold** and *italic*\n", "m a w backtick a"),
-+        ("ˇalpha beta\n\n**bold** and *italic*\n", "\" a y i w w \" a p"),
++        (
++            "ˇalpha beta\n\n**bold** and *italic*\n",
++            "\" a y i w w \" a p",
++        ),
 +        ("ˇalpha beta gamma\n\n**bold**\n", "d w . u u"),
 +        ("ˇalpha beta gamma\n\n**bold**\n", "q a x q @ a"),
 +        ("ˇintro\n\n**bold** and *italic*\nend\n", "shift-v 3 j d u"),
-+        ("ˇintro\n\n**bold** and *italic*\nend\n", "/ b o l d enter n"),
-+        ("ˇintro\n\n# Heading\n\n| HP |\n| --- |\n| 12 |\n", "shift-g k 0 w c i w 9 escape u"),
-+        ("ˇplain **bold** and *italic* end\n", "w w e b c i w X escape u"),
++        (
++            "ˇintro\n\n**bold** and *italic*\nend\n",
++            "/ b o l d enter n",
++        ),
++        (
++            "ˇintro\n\n# Heading\n\n| HP |\n| --- |\n| 12 |\n",
++            "shift-g k 0 w c i w 9 escape u",
++        ),
++        (
++            "ˇplain **bold** and *italic* end\n",
++            "w w e b c i w X escape u",
++        ),
 +        ("ˇintro\n\n# Heading\n\ntext\n", "2 j 0 w c i w X escape u"),
 +        ("ˇintro\n\n![map](missing.png)\nend\n", "2 j w x u"),
 +        ("ˇintro\n\n> quoted\n> prose\nend\n", "2 j shift-v j d u"),
-+        ("ˇalpha **bold**\nbeta *italic*\ngamma `code`\n", "ctrl-v j j l d u"),
++        (
++            "ˇalpha **bold**\nbeta *italic*\ngamma `code`\n",
++            "ctrl-v j j l d u",
++        ),
 +        ("ˇ雨 café é 🐉\n\n**bold**\n", "w v e y shift-g p u"),
-+        ("ˇintro\n\n```unknown\nunsupported data\n```\nend\n", "3 j c i w X escape u"),
++        (
++            "ˇintro\n\n```unknown\nunsupported data\n```\nend\n",
++            "3 j c i w X escape u",
++        ),
 +    ] {
 +        cx.set_shared_state(state).await;
 +        cx.executor().run_until_parked();
@@ -123,7 +156,9 @@
 +    let mut cx = context(cx).await;
 +    cx.set_state("ˇintro\n\n**bold**\n", Mode::Normal);
 +    cx.executor().run_until_parked();
-+    cx.update(|_, cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string("雨 **café** 🐉".into())));
++    cx.update(|_, cx| {
++        cx.write_to_clipboard(gpui::ClipboardItem::new_string("雨 **café** 🐉".into()))
++    });
 +    cx.simulate_keystrokes("i");
 +    cx.dispatch_action(editor::actions::Paste);
 +    cx.simulate_keystrokes("escape");

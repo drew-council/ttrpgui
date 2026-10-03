@@ -32,6 +32,23 @@
           inherit system;
         };
         rustToolchain = with inputs.fenix.packages.${system}; combine [ stable.toolchain ];
+        runtimeLibraries = with pkgs; [
+          libxcb
+          libxkbcommon
+          wayland
+          libglvnd
+          vulkan-loader
+          fontconfig
+          freetype
+          openssl
+          zlib
+          zstd
+          bzip2
+          alsa-lib
+          libgit2
+          libxml2
+          stdenv.cc.cc.lib
+        ];
         treefmtEval = treefmt-nix.lib.evalModule pkgs {
           imports = [
             topiary-nushell.treefmtModules.default
@@ -40,6 +57,13 @@
         };
       in
       {
+        legacyPackages = pkgs;
+        packages.runtime = pkgs.buildEnv {
+          name = "ttrpgui-runtime";
+          paths = runtimeLibraries;
+          pathsToLink = [ "/lib" ];
+          ignoreCollisions = true;
+        };
         devShells.default = pkgs.mkShell {
           inputsFrom = [ pkgs.zed-editor ];
           packages = with pkgs; [

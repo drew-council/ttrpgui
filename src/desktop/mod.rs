@@ -1,9 +1,12 @@
+mod app_session;
 mod campaign;
 mod editor_workspace;
 mod encounter;
 mod fields;
 mod link_completion;
 mod navigator;
+mod persistence;
+mod rehearsal;
 mod visuals;
 
 use std::{cell::Cell, path::PathBuf, rc::Rc, sync::Arc, time::Duration};
@@ -13,26 +16,34 @@ use gpui::{App, AppContext as _, UpdateGlobal};
 use settings::SettingsStore;
 use workspace::{AppState, OpenMode, Workspace};
 
-/// Compose the native editor proof using one Zed/GPUI dependency graph.
+/// Compose the native campaign app using one Zed/GPUI dependency graph.
 pub fn run(smoke: bool, campaign_root: Option<PathBuf>) -> anyhow::Result<()> {
     zlog::init();
     zlog::init_output_stderr();
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    std::fs::create_dir_all(root.join(".editor-proof"))?;
+    let root = if let Some(path) = std::env::var_os("TTRPGUI_DATA_DIR") {
+        PathBuf::from(path)
+    } else if let Some(path) = std::env::var_os("XDG_DATA_HOME") {
+        PathBuf::from(path).join("ttrpgui")
+    } else {
+        PathBuf::from(
+            std::env::var_os("HOME").context("Set HOME, XDG_DATA_HOME, or TTRPGUI_DATA_DIR")?,
+        )
+        .join(".local/share/ttrpgui")
+    };
+    std::fs::create_dir_all(&root)?;
     let instance = std::fs::OpenOptions::new()
         .read(true)
         .write(true)
         .create(true)
         .truncate(false)
-        .open(root.join(".editor-proof/instance.lock"))?;
+        .open(root.join("instance.lock"))?;
     instance
         .try_lock()
-        .context("an editor proof instance is already running")?;
+        .context("a ttrpgui instance is already running")?;
     let data = if smoke {
-        root.join(".editor-proof")
-            .join(format!("smoke-{}", uuid::Uuid::new_v4()))
+        root.join(format!("smoke-{}", uuid::Uuid::new_v4()))
     } else {
-        root.join(".editor-proof")
+        root.clone()
     };
     let state = data.join("state");
     std::fs::create_dir_all(&state)?;
@@ -42,10 +53,19 @@ pub fn run(smoke: bool, campaign_root: Option<PathBuf>) -> anyhow::Result<()> {
     let documents = data.join("documents");
     std::fs::create_dir_all(&documents)?;
     let mut paths = Vec::new();
-    for name in ["session.md", "location.md"] {
+    for (name, contents) in [
+        (
+            "session.md",
+            include_str!("../../fixtures/editor/session.md"),
+        ),
+        (
+            "location.md",
+            include_str!("../../fixtures/editor/location.md"),
+        ),
+    ] {
         let path = documents.join(name);
         if !path.exists() {
-            std::fs::copy(root.join("fixtures/editor").join(name), &path)?;
+            std::fs::write(&path, contents)?;
         }
         paths.push(path);
     }
@@ -56,13 +76,14 @@ pub fn run(smoke: bool, campaign_root: Option<PathBuf>) -> anyhow::Result<()> {
         Some(campaign::CampaignModel::open(if smoke {
             data.join("campaign")
         } else {
-            campaign_root.unwrap_or_else(|| root.join(".editor-proof/campaign"))
+            campaign_root.unwrap_or_else(|| root.join("campaign"))
         })?)
     };
     if let Some(campaign) = &campaign {
         paths = vec![campaign.store.root().to_path_buf()];
     }
 
+    let persistence = campaign.as_ref().map(|model| model.store.clone());
     let outcome = Rc::new(Cell::new(false));
     let result = outcome.clone();
     let application = if smoke {
@@ -88,6 +109,9 @@ pub fn run(smoke: bool, campaign_root: Option<PathBuf>) -> anyhow::Result<()> {
             cx.quit();
         }
     });
+    if let Some(persistence) = persistence {
+        persistence.finish()?;
+    }
     drop(instance);
     if smoke {
         std::fs::remove_dir_all(data)?;
@@ -126,7 +150,13 @@ fn initialize(
         None,
         paths
             .iter()
-            .filter_map(|path| path.parent().map(std::path::Path::to_path_buf))
+            .filter_map(|path| {
+                if path.is_dir() {
+                    Some(path.clone())
+                } else {
+                    path.parent().map(std::path::Path::to_path_buf)
+                }
+            })
             .collect(),
     )]
     .into_iter()
@@ -203,7 +233,6 @@ fn initialize(
     if let Some(model) = &campaign {
         cx.set_global(campaign::ActiveCampaign(model.clone()));
         workspace::register_serializable_item::<encounter::EncounterView>(cx);
-        campaign::watch(model, cx);
     }
 
     let open = Workspace::new_local(paths, app_state, None, None, None, OpenMode::NewWindow, cx);
@@ -212,8 +241,10 @@ fn initialize(
             let workspace = opened.workspace;
             let result = opened.window.update(cx, |_, window, cx| {
                 window.set_window_title("ttrpgui — campaign workspace");
+                app_session::init(campaign.clone(), &workspace, window, cx);
                 if let Some(model) = &campaign {
-                    link_completion::init(model, &workspace, cx);
+                    link_completion::init(model, &workspace, window, cx);
+                    campaign::watch(model, &workspace, cx);
                     let panel = cx.new(|cx| {
                         navigator::Navigator::new(model.clone(), workspace.downgrade(), window, cx)
                     });
@@ -224,7 +255,15 @@ fn initialize(
                         .documents
                         .keys()
                         .find(|id| matches!(id, campaign_documents::DocumentId::Note(_)))
-                        .copied();
+                        .copied()
+                        .or_else(|| {
+                            model
+                                .read(cx)
+                                .engine
+                                .state()
+                                .active_encounter()
+                                .map(|e| campaign_documents::DocumentId::Encounter(e.id))
+                        });
                     if let Some(first) =
                         first.filter(|_| workspace.read(cx).items(cx).next().is_none())
                     {
@@ -255,6 +294,15 @@ fn initialize(
                         outcome.set(true);
                     }
                     if smoke {
+                        if let Some(model) = &campaign {
+                            if let Err(error) =
+                                rehearsal::links(model, &workspace, opened.window.into(), cx).await
+                            {
+                                eprintln!("Link rehearsal failed: {error:#}");
+                                cx.update(|cx| cx.quit());
+                                return;
+                            }
+                        }
                         let verified = cx.update_window(opened.window.into(), |_, window, cx| {
                             let result = if let Some(model) = &campaign {
                                 encounter::verify(model, &workspace, window, cx)
@@ -264,12 +312,28 @@ fn initialize(
                             if let Err(error) = &result {
                                 eprintln!("Editor smoke test: {error:#}");
                             }
-                            outcome.set(result.is_ok());
-                            cx.quit();
+                            result
                         });
-                        if let Err(error) = verified {
+                        let mut verified = verified.and_then(|result| result);
+                        if verified.is_ok() {
+                            if let Some(model) = &campaign {
+                                verified = campaign::wait_saved(model, cx).await;
+                            }
+                        }
+                        if verified.is_ok() && campaign.is_some() {
+                            verified =
+                                rehearsal::restore(&workspace, opened.window.into(), cx).await;
+                        }
+                        if verified.is_ok() {
+                            if let Some(model) = &campaign {
+                                verified = rehearsal::external_changes(model, cx).await;
+                            }
+                        }
+                        if let Err(error) = &verified {
                             eprintln!("Editor smoke test: {error:#}");
                         }
+                        outcome.set(verified.is_ok());
+                        cx.update(|cx| cx.quit());
                     }
                 }
                 Err(error) => {

@@ -38,6 +38,35 @@ fn participants(engine: &CampaignEngine, encounter: EncounterId) -> BTreeSet<Par
 }
 
 #[test]
+fn persistent_participants_require_characters_but_history_keeps_its_snapshot() {
+    let (mut engine, hero, encounter) = setup();
+    let mut malformed = engine.state().clone();
+    malformed.config.roster.clear();
+    malformed.character_hp.clear();
+    malformed.creatures.get_mut(&hero).unwrap().kind = CreatureKind::Template;
+    assert!(
+        malformed
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("persistent character")
+    );
+    engine.execute(Command::Start(encounter)).unwrap();
+    engine.execute(Command::Complete(encounter)).unwrap();
+    let mut historical = engine.state().clone();
+    historical.config.roster.clear();
+    historical.character_hp.clear();
+    historical.creatures.get_mut(&hero).unwrap().kind = CreatureKind::Template;
+    historical.validate().unwrap();
+    assert!(
+        historical.encounters[&encounter]
+            .participants
+            .values()
+            .all(|p| p.persistent)
+    );
+}
+
+#[test]
 fn persistent_health_lifecycle_reset_and_history() {
     let (mut engine, hero, first) = setup();
     let ids = participants(&engine, first);

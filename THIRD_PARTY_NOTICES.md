@@ -14,7 +14,8 @@ MIT and Apache license texts remain as historical notices.
   crates: Apache-2.0. Each crate's manifest retains its own license declaration.
 - Bootstrap preserves the complete upstream source and license notices.
 - Local changes: `patches/zed/0001-parent-buffer-markdown.patch` removes the
-  separate table editor and reveals source for keyboard editing;
+  separate table editor, reveals source for keyboard editing, and adds an
+  addon source-display scope around Vim editor operations;
   `0002-vim-markdown-regressions.patch` adds integration tests and their dependencies.
 
 ## Catppuccin for Zed

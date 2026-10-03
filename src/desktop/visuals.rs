@@ -14,7 +14,7 @@ pub fn portrait(path: Option<PathBuf>, name: &str) -> AnyElement {
         .flex()
         .items_center()
         .justify_center()
-        .bg(rgb(0x45475a));
+        .bg(rgb(palette::SELECTED_SURFACE));
     if let Some(path) = path {
         frame
             .child(
@@ -27,7 +27,7 @@ pub fn portrait(path: Option<PathBuf>, name: &str) -> AnyElement {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .text_color(rgb(0xf9e2af))
+                            .text_color(rgb(palette::WARNING))
                             .child("!")
                             .into_any_element()
                     }),
@@ -36,4 +36,18 @@ pub fn portrait(path: Option<PathBuf>, name: &str) -> AnyElement {
     } else {
         frame.child(initials).into_any_element()
     }
+}
+
+/// Semantic Catppuccin Mocha colors, shared by campaign controls.
+pub mod palette {
+    pub const BASE: u32 = 0x1e1e2e;
+    pub const MANTLE: u32 = 0x181825;
+    pub const SURFACE: u32 = 0x313244;
+    pub const SELECTED_SURFACE: u32 = 0x45475a;
+    pub const ACCENT: u32 = 0xcba6f7;
+    pub const TEXT: u32 = 0xcdd6f4;
+    pub const DANGER: u32 = 0xf38ba8;
+    pub const WARNING: u32 = 0xf9e2af;
+    pub const HEALTHY: u32 = 0xa6e3a1;
+    pub const LINK: u32 = 0x89b4fa;
 }

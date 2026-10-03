@@ -104,3 +104,35 @@ fn ten_thousand_page_warm_search_measurement() {
     eprintln!("10,000 page warm fuzzy query: {elapsed:?}");
     // Report actual timing instead of a machine-dependent CI assertion.
 }
+
+#[test]
+fn templates_are_plain_markdown_and_cannot_escape_template_directory() {
+    let temp = tempfile::tempdir().unwrap();
+    std::fs::create_dir(temp.path().join("templates")).unwrap();
+    std::fs::write(
+        temp.path().join("templates/session.md"),
+        "# {{title}}\n\n<custom />\n[[existing]]",
+    )
+    .unwrap();
+    assert_eq!(template_names(temp.path()).unwrap(), vec!["session.md"]);
+    assert_eq!(
+        instantiate_template(temp.path(), "session.md", "Éowyn").unwrap(),
+        "# Éowyn\n\n<custom />\n[[existing]]"
+    );
+    assert!(instantiate_template(temp.path(), "../secret.md", "Title").is_err());
+}
+
+#[test]
+fn heading_navigation_handles_styling_unicode_duplicates_and_code() {
+    let source = "# Introduction\n\n```md\n# Fake\n```\n\n## Éowyn **arrives**\n\n## Éowyn arrives\n\nDetails\n-------\n";
+    assert_eq!(
+        heading_offset(source, "%C3%A9owyn-arrives"),
+        source.find("## Éowyn")
+    );
+    assert_eq!(
+        heading_offset(source, "éowyn-arrives-1"),
+        source.rfind("## Éowyn")
+    );
+    assert_eq!(heading_offset(source, "Details"), source.find("Details"));
+    assert_eq!(heading_offset(source, "fake"), None);
+}

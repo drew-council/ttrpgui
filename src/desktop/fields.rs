@@ -1,3 +1,4 @@
+use crate::desktop::visuals::palette;
 use editor::Editor;
 use gpui::{App, AppContext, Context, Entity, Focusable, Window};
 
@@ -52,7 +53,7 @@ impl Fields {
                 div().flex().flex_col().gap_1().child(*label).child(
                     div()
                         .p_2()
-                        .bg(gpui::rgb(0x313244))
+                        .bg(gpui::rgb(palette::SURFACE))
                         .rounded_md()
                         .child(input.clone()),
                 )

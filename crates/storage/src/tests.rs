@@ -25,6 +25,50 @@ fn example() -> Campaign {
 }
 
 #[test]
+fn explicit_recovery_preserves_external_bytes_before_resolving_conflict() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut campaign = example();
+    let mut store = CampaignStore::create(temp.path(), &campaign).unwrap();
+    campaign.config.name = "Recovered work".into();
+    store.preserve_unsaved(&campaign).unwrap();
+    let external = b"invalid external TOML, preserve exactly";
+    fs::write(temp.path().join("campaign.toml"), external).unwrap();
+    assert!(store.save(&campaign).is_err());
+    assert_eq!(store.restore_unsaved().unwrap(), campaign);
+    assert!(store.unsaved().unwrap().is_none());
+    let backup = fs::read_dir(temp.path().join(".recovery"))
+        .unwrap()
+        .next()
+        .unwrap()
+        .unwrap()
+        .path();
+    let files: Files = serde_json::from_slice(&fs::read(backup).unwrap()).unwrap();
+    assert_eq!(files["campaign.toml"], external);
+    assert_eq!(store.reload().unwrap(), campaign);
+}
+
+#[test]
+fn external_snapshot_requires_explicit_acceptance_of_the_same_disk_version() {
+    let temp = tempfile::tempdir().unwrap();
+    let mut campaign = example();
+    let mut store = CampaignStore::create(temp.path(), &campaign).unwrap();
+    let path = temp.path().join("campaign.toml");
+    campaign.config.name = "External one".into();
+    fs::write(&path, toml::to_string(&campaign.config).unwrap()).unwrap();
+    let snapshot = store.external_snapshot().unwrap().unwrap();
+    assert!(
+        store.save(&campaign).is_err(),
+        "Reading external state must not accept it"
+    );
+    campaign.config.name = "External two".into();
+    fs::write(&path, toml::to_string(&campaign.config).unwrap()).unwrap();
+    assert!(store.accept_external(snapshot).is_err());
+    let snapshot = store.external_snapshot().unwrap().unwrap();
+    store.accept_external(snapshot).unwrap();
+    store.save(&campaign).unwrap();
+}
+
+#[test]
 fn portable_roundtrip_and_prose_preservation() {
     let temp = tempfile::tempdir().unwrap();
     let campaign = example();
@@ -157,4 +201,31 @@ fn malicious_paths_and_symlinks_cannot_escape_campaign() {
         std::os::unix::fs::symlink("/tmp", temp.path().join("notes")).unwrap();
         assert!(transaction::safe_path(temp.path(), "notes/outside").is_err());
     }
+}
+
+#[test]
+fn document_batches_reject_external_edits_and_preserve_unsaved_campaign() {
+    let temp = tempfile::tempdir().unwrap();
+    let campaign = example();
+    let mut store = CampaignStore::create(temp.path(), &campaign).unwrap();
+    let id = campaign.sessions.keys().next().unwrap();
+    let path = format!("sessions/{id}/notes.md");
+    store
+        .edit_documents([(path.clone(), (String::new(), "[[Archive]]".into()))].into())
+        .unwrap();
+    assert!(
+        store
+            .edit_documents([(path.clone(), (String::new(), "overwrite".into()))].into())
+            .is_err()
+    );
+    assert_eq!(
+        fs::read_to_string(temp.path().join(path)).unwrap(),
+        "[[Archive]]"
+    );
+    let mut unsaved = campaign.clone();
+    unsaved.config.name = "Recover me".into();
+    store.preserve_unsaved(&unsaved).unwrap();
+    assert_eq!(store.unsaved().unwrap(), Some(unsaved));
+    store.clear_unsaved().unwrap();
+    assert_eq!(store.unsaved().unwrap(), None);
 }

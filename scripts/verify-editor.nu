@@ -11,8 +11,16 @@ def main [--neovim] {
   cd ($env.FILE_PWD | path dirname)
   checked nu scripts/bootstrap.nu
   checked cargo check --locked
+  checked cargo test --locked -p campaign_domain -p campaign_storage -p campaign_documents
   checked cargo test --locked --test launcher
-  checked cargo run --locked -- --smoke-test
+  let data = (mktemp -d | str trim)
+  try {
+    with-env {TTRPGUI_DATA_DIR: $data} {
+      checked cargo run --locked -- --smoke-test
+      checked cargo run --locked -- --campaign-smoke-test
+    }
+  } catch {|error| rm -rf $data; error make {msg: $error.msg} }
+  rm -rf $data
   checked cargo test --manifest-path upstream/zed/Cargo.toml --locked -p markdown_live_preview --lib -- --test-threads=2
   checked cargo test --manifest-path upstream/zed/Cargo.toml --locked -p vim --lib -- --test-threads=2
   if $neovim {

@@ -7,6 +7,10 @@ fn invoke(args: &[&str]) -> std::process::Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_ttrpgui"));
     // Deliberately provide no display, shell initialization, or personal env.
     command.env_clear().env("TTRPGUI_HELPER_TEST", "sentinel");
+    command.env(
+        "TTRPGUI_DATA_DIR",
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(".editor-proof"),
+    );
     if let Some(path) = std::env::var_os("LD_LIBRARY_PATH") {
         command.env("LD_LIBRARY_PATH", path);
     }

@@ -75,17 +75,55 @@ keyboard traversal across rendered blocks, table focus and undo, Unicode and
 clipboard behavior, and shared-buffer consistency. Compilation alone does not
 pass it. See `verification.md` for actual results and unverified cases.
 
-After acceptance, the intended workspace boundaries are:
+The implemented workspace boundaries are:
 
-- Domain: typed UUID entities, commands, validation, combat lifecycle, structured undo; no GPUI.
-- Storage: TOML/Markdown, atomic replacement, recoverable batches, external conflicts.
-- Documents: handles, templates, portable links, aliases, backlinks, derived search indexes.
-- Editor integration: the pinned Zed graph and Markdown presentation patches.
-- Desktop: workspace items, campaign navigator, library picker, encounters, shared controls.
+- `crates/domain`: typed UUID entities, commands, validation, combat lifecycle,
+  and structured undo; no GPUI dependencies.
+- `crates/storage`: human-readable TOML/Markdown, atomic file replacement,
+  recoverable batches, external conflict checks, and explicit recovery backups.
+- `crates/documents`: document identity, templates, portable links, aliases,
+  backlinks, revision-checked derived search indexes, and fuzzy search.
+- `patches/zed`: editor integration and Markdown presentation changes.
+- `src/desktop`: native workspace composition, campaign navigation, encounters,
+  fields, links, and shared semantic Catppuccin colors. Encounter rendering,
+  persistence, and rehearsal code have separate modules.
 
-The initial app opens fixture copies under `.editor-proof/documents` and keeps
-its settings/database under `.editor-proof/state`. It does not open the user's
-existing Zed profile or campaign data. This development-only path is not the
-campaign storage design. Portable campaign directories, structured combat,
-rename/link maintenance, release packaging, and the 10,000-page/100-participant
-performance gate remain required work after editor acceptance.
+## Campaign state and persistence
+
+Campaign directories are portable. Creature, location, session, and note UUID
+folders contain `metadata.toml`, `notes.md`, and optional relative assets.
+Encounters live beneath their sessions; configuration and persistent character
+HP have separate root TOML files. Templates are ordinary Markdown with a
+`{{title}}` substitution. Search indexes and workspace layout are derived state.
+
+Domain commands validate a candidate before committing one undo step. A bulk
+edit remains one step. Persistent character HP is resolved when an encounter
+starts, and completed encounters retain their own snapshots. A campaign has at
+most one active encounter. Prose remains in Zed buffers and its undo history is
+independent of structured domain history.
+
+A durable journal records both sides of each multi-file mutation before file
+replacement. Recovery preflights the whole batch and retains the journal on an
+external conflict. Failed saves retain structured work in `.unsaved.toml`.
+Explicit restoration first preserves exact external metadata in `.recovery`.
+The Linux watcher registers subdirectories and scans newly created directories;
+clean structured changes reload, while dirty changes preserve both versions.
+Open prose buffers remain authoritative when updating the derived index.
+
+Renames retain old names as aliases and rewrite resolvable links. Open files
+receive editor transactions; closed files receive a recoverable compare-before-
+write batch. Metadata and link edits are separate transactions, with retained
+aliases protecting wiki-link resolution across an interrupted rename. Directory
+identity is UUID-based, so renaming a page does not move its assets.
+
+Application data defaults to `$XDG_DATA_HOME/ttrpgui`, with `TTRPGUI_DATA_DIR` as
+an override. Explicit `--campaign` directories are independent of settings and
+workspace state. Fixture copies are only used by the headless editor proof.
+The launcher handles `--printenv` before initializing GPUI and holds an instance
+lock. Packaging includes runtime library paths, attribution, and application
+source with the pinned upstream bootstrap recipe.
+
+See `verification.md` for release acceptance still requiring work, including
+large-campaign persistence and end-to-end rendering measurements. Current
+structured persistence is synchronous; a fast fuzzy query does not establish
+smooth large-campaign interaction.

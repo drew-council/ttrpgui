@@ -6,6 +6,12 @@ use std::{
     path::{Component, Path, PathBuf},
 };
 
+const LINK_COMPONENT: &percent_encoding::AsciiSet = &NON_ALPHANUMERIC
+    .remove(b'-')
+    .remove(b'_')
+    .remove(b'.')
+    .remove(b'~');
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum LinkKind {
     Markdown,
@@ -13,6 +19,7 @@ pub enum LinkKind {
 }
 #[derive(Clone, Debug)]
 pub struct Link {
+    pub span: Range<usize>,
     pub target: String,
     pub heading: Option<String>,
     pub label: Option<String>,
@@ -65,6 +72,7 @@ pub fn parse_links(source: &str) -> Vec<Link> {
                     })
                 });
                 links.push(Link {
+                    span: span.clone(),
                     target,
                     heading,
                     label: None,
@@ -101,6 +109,7 @@ pub fn parse_links(source: &str) -> Vec<Link> {
             .map_or((inner, None), |(a, b)| (a, Some(b.to_owned())));
         let (target, heading) = target_parts(destination);
         links.push(Link {
+            span: start..end + 2,
             destination: Some(offset..offset + target.len()),
             target,
             heading,
@@ -110,6 +119,45 @@ pub fn parse_links(source: &str) -> Vec<Link> {
         offset = end + 2;
     }
     links
+}
+
+pub fn heading_offset(source: &str, fragment: &str) -> Option<usize> {
+    let fragment = percent_decode_str(fragment)
+        .decode_utf8_lossy()
+        .to_lowercase();
+    let mut heading = None;
+    let mut title = String::new();
+    let mut duplicates = std::collections::BTreeMap::<String, usize>::new();
+    for (event, range) in Parser::new(source).into_offset_iter() {
+        match event {
+            Event::Start(Tag::Heading { .. }) => {
+                heading = Some(range.start);
+                title.clear();
+            }
+            Event::Text(text) | Event::Code(text) if heading.is_some() => title.push_str(&text),
+            Event::End(TagEnd::Heading(_)) => {
+                let start = heading.take()?;
+                let slug = title
+                    .to_lowercase()
+                    .chars()
+                    .filter(|c| c.is_alphanumeric() || c.is_whitespace() || *c == '-' || *c == '_')
+                    .map(|c| if c.is_whitespace() { '-' } else { c })
+                    .collect::<String>();
+                let occurrence = duplicates.entry(slug.clone()).or_default();
+                let unique = if *occurrence == 0 {
+                    slug
+                } else {
+                    format!("{slug}-{}", *occurrence)
+                };
+                *occurrence += 1;
+                if title.to_lowercase() == fragment || unique == fragment {
+                    return Some(start);
+                }
+            }
+            _ => (),
+        }
+    }
+    None
 }
 
 fn normalize(path: &Path) -> Option<PathBuf> {
@@ -188,7 +236,7 @@ impl Catalogue {
         let path = pathdiff::diff_paths(&target.path, source.path.parent()?)?;
         let destination = encode_path(&path);
         let fragment = heading
-            .map(|s| format!("#{}", utf8_percent_encode(s, NON_ALPHANUMERIC)))
+            .map(|s| format!("#{}", utf8_percent_encode(s, LINK_COMPONENT)))
             .unwrap_or_default();
         let label = target
             .name
@@ -206,7 +254,7 @@ fn encode_path(path: &Path) -> String {
             if part == ".." {
                 part.to_owned()
             } else {
-                utf8_percent_encode(part, NON_ALPHANUMERIC).to_string()
+                utf8_percent_encode(part, LINK_COMPONENT).to_string()
             }
         })
         .collect::<Vec<_>>()

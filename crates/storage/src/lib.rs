@@ -19,6 +19,11 @@ pub struct CampaignStore {
     expected: Files,
 }
 
+pub struct ExternalSnapshot {
+    pub campaign: Campaign,
+    files: Files,
+}
+
 impl CampaignStore {
     /// Holds an OS lock for the store lifetime. Recovery finishes a previously
     /// prepared transaction before any campaign data is made available.
@@ -100,8 +105,35 @@ impl CampaignStore {
         let path = transaction::safe_path(&self.root, ".unsaved.toml")?;
         if path.exists() {
             fs::remove_file(path)?;
+            File::open(&self.root)?.sync_all()?;
         }
         Ok(())
+    }
+
+    /// Explicit recovery resolution. Keep the exact external metadata (even
+    /// malformed TOML) before replacing it with the user's recovered state.
+    pub fn restore_unsaved(&mut self) -> Result<Campaign> {
+        let recovered = self.unsaved()?.context("No recovery copy exists")?;
+        let previous = decode(&self.expected)?;
+        ensure!(
+            recovered.config.id == previous.config.id,
+            "Recovery belongs to another campaign"
+        );
+        ensure!(
+            !self.root.join(".transaction").exists(),
+            "Reopen the campaign to finish the pending save first"
+        );
+        let current = read_structured(&self.root)?;
+        let backup = format!(".recovery/{}.json", uuid::Uuid::new_v4());
+        transaction::atomic_write(
+            &transaction::safe_path(&self.root, &backup)?,
+            &serde_json::to_vec_pretty(&current)?,
+        )?;
+        File::open(&self.root)?.sync_all()?;
+        self.expected = current;
+        self.save(&recovered)?;
+        self.clear_unsaved()?;
+        Ok(recovered)
     }
 
     /// Apply closed-document edits with compare-before-write conflict checks.
@@ -127,6 +159,28 @@ impl CampaignStore {
 
     pub fn has_external_changes(&self) -> Result<bool> {
         Ok(read_structured(&self.root)? != self.expected)
+    }
+
+    pub fn external_snapshot(&self) -> Result<Option<ExternalSnapshot>> {
+        let files = read_structured(&self.root)?;
+        if files == self.expected {
+            return Ok(None);
+        }
+        Ok(Some(ExternalSnapshot {
+            campaign: decode(&files)?,
+            files,
+        }))
+    }
+
+    /// Accept only the exact externally-read version, after the UI confirms
+    /// that it has no intervening local mutations.
+    pub fn accept_external(&mut self, snapshot: ExternalSnapshot) -> Result<()> {
+        ensure!(
+            read_structured(&self.root)? == snapshot.files,
+            "External metadata changed again during reload"
+        );
+        self.expected = snapshot.files;
+        Ok(())
     }
 
     /// Call only for clean domain state. A dirty caller retains its in-memory
