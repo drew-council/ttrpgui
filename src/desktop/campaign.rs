@@ -24,6 +24,9 @@ pub struct CampaignModel {
 pub struct ActiveCampaign(pub Entity<CampaignModel>);
 impl gpui::Global for ActiveCampaign {}
 impl EventEmitter<()> for CampaignModel {}
+/// Ask link maintenance to resume after a failure.
+pub struct RetryLinkMaintenance;
+impl EventEmitter<RetryLinkMaintenance> for CampaignModel {}
 impl CampaignModel {
     pub fn open(root: PathBuf) -> anyhow::Result<Self> {
         let (store, state) = if root.join("campaign.toml").exists() {
@@ -149,6 +152,17 @@ impl CampaignModel {
         })
         .detach();
         cx.notify();
+    }
+
+    /// Retry the structured save and any failed link maintenance.
+    pub fn retry(&mut self, cx: &mut Context<Self>) {
+        if self.restoring {
+            return;
+        }
+        self.save(cx);
+        if self.link_error.take().is_some() {
+            cx.emit(RetryLinkMaintenance);
+        }
     }
 
     pub fn restore_unsaved(&mut self, cx: &mut Context<Self>) {

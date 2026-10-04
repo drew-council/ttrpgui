@@ -3,4 +3,4 @@ revision = "ee832fc61bfe2a7e7662727b414cd4aed1e23733"
 archive = "https://codeload.github.com/harrywang/zed/tar.gz/ee832fc61bfe2a7e7662727b414cd4aed1e23733"
 sha256 = "57f36953fa8f89f7bf2a81726378d5f2d5f69ab912ad8b94ed0a8e34d063dca8"
 pull_request = "https://github.com/zed-industries/zed/pull/62593"
-patches = ["patches/zed/0001-parent-buffer-markdown.patch", "patches/zed/0002-vim-markdown-regressions.patch", "patches/zed/0003-durable-editor-view-state.patch", "patches/zed/0004-presentation-status.patch", "patches/zed/0005-viewport-presentation.patch"]
+patches = ["patches/zed/0001-parent-buffer-markdown.patch", "patches/zed/0002-vim-markdown-regressions.patch", "patches/zed/0003-durable-editor-view-state.patch", "patches/zed/0004-presentation-status.patch", "patches/zed/0005-viewport-presentation.patch", "patches/zed/0006-concealment-row-coalescing.patch"]

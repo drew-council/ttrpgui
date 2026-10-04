@@ -14,6 +14,11 @@ def main [--neovim --performance] {
   checked cargo test --locked --workspace
   let data = (mktemp -d | str trim)
   try {
+    # Headless rehearsals must not reach the desktop: no display, and no
+    # session bus through which a portal file chooser could appear.
+    for name in [DISPLAY WAYLAND_DISPLAY WAYLAND_SOCKET DBUS_SESSION_BUS_ADDRESS] {
+      hide-env --ignore-errors $name
+    }
     with-env {TTRPGUI_DATA_DIR: $data} {
       checked cargo run --locked -- --smoke-test
       checked cargo run --locked -- --campaign-smoke-test

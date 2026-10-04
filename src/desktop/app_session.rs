@@ -18,17 +18,30 @@ pub fn init(
     let workspace = workspace.downgrade();
     let window = window.window_handle();
     let pending = std::rc::Rc::new(std::cell::Cell::new(false));
+    // Set after a reported save failure: quitting again proceeds, keeping the
+    // recovery copy and on-disk files rather than trapping the user.
+    let blocked = std::rc::Rc::new(std::cell::Cell::new(false));
     cx.on_action(move |_: &zed_actions::Quit, cx| {
         if pending.replace(true) {
             return;
         }
         let pending = pending.clone();
+        let blocked = blocked.clone();
         let model = model.clone();
         let workspace = workspace.clone();
         cx.spawn(async move |cx| {
             let result: anyhow::Result<bool> = async {
                 if let Some(model) = &model {
-                    wait_saved(model, cx).await?;
+                    match wait_saved(model, cx).await {
+                        Ok(()) => blocked.set(false),
+                        Err(error) if blocked.get() => {
+                            eprintln!("Quitting with unresolved save failure: {error:#}");
+                        }
+                        Err(error) => {
+                            blocked.set(true);
+                            return Err(error);
+                        }
+                    }
                 }
                 let Some(workspace) = workspace.upgrade() else {
                     return Ok(true);
@@ -86,9 +99,16 @@ pub fn init(
                 Ok(false) => (),
                 Err(error) => {
                     if let Some(model) = model {
+                        let recovery = model.read_with(cx, |m, _| m.has_recovery);
                         model.update(cx, |m, cx| {
-                            m.error =
-                                Some(format!("Could not finish saving before quit: {error:#}"));
+                            m.error = Some(format!(
+                                "Could not finish saving before quit: {error:#}. Retry save, or press Ctrl+Shift+Q again to quit anyway{}.",
+                                if recovery {
+                                    " (unsaved work is kept as a recovery copy)"
+                                } else {
+                                    ""
+                                }
+                            ));
                             cx.notify();
                         });
                     } else {

@@ -1,9 +1,10 @@
 # Original project requirements
 
 This is the implementation brief from the user's original plan, summarized for
-handoff. It describes the intended baseline, **not the completed state**. See
-[handoff.md](handoff.md) for the stopping point and [baseline.md](baseline.md)
-for the requirement audit. The full original plan remains in the conversation.
+handoff. It describes the intended baseline. [baseline.md](baseline.md) maps each
+requirement to its verification or to an explicit decision, and
+[handoff.md](handoff.md) records current limits. The full original plan remains
+in the conversation.
 
 ## Constraints and direction
 

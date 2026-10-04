@@ -1,10 +1,10 @@
 # ADR 001: Keep Zed's editing model authoritative
 
-Status: source-on-edit editor foundation accepted for campaign integration.
-The complete campaign release and performance gates remain under verification.
-Implementation stopped for user-requested handoff on 2026-10-03; see
-[handoff.md](handoff.md) for the failing formatting/bootstrap checks and remaining
-work. The original brief is in [original-requirements.md](original-requirements.md).
+Status: accepted. The source-on-edit editor foundation and the campaign
+baseline pass the checks in [verification.md](verification.md); the requirement
+audit is [baseline.md](baseline.md) and current limits are in
+[handoff.md](handoff.md). The brief is in
+[original-requirements.md](original-requirements.md).
 
 The desktop composes Zed's `Workspace`, `Project`, `Editor`, `vim`, search,
 command palette, and the live Markdown addon from **one source revision**.
@@ -28,7 +28,13 @@ the plan's accepted **live Markdown with source-on-edit fallback**:
 | Unsupported syntax | Preserved in Markdown | Ordinary source editing |
 
 Ctrl+Alt+M toggles source/live presentation for the focused editor. Text remains
-Markdown in both modes. There is no source/preview pair or second document model.
+Markdown in both modes. Formatting actions (Ctrl+Alt+B bold, Ctrl+Alt+I italic;
+strike, code, heading, bullet and Insert Image from the palette) are editor
+actions on the same buffer: each is one transaction over every selection, so a
+single Vim `u` reverts it. Inline formats toggle when the selection already
+carries the delimiters. Insert Image copies the chosen file into the page's
+`assets/` through the storage worker and inserts a relative link at the cursor
+anchor captured before the chooser opened. There is no source/preview pair or second document model.
 A split uses Zed's `clone_on_split`, retaining the same underlying project buffer
 with independent selections and scroll state. Zed owns Vim modes, selections,
 registers, transactions, text undo, and document saving.
@@ -54,10 +60,15 @@ temporarily suspending only the Markdown addon's decorations, then restores
 cached presentation before the next frame. This preserves upstream source
 coordinates without replacing Vim's operators or the document engine. Tests
 cover commands crossing bold text, tables, images, quotes, and headings. All
-564 upstream Vim tests and 32 Markdown-addon tests passed with the current
-viewport patch series; the live Neovim comparisons also pass. These do not
-substitute for the currently failing application formatting proof. See
-verification.md for current checks and historical results.
+564 upstream Vim tests and 32 Markdown-addon tests pass with the six-patch
+series, as do the live Neovim comparisons and the application's formatting,
+search and image rehearsals.
+
+The suspend/restore around each Vim operation is the main interaction cost on
+long notes. Patch 5 limits presentation to the viewport; patch 6 merges
+same-row concealment edits (so tab and wrap maps rescan each line once) and
+narrows the margin to ±30 buffer rows. Scrolling re-applies decorations, so the
+margin only covers autoscroll within a frame.
 
 ## Prior art decision
 
@@ -100,6 +111,36 @@ GPUI revision. Newer Kit releases require a different GPUI graph. Kit supplies
 controls; Zed retains workspace items, panes, editors and action dispatch. Draft
 descriptions use a full Zed editor so multiline Vim undo remains available.
 
+## Workspace integration
+
+Zed's own binary configures several things this application must do itself:
+
+- **Pane toolbars.** Every pane gets Zed's `BufferSearchBar` and
+  `ProjectSearchBar` on creation (`editor_workspace::initialize_pane`). Vim's
+  `/` drives the buffer search bar and project search tabs render their query
+  input in the project search bar; without them both silently did nothing.
+  (`PaneSearchBarCallbacks` is only consumed by Zed's terminal panel.)
+- **Prompts.** Linux has no native dialogs and GPUI's fallback prompt is
+  mouse-only, so `ui_prompt` installs Zed's themed in-window prompt (Enter,
+  Esc, h/l). Save conflicts and close prompts are therefore keyboard-operable.
+- **Tab movement.** Ctrl-W m h/j/k/l move the active tab to the neighbouring
+  pane, alongside Zed's Ctrl-W pane commands.
+- **File choosers.** On Linux even GPUI's headless platform opens file choosers
+  through the desktop portal. Rehearsals supply an image through
+  `RehearsalImage` instead of prompting, and verification hides the session bus.
+
+Session pages carry a header block (`session_page.rs`) listing the session's
+encounters with status and participant count. It is an editor block owned by
+the page's Zed editor, refreshed from the campaign model; the Markdown text and
+its undo history are untouched.
+
+The navigator's browse list has collapsible Sessions, Creatures, Locations and
+Notes groups with counts; h collapses to the nearest parent, l or Enter expands.
+Filtered search, link completion and ambiguity pickers stay flat.
+
+Completed encounters refuse editing keys with an explanation in the view; the
+domain also rejects such commands.
+
 ## Campaign state and persistence
 
 Campaign directories are portable. Creature, location, session, and note UUID
@@ -130,7 +171,17 @@ open item, flushes independent editor cursor/scroll state, and saves the pane
 layout. Split restoration applies identical unsaved text only once to avoid
 moving already-restored anchors in other views.
 
-Renames retain old names as aliases and rewrite resolvable links. Open files
+Renames retain old names as aliases and rewrite resolvable links. Link
+maintenance is one serialized loop that remembers the catalogue the documents'
+links currently reflect. It rewrites from there to the newest catalogue, starts
+again if a rename lands while it is preparing, and on failure keeps that base:
+Retry save (button or palette) resumes it, and quitting waits for it. A second
+Ctrl+Shift+Q after a reported save failure quits anyway, leaving the recovery
+copy and disk files in place.
+
+Open prose follows Zed's buffer rules: a dirty page whose file changes on disk
+is marked conflicted, autosave skips it, the navigator status names it, and an
+explicit save asks to overwrite or discard the edits. Open files
 receive editor transactions; closed files receive a recoverable compare-before-
 write batch. Metadata and link edits are separate transactions, with retained
 aliases protecting wiki-link resolution across an interrupted rename. Directory
@@ -143,7 +194,11 @@ The launcher handles `--printenv` before initializing GPUI and holds an instance
 lock. Packaging includes runtime library paths, attribution, and application
 source with the pinned upstream bootstrap recipe.
 
-See `verification.md` for release acceptance still requiring work, including
-large-campaign persistence and end-to-end rendering measurements. Moving disk
-writes off the UI thread does not by itself establish smooth large-campaign
-interaction. The original requirements are tracked in baseline.md.
+The application offers no page move: identity is UUID-based and renames never
+move directories. Relative-link rewriting on path changes exists and is tested
+for a future move feature (for example moving an encounter between sessions,
+which would also need its prose, assets and open buffers relocated in one
+journaled batch).
+
+Measured results, including sustained saves on a 10,000-page campaign, are in
+verification.md. They are CPU frame-construction times, not display latency.

@@ -204,7 +204,61 @@ async fn refresh_documents(
     Ok(())
 }
 
+/// Open pages whose file changed on disk while they had unsaved edits. Zed
+/// keeps both versions: autosave skips them and saving asks to overwrite or
+/// discard the edits.
+pub fn prose_conflicts(workspace: &Entity<Workspace>, cx: &App) -> Vec<String> {
+    let mut names = workspace
+        .read(cx)
+        .items_of_type::<editor::Editor>(cx)
+        .filter_map(|e| {
+            let multibuffer = e.read(cx).buffer().read(cx);
+            let buffer = multibuffer.as_singleton()?;
+            buffer
+                .read(cx)
+                .has_conflict()
+                .then(|| multibuffer.title(cx).to_string())
+        })
+        .collect::<Vec<_>>();
+    names.sort();
+    names.dedup();
+    names
+}
+
+/// Refresh status whenever a buffer's disk or dirty state changes.
+fn observe_buffers(model: &Entity<CampaignModel>, workspace: &Entity<Workspace>, cx: &mut App) {
+    let notify =
+        |model: &WeakEntity<CampaignModel>, buffer: &Entity<language::Buffer>, cx: &mut App| {
+            let model = model.clone();
+            cx.subscribe(buffer, move |_, event: &language::BufferEvent, cx| {
+                use language::BufferEvent::*;
+                if matches!(
+                    event,
+                    FileHandleChanged | ReloadNeeded | DirtyChanged | Saved | Reloaded
+                ) {
+                    let _ = model.update(cx, |_, cx| cx.notify());
+                }
+            })
+            .detach();
+        };
+    let weak = model.downgrade();
+    let open = workspace
+        .read(cx)
+        .items_of_type::<editor::Editor>(cx)
+        .filter_map(|e| e.read(cx).buffer().read(cx).as_singleton())
+        .collect::<Vec<_>>();
+    for buffer in open {
+        notify(&weak, &buffer, cx);
+    }
+    cx.observe_new(move |_: &mut language::Buffer, _, cx| {
+        let buffer = cx.entity();
+        notify(&weak, &buffer, cx);
+    })
+    .detach();
+}
+
 pub fn watch(model: &Entity<CampaignModel>, workspace: &Entity<Workspace>, cx: &mut App) {
+    observe_buffers(model, workspace, cx);
     let fs = <dyn fs::Fs>::global(cx);
     let root = model.read(cx).store.root().to_path_buf();
     let model = model.downgrade();

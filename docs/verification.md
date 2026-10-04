@@ -1,92 +1,152 @@
 # Baseline verification
 
-Implementation stopped for user-requested handoff on 2026-10-03. The baseline is
-incomplete. Read [handoff.md](handoff.md) for known failures and next steps,
-[original-requirements.md](original-requirements.md) for the brief, and
-[baseline.md](baseline.md) for the release checklist.
+Results observed on 2026-10-03 against the current tree (six-patch Zed series,
+GPUI Kit 0.5.1). The checklist these satisfy is [baseline.md](baseline.md); the
+brief is [original-requirements.md](original-requirements.md); the current
+status and known limits are in [handoff.md](handoff.md).
 
-## Current checks (2026-10-03)
+## One-command reproduction
 
-| Check | Observed result |
+```sh
+nix develop
+nu scripts/verify-editor.nu --neovim --performance
+```
+
+This runs, in order: bootstrap validation, `cargo check`, the root workspace
+tests, the headless editor and campaign rehearsals, the two-process restart
+rehearsal, the optimized 10,000-page performance gates, the Markdown addon
+tests, all upstream Vim tests and the live Neovim comparisons. Headless runs
+hide `DISPLAY`, `WAYLAND_DISPLAY`, `WAYLAND_SOCKET` and
+`DBUS_SESSION_BUS_ADDRESS`, so nothing can reach the desktop (on Linux even
+GPUI's headless file chooser goes through the desktop portal over D-Bus).
+
+Native rendering checks run separately on a private offscreen Weston:
+
+```sh
+nix develop -c nix shell --inputs-from . nixpkgs#weston -c \
+  uv run scripts/native_check.py --scenario note --binary target/release/ttrpgui --require-performance
+# --scenario combat | session  render the encounter and a session page.
+```
+
+Packaging: `nix develop -c nu scripts/package.nu --release`.
+
+## Source reproducibility
+
+| Check | Result |
 | --- | --- |
-| Application build on one linked GPUI graph, including GPUI Kit | Passed |
-| Fresh checksum-verified Zed + Kit bootstrap, five-patch series | Forward application passed at `/tmp/ttrpgui-bootstrap-viewport/zed` |
-| Bootstrap idempotence and reverse patch verification | **Failed**: independent reverse checks cannot validate overlapping patches; local source marker also remains stale |
-| Domain rules | 7 tests passed, including document-revision invalidation through undo/redo |
-| Documents, templates, links, headings, stale indexing | 7 tests passed |
-| Storage, interruption, external conflicts, atomic batches, recovery, image import | 10 tests passed |
-| Dedicated save worker: dropped futures, ordered barriers/coalescing, failed-save recovery | 2 tests passed |
-| Launcher helper, unknown arguments, OS instance lock | 3 subprocess tests passed without displays |
-| Upstream Markdown addon | 32 tests passed after viewport changes |
-| Upstream Vim | 564 tests passed after viewport/settings changes |
-| Live Neovim campaign comparisons | 5 tests passed, including 15 recorded command scenarios |
-| Upstream editor deserialization | 2 tests passed |
-| Application Markdown parsing and native presentation | Passed after awaiting asynchronous parsing and propagating language themes |
-| Combat/library rehearsal | Passed with 100 participants, selection, negative HP, initiative reorder, undo/redo, quantity and independent copies |
-| Description rehearsal | Passed: multiline Vim draft, text undo, mode-aware Esc, first-selected prefill, one-step bulk apply/undo |
-| Rename integrity | Passed: open editor transactions, closed journaled files, wiki labels, relative links/headings, domain undo/redo |
-| Navigator keyboard flow | Passed: session expansion, session creation, encounter creation under selected parent, automatic roster, tab opening |
-| Connected keyboard campaign lifecycle | Passed: start, local/library copies, bulk initiative/damage/reset/undo, rename, completion, carried character HP, immutable history |
-| External changes | Passed: clean metadata reload, closed prose indexing, externally added/deleted pages, dirty conflict preservation, explicit recovery |
-| Two-process restart | Passed: exact pane bounds for both split axes, tabs, focus, independent cursors/scroll, shared buffer and unsaved text |
-| Native combat rendering | Passed on private software Wayland display; screenshot inspected |
-| Native image-rich note | Parsed 618,948 bytes, 100 PNG assets, 200 blocks, 9,000 inline markers; screenshot showed image, heading, bold text, links, Unicode and wrapping |
-| Python native supervisor | Ruff passed |
-| Native formatting actions and editor proof | **Failed**: new BoldSelection dispatch did not edit the checked document; original two-tab/shared-buffer assertion passed |
-| Optimized application build | Passed; `target/release/ttrpgui` available |
+| `bootstrap.nu --strict`: download the pinned archive, verify SHA-256, apply all six patches, compare every source file with the local checkout | Passed; identical |
+| Fresh bootstrap into a new directory, then a second (idempotent) invocation | Passed |
+| Idempotent validation reverses the whole series newest-first in an owned temporary copy of the touched files (`--fuzz=0`) | Passed; a tampered patched file is rejected |
+| Local checkout formatting drift (`items.rs`, `fold_map.rs`, `display_map.rs`) | Removed; local tree now byte-identical to archive + patches |
+| Patch 6 applies with zero fuzz and reproduces the local files | Passed |
 
-The root workspace totals 29 passing tests. The preserved Neovim trace was
-rerun successfully against the current viewport implementation. Neovim remains
-a comparison-test dependency and is never used by the application. Earlier
-two-process restart/editor-deserialization evidence should be rerun after the
-final fixes; see handoff.md for raw log locations.
+## Automated suites
+
+| Suite | Result |
+| --- | --- |
+| Root workspace: documents 7, domain 7, storage 10, save worker 2, launcher 3 | **29 passed** |
+| Upstream editor fold-map tests incl. new `test_concealment_edits_merge_per_row` and randomized fold tests | **9 passed** |
+| Markdown live-preview addon | **32 passed** |
+| Upstream Vim | **564 passed** |
+| Live Neovim campaign comparisons (15 recorded command scenarios) | **5 passed** |
+
+## Headless application rehearsals
+
+All pass with the debug build and with the packaged release binary run outside
+the development shell. Each is a real GPUI application with isolated data and a
+30-second hang guard.
+
+`--smoke-test` (plain editor):
+
+| Rehearsal | Covers |
+| --- | --- |
+| Editor workspace | Two tabs and a split sharing one buffer, independent views, shared edit/undo, Vim Normal mode, focus |
+| Native Markdown actions | Ctrl+Alt+B over two disjoint selections in one transaction; one Vim `u` reverts; Ctrl+Alt+I toggles; palette strike/code inline and heading/bullet per line; edits reach the split; focus retained; presentation re-enabled |
+| Vim search | `/` opens the pane search bar, Enter jumps and returns focus, `n`/`N` repeat |
+
+`--campaign-smoke-test`:
+
+| Rehearsal | Covers |
+| --- | --- |
+| Links | `[[` completion through the picker, portable relative link, Vim undo, Ctrl+Enter to a heading |
+| Combat/library | 100 participants; cursor wrap at both ends, g/G/Home/End, explicit two-row selection and toggling; damage to negative HP; undo/redo; initiative reorder keeps cursor and selection; field cancellation and focus scoping; library quantity and independent copies as one undo; Shift+F10 menu |
+| Description | Multiline Vim draft, draft undo, mode-aware Escape, first-selected prefill, one-step bulk commit/undo |
+| Encounter tab | Serialize/restore identity and selection; split views have independent focus |
+| Rename integrity | Open-buffer and closed-file link rewriting with labels/headings; undo/redo; rename then undo while preparation is in flight; consecutive renames; an unreadable closed page produces a visible failure that Retry resumes without losing the rename |
+| Navigator | Session collapse/expand; Sessions/Creatures/Locations/Notes groups collapse with h, expand with l or Enter, and search still finds pages in collapsed groups; keyboard session and encounter creation; roster inclusion; tab opening |
+| Keyboard session | Create, start, local/library copies, bulk initiative/damage/reset/undo, rename, save to library, complete, next encounter with carried HP, history unchanged by viewing, editing keys on a completed encounter explain instead of opening fields |
+| External changes | Clean metadata reload, closed prose indexing, external page add/delete, dirty structured conflict preserved, explicit recovery |
+| Image import | InsertImage via the storage worker into page-relative `assets/`, inserted at the anchored cursor, original file untouched, focus kept, one-step undo, non-images rejected visibly |
+| Session page | The session document's header block lists its encounters and follows creation and undo |
+| Workspace keyboard | Palette runs "pane: split right"; Ctrl-W m h moves a tab to the left pane with focus; ambiguous `[[Beta page]]` opens a restricted picker and Down/Enter opens the second page; Ctrl-O/Ctrl-I history; Ctrl+Shift+F project search as a tab finds text |
+| Prose conflict | Dirty page changed on disk keeps both versions, is reported in the status, survives autosave; Ctrl+S then Enter overwrites, Ctrl+S then l, Enter discards edits |
+
+`--session-smoke-test prepare` then `restore` (two processes, one data
+directory): three panes across both split axes, exact pane bounds, tabs, active
+items, focus, independent cursors/scroll, unsaved text and shared buffers
+restored. Passed.
 
 ## Measurements
 
-Latest optimized check passed (process exit 0):
+Optimized build, headless, isolated data (`--performance-smoke-test`). Same
+results from `target/release` and from the packaged binary:
 
-| End-to-end CPU measurement | Observed result |
+| Measurement | Result | Gate |
+| --- | --- | --- |
+| Durable creation of 10,000 pages + 100 participants | ~18 s, before the UI deadline starts | — |
+| Warm picker: input + fuzzy query + CPU frame | median 2.7–3.2 ms, max 3.6 ms | < 50 ms, passed |
+| 100-participant navigation: key + CPU frame | p95 4.4–5.5 ms | < 16.67 ms, passed |
+| Health mutation + queued save + CPU frame | 5.4–5.8 ms | < 16.67 ms, passed |
+| Sustained: 120 mutations at frame rate, each + queued save + CPU frame | p95 6.3–6.6 ms, max 9.8 ms | < 16.67 ms, passed |
+| Save queue drain after the last of those edits | 0.18–0.33 s; reloaded disk state equals memory | Durability, passed |
+
+Native, private software Wayland (Weston + lavapipe, two rasterizer threads),
+619 KB note with 100 PNG images, 9,000 inline markers:
+
+| Measurement | Result |
 | --- | --- |
-| 10,000-page warm picker: input, fuzzy query, CPU frame | median 2.72 ms, max 2.91 ms |
-| 100-participant key navigation and CPU frame | p50 2.76 ms, p95 4.72 ms, max 5.41 ms |
-| Health mutation, queued save and CPU frame with 10,000 pages | 5.15 ms |
-| Initial durable creation of the portable fixture | 17.67 seconds, before UI-loop deadline |
+| Parsed and presented | ready in ~0.65 s; screenshot shows heading, image, bold, links, Unicode, wrapping |
+| Idle frame construction | median 3.6 ms |
+| 24 Vim j/k motions, key dispatch + CPU frame | median 11.6–11.7 ms, p95 13.4–13.9 ms; `--require-performance` (< 16.67 ms) passed |
+| Before this work | ~480 ms per motion (debug); optimized before patch 6: median 18.2 ms, p95 21.4 ms (failed) |
 
-The 50 ms picker gate and 16.67 ms combat CPU-budget gates passed. These are
-headless CPU frames, **not hardware presentation latency** or proof of the user's
-display sustaining 60 Hz. Raw log: `/tmp/ttrpgui-optimized-performance.log`.
+Patch 6 diagnosis: each Vim operation suspends and restores the addon's
+concealments. Per-stage timing showed the tab map rescanning each long line
+once per concealed marker (1.44 ms for 128 edits). Merging same-row edits cut
+that to 0.37 ms, and a ±30-row viewport margin (from ±60) roughly halved the
+concealments involved.
 
-The 619 KB image-rich note was verified on private software Wayland. The last
-native debug measurement after viewport lookup: ready in 2.58 seconds, Vim
-motion/frame median 481.59 ms and max 483.79 ms (six samples). This preceded the
-final removal of redundant Vim settings source scopes. It still missed the
-interaction target. **Optimized native long-note measurement is outstanding.**
-The supervisor now measures 24 motions and supports `--require-performance`.
-No smooth 60 Hz long-note result is claimed.
+These are **CPU frame-construction times**, not hardware presentation latency,
+and they were measured on a software compositor, not on the user's display. No
+claim is made that the user's display sustains 60 Hz.
 
-## Reproduction and desktop isolation
+## Native rendering
 
-After fixing bootstrap and formatting, run `nu scripts/verify-editor.nu` from
-`nix develop`. `--neovim` enables live comparisons and `--performance` adds the
-optimized 10k-page/100-participant gate. The script currently fails at bootstrap.
-Cargo
-build concurrency is capped at two jobs. Headless application rehearsals use
-isolated data and enforce a 15-second event-loop deadline.
+Screenshots from the private compositor were inspected for the note, combat and
+session scenarios, both for the build tree and the packaged binary: Catppuccin
+colours, navigator group headers with counts, focus border, selection count,
+LOW label, contextual shortcuts, portrait fallback, the session page's encounter
+header, and Vim mode indicator. Artifacts: `.editor-proof/native-*` (ignored).
 
-For native rendering, use `uv run scripts/native_check.py` with Weston in the
-shell. `--scenario note` creates a long image-rich note, verifies actual parsed
-presentation, and measures Vim motions. The Nix development shell supplies a
-software Vulkan ICD from the same pinned libc/LLVM graph as the binary. The
-supervisor strips desktop display/socket variables, starts its own offscreen
-compositor, limits software rendering threads, and terminates only its owned
-process groups in a finally block. No native proof process remained afterward.
+## Packaging
 
-The original launch incident was recursive invocation of the **linked ttrpgui
-binary**, caused by an unhandled `--printenv` helper argument. It was not an
-external Zed application. The entrypoint now handles helper/help arguments
-before GPUI or storage initialization, rejects unknown arguments, and holds an
-OS instance lock. Launcher subprocess regressions verify these protections.
+`nu scripts/package.nu --release` validates bootstrap, builds, and produces
+`dist/ttrpgui` (Nix store): wrapped binary with the runtime library closure,
+desktop entry, LICENSE, THIRD_PARTY_NOTICES and the application source with the
+pinned bootstrap recipe (109 files). The packaged binary passed `--help`, both
+headless suites and the performance gates outside `nix develop`, and the native
+note (with the performance gate) and combat checks.
 
-Final packaging, optimized long-note performance and remaining editor/workspace/
-external-conflict acceptance remain release gates. See handoff.md for the
-concrete repair order and baseline.md for unresolved requirements.
+## Log noise that is expected
+
+- Git errors about `/tmp/.git`: fixtures under `/tmp` sit below an unrelated
+  bogus Git directory. Do not delete it.
+- `WatchNotFound`/inotify messages during fixture cleanup.
+- `persisting editor selections ... FOREIGN KEY constraint failed`: an upstream
+  Zed race. Selection saves fire ~100 ms after a change and reference the
+  editor's item row, which the workspace writes on its own schedule. The quit
+  path (patch 3) writes item rows before selections, and the restart rehearsal
+  verifies restored cursors.
+- `No selection history for undone transaction` in the editor smoke: the test
+  edits through `Editor::edit` without a selection transaction, then undoes.
+- The missing portrait in native fixtures is intentional (fallback is visible).

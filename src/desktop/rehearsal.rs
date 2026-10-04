@@ -630,6 +630,370 @@ Watcher rehearsal marker
     Ok(())
 }
 
+/// A dirty open page changed on disk keeps both versions through Zed's buffer
+/// conflict state, is reported, survives autosave, and resolves by keyboard
+/// through the themed in-window prompt.
+pub async fn prose_conflict(
+    model: &Entity<CampaignModel>,
+    workspace: &Entity<Workspace>,
+    window: AnyWindowHandle,
+    cx: &mut AsyncApp,
+) -> anyhow::Result<()> {
+    use campaign_domain::{Command, Note};
+    let note = Note::new("Conflict rehearsal");
+    let id = DocumentId::Note(note.id);
+    model.update(cx, |m, cx| m.execute(Command::CreateNote(note), cx));
+    super::campaign::wait_saved(model, cx).await?;
+    let path = model.read_with(cx, |m, _| {
+        m.store.root().join(&m.catalogue.documents[&id].path)
+    });
+    std::fs::write(&path, "# Disk\n")?;
+    let item = window
+        .update(cx, |_, window, cx| {
+            workspace.update(cx, |w, cx| {
+                w.open_abs_path(path.clone(), Default::default(), window, cx)
+            })
+        })?
+        .await?;
+    let editor = cx
+        .update(|cx| item.act_as::<editor::Editor>(cx))
+        .context("Conflict page did not open in an editor")?;
+    let buffer = editor
+        .read_with(cx, |e, cx| e.buffer().read(cx).as_singleton())
+        .context("Conflict page has no buffer")?;
+    let wait = async |cx: &mut AsyncApp, condition: &dyn Fn(&mut AsyncApp) -> bool| {
+        for _ in 0..300 {
+            if condition(cx) {
+                return true;
+            }
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(10))
+                .await;
+        }
+        condition(cx)
+    };
+    let text = |cx: &mut AsyncApp| editor.read_with(cx, |e, cx| e.text(cx));
+    let disk = || std::fs::read_to_string(&path).unwrap_or_default();
+
+    for (round, keys, keep_local) in [(0, &["enter"][..], true), (1, &["l", "enter"][..], false)] {
+        let local = format!("# Local {round}\n\nUnsaved edit\n");
+        let external = format!("# External {round}\n\nOutside edit\n");
+        window.update(cx, |_, window, cx| {
+            window.focus(&editor.focus_handle(cx), cx);
+            editor.update(cx, |e, cx| e.set_text(local.as_str(), window, cx));
+        })?;
+        // Write before autosave (750 ms) can save the local edit.
+        std::fs::write(&path, &external)?;
+        ensure!(
+            wait(cx, &|cx| buffer.read_with(cx, |b, _| b.has_conflict())).await,
+            "Dirty page did not enter conflict after an external write"
+        );
+        ensure!(
+            cx.update(|cx| !super::watcher::prose_conflicts(workspace, cx).is_empty()),
+            "Prose conflict was not reported in the campaign status"
+        );
+        // Autosave must not overwrite the external version.
+        cx.background_executor()
+            .timer(std::time::Duration::from_millis(1000))
+            .await;
+        ensure!(
+            disk() == external && text(cx) == local,
+            "Autosave did not preserve both versions: disk={:?}, buffer={:?}",
+            disk(),
+            text(cx)
+        );
+        press(window, "ctrl-s", cx)?;
+        ensure!(
+            wait(cx, &|cx| window
+                .update(cx, |_, window, _| window.has_active_prompt())
+                .unwrap_or(false))
+            .await,
+            "Saving a conflicted page did not ask how to resolve it"
+        );
+        for key in keys {
+            press(window, key, cx)?;
+        }
+        let expected = if keep_local { &local } else { &external };
+        ensure!(
+            wait(cx, &|cx| disk() == *expected
+                && text(cx) == *expected
+                && !buffer
+                    .read_with(cx, |b, _| b.has_conflict() || b.is_dirty()))
+            .await,
+            "Conflict resolution round {round} did not settle: disk={:?}, buffer={:?}",
+            disk(),
+            text(cx)
+        );
+        ensure!(
+            !window.update(cx, |_, window, _| window.has_active_prompt())?,
+            "Conflict prompt remained open"
+        );
+    }
+    ensure!(
+        cx.update(|cx| super::watcher::prose_conflicts(workspace, cx).is_empty()),
+        "Resolved conflict remained in the campaign status"
+    );
+    println!(
+        "Prose conflict rehearsal passed: dirty page changed on disk keeps both versions, is reported, survives autosave, and resolves by keyboard via Overwrite and Discard Edits."
+    );
+    Ok(())
+}
+
+/// Keyboard-only workspace route: palette split, moving a tab between panes,
+/// ambiguous-link picker, navigation history and project-wide search.
+pub async fn workspace_keyboard(
+    model: &Entity<CampaignModel>,
+    workspace: &Entity<Workspace>,
+    window: AnyWindowHandle,
+    cx: &mut AsyncApp,
+) -> anyhow::Result<()> {
+    use campaign_domain::{Command, Note};
+    let pause = async |cx: &mut AsyncApp, ms: u64| {
+        cx.background_executor()
+            .timer(std::time::Duration::from_millis(ms))
+            .await
+    };
+    let wait = async |cx: &mut AsyncApp, condition: &dyn Fn(&mut AsyncApp) -> bool| {
+        for _ in 0..200 {
+            if condition(cx) {
+                return true;
+            }
+            cx.background_executor()
+                .timer(std::time::Duration::from_millis(10))
+                .await;
+        }
+        condition(cx)
+    };
+    let type_text = |text: &str, cx: &mut AsyncApp| -> anyhow::Result<()> {
+        for ch in text.chars() {
+            let key = match ch {
+                ' ' => "space".to_string(),
+                c => c.to_string(),
+            };
+            press(window, &key, cx)?;
+        }
+        Ok(())
+    };
+
+    let alpha = Note::new("Alpha page");
+    let first = Note::new("Beta page");
+    let second = Note::new("Beta page");
+    let ids = [alpha.id, first.id, second.id].map(DocumentId::Note);
+    model.update(cx, |m, cx| {
+        for note in [alpha, first, second] {
+            m.execute(Command::CreateNote(note), cx);
+        }
+    });
+    super::campaign::wait_saved(model, cx).await?;
+    let (root, paths) = model.read_with(cx, |m, _| {
+        (
+            m.store.root().to_path_buf(),
+            ids.map(|id| m.catalogue.documents[&id].path.clone()),
+        )
+    });
+    let alpha_text = "# Alpha\n\nSee [[Beta page]] soon.\n\nunique-search-token\n";
+    let bodies = [alpha_text, "# Beta one\n", "# Beta two\n"];
+    model
+        .read_with(cx, |m, _| {
+            m.store.edit_documents(
+                paths
+                    .iter()
+                    .zip(bodies)
+                    .map(|(path, body)| {
+                        (
+                            path.to_string_lossy().into_owned(),
+                            (String::new(), body.to_owned()),
+                        )
+                    })
+                    .collect(),
+            )
+        })
+        .await?;
+    let open = async |path: &std::path::Path,
+                      cx: &mut AsyncApp|
+           -> anyhow::Result<Entity<editor::Editor>> {
+        let item = window
+            .update(cx, |_, window, cx| {
+                workspace.update(cx, |w, cx| {
+                    w.open_abs_path(root.join(path), Default::default(), window, cx)
+                })
+            })?
+            .await?;
+        let editor = cx
+            .update(|cx| item.act_as::<editor::Editor>(cx))
+            .context("Page did not open in an editor")?;
+        window.update(cx, |_, window, cx| {
+            window.focus(&editor.focus_handle(cx), cx);
+            window.refresh();
+            window.draw(cx).clear(cx);
+        })?;
+        Ok(editor)
+    };
+    let alpha_editor = open(&paths[0], cx).await?;
+    let pane_count = |cx: &mut AsyncApp| workspace.read_with(cx, |w, _| w.panes().len());
+    let panes_before = pane_count(cx);
+
+    // Command palette: run "pane: split right" by name.
+    press(window, "ctrl-shift-p", cx)?;
+    ensure!(
+        workspace.read_with(cx, |w, cx| w
+            .active_modal::<command_palette::CommandPalette>(cx)
+            .is_some()),
+        "Ctrl+Shift+P did not open the command palette"
+    );
+    type_text("pane split right", cx)?;
+    pause(cx, 150).await;
+    press(window, "enter", cx)?;
+    ensure!(
+        wait(cx, &|cx| pane_count(cx) == panes_before + 1).await,
+        "The palette did not run pane: split right"
+    );
+    pause(cx, 30).await;
+
+    // Ctrl-W m h moves the active tab into the left pane, keeping focus on it.
+    let beta_editor = open(&paths[1], cx).await?;
+    let right = workspace.read_with(cx, |w, _| w.active_pane().clone());
+    press(window, "ctrl-w", cx)?;
+    press(window, "m", cx)?;
+    press(window, "h", cx)?;
+    let moved = wait(cx, &|cx| {
+        workspace.read_with(cx, |w, cx| {
+            let active = w.active_pane();
+            *active != right
+                && active
+                    .read(cx)
+                    .items()
+                    .any(|i| i.item_id() == beta_editor.entity_id())
+                && !right
+                    .read(cx)
+                    .items()
+                    .any(|i| i.item_id() == beta_editor.entity_id())
+        })
+    })
+    .await;
+    ensure!(moved, "Ctrl-W m h did not move the tab to the left pane");
+    ensure!(
+        window.update(cx, |_, window, cx| beta_editor
+            .focus_handle(cx)
+            .is_focused(window))?,
+        "Focus did not follow the moved tab"
+    );
+
+    // Ambiguous [[Beta page]]: Ctrl-Enter opens the restricted picker; choose
+    // the second candidate with the keyboard.
+    let _ = alpha_editor;
+    let alpha_editor = open(&paths[0], cx).await?;
+    let link = alpha_text.find("[[Beta").unwrap() + 3;
+    window.update(cx, |_, window, cx| {
+        alpha_editor.update(cx, |e, cx| {
+            let offset = editor::MultiBufferOffset(link);
+            e.change_selections(Default::default(), window, cx, |s| {
+                s.select_ranges([offset..offset])
+            })
+        });
+        window.refresh();
+        window.draw(cx).clear(cx);
+    })?;
+    press(window, "ctrl-enter", cx)?;
+    let panel = workspace
+        .read_with(cx, |w, cx| w.panel::<super::navigator::Navigator>(cx))
+        .context("Campaign navigator missing")?;
+    let candidates = panel.read_with(cx, |p, cx| p.visible_pages(cx));
+    ensure!(
+        candidates.len() == 2 && candidates.iter().all(|id| ids[1..].contains(id)),
+        "Ambiguous link did not restrict the picker to both pages: {candidates:?}"
+    );
+    press(window, "down", cx)?;
+    press(window, "enter", cx)?;
+    let chosen = candidates[1];
+    let expected = bodies[ids.iter().position(|id| *id == chosen).unwrap()];
+    let active_text = |cx: &mut AsyncApp| {
+        workspace.read_with(cx, |w, cx| {
+            w.active_item_as::<editor::Editor>(cx)
+                .map(|e| e.read(cx).text(cx))
+                .unwrap_or_default()
+        })
+    };
+    ensure!(
+        wait(cx, &|cx| active_text(cx) == expected).await,
+        "Choosing the second candidate did not open it: {:?}",
+        active_text(cx)
+    );
+    pause(cx, 30).await;
+
+    // Navigation history: Ctrl-O returns to the link, Ctrl-I goes forward.
+    window.update(cx, |_, window, cx| {
+        if let Some(e) = workspace.read(cx).active_item_as::<editor::Editor>(cx) {
+            window.focus(&e.focus_handle(cx), cx);
+        }
+        window.refresh();
+        window.draw(cx).clear(cx);
+    })?;
+    press(window, "ctrl-o", cx)?;
+    ensure!(
+        wait(cx, &|cx| active_text(cx) == alpha_text).await,
+        "Ctrl-O did not navigate back to the linking page"
+    );
+    pause(cx, 30).await;
+    press(window, "ctrl-i", cx)?;
+    ensure!(
+        wait(cx, &|cx| active_text(cx) == expected).await,
+        "Ctrl-I did not navigate forward again"
+    );
+
+    // Project search opens as a workspace item and finds closed-page text.
+    press(window, "ctrl-shift-f", cx)?;
+    let search = workspace
+        .read_with(cx, |w, cx| {
+            w.active_item_as::<search::ProjectSearchView>(cx)
+        })
+        .context("Ctrl+Shift+F did not open project search as a tab")?;
+    window.update(cx, |_, window, cx| {
+        window.refresh();
+        window.draw(cx).clear(cx);
+    })?;
+    ensure!(
+        wait(cx, &|cx| window
+            .update(cx, |_, window, cx| {
+                window.refresh();
+                window.draw(cx).clear(cx);
+                // The query input lives in the toolbar's search bar.
+                let _ = &search;
+                window
+                    .context_stack()
+                    .iter()
+                    .any(|context| context.contains("ProjectSearchBar"))
+                    && !window
+                        .context_stack()
+                        .iter()
+                        .any(|context| context.contains("VimControl"))
+            })
+            .unwrap_or(false))
+        .await,
+        "Project search did not take keyboard focus: {:?}",
+        window.update(cx, |_, window, _| window
+            .context_stack()
+            .iter()
+            .map(|c| format!("{c:?}"))
+            .collect::<Vec<_>>())?
+    );
+    type_text("unique-search-token", cx)?;
+    press(window, "enter", cx)?;
+    ensure!(
+        wait(cx, &|cx| search.read_with(cx, |s, _| s.has_matches())).await,
+        "Project search found no results for {:?}",
+        search.read_with(cx, |s, cx| s.search_query_text(cx))
+    );
+    ensure!(
+        search.read_with(cx, |s, cx| s.search_query_text(cx) == "unique-search-token"),
+        "Project search query was not typed into its own input"
+    );
+    println!(
+        "Workspace keyboard rehearsal passed: palette split, Ctrl-W m h tab move with focus, ambiguous-link picker, Ctrl-O/Ctrl-I history and project search as a tab."
+    );
+    Ok(())
+}
+
 pub async fn rename_links(
     model: &Entity<CampaignModel>,
     workspace: &Entity<Workspace>,
@@ -694,7 +1058,7 @@ pub async fn rename_links(
     session.name = "Renamed session".into();
     session.aliases.push(original.clone());
     model.update(cx, |m, cx| {
-        m.execute(Command::UpdateSession(session), cx);
+        m.execute(Command::UpdateSession(session.clone()), cx);
     });
     super::campaign::wait_saved(model, cx).await?;
     let revised = source.replace(&format!("[[{original}"), "[[Renamed session");
@@ -722,8 +1086,108 @@ pub async fn rename_links(
     );
     model.update(cx, |m, cx| m.undo(cx));
     super::campaign::wait_saved(model, cx).await?;
+    let texts = |cx: &mut AsyncApp| -> anyhow::Result<(String, String)> {
+        Ok((
+            editor.read_with(cx, |e, cx| e.text(cx)),
+            std::fs::read_to_string(root.join(&closed_path))?,
+        ))
+    };
+    let tick = |cx: &mut AsyncApp| {
+        cx.background_executor()
+            .timer(std::time::Duration::from_millis(1))
+    };
+
+    // Undo while the rename's link preparation is in flight.
+    let mut renamed = session.clone();
+    renamed.name = "Rapid session".into();
+    model.update(cx, |m, cx| m.execute(Command::UpdateSession(renamed), cx));
+    tick(cx).await;
+    model.update(cx, |m, cx| m.undo(cx));
+    super::campaign::wait_saved(model, cx).await?;
+    ensure!(
+        texts(cx)? == (source.clone(), source.clone()),
+        "Rename then immediate undo left stale links: {:?}",
+        texts(cx)?
+    );
+    // Two renames in quick succession end at the newest name.
+    for name in ["Rapid session", "Final session"] {
+        let mut renamed =
+            model.read_with(cx, |m, _| m.engine.state().sessions[&session.id].clone());
+        if !renamed.aliases.contains(&renamed.name) {
+            renamed.aliases.push(renamed.name.clone());
+        }
+        renamed.name = name.into();
+        model.update(cx, |m, cx| m.execute(Command::UpdateSession(renamed), cx));
+        tick(cx).await;
+    }
+    super::campaign::wait_saved(model, cx).await?;
+    let last = source.replace(&format!("[[{original}"), "[[Final session");
+    ensure!(
+        texts(cx)? == (last.clone(), last.clone()),
+        "Consecutive renames left stale links: {:?}",
+        texts(cx)?
+    );
+    model.update(cx, |m, cx| {
+        m.undo(cx);
+        m.undo(cx);
+    });
+    super::campaign::wait_saved(model, cx).await?;
+    ensure!(
+        texts(cx)? == (source.clone(), source.clone()),
+        "Undoing consecutive renames left stale links"
+    );
+
+    // A failed link update is reported, keeps the quit barrier, and resumes
+    // from the same base on Retry without losing the rename.
+    use std::os::unix::fs::PermissionsExt as _;
+    let closed_file = root.join(&closed_path);
+    std::fs::set_permissions(&closed_file, std::fs::Permissions::from_mode(0o000))?;
+    if std::fs::read(&closed_file).is_ok() {
+        // Privileged users bypass permissions; the failure path is untestable.
+        std::fs::set_permissions(&closed_file, std::fs::Permissions::from_mode(0o644))?;
+        println!("Rename failure rehearsal skipped: permissions are not enforced for this user.");
+    } else {
+        let mut failed = session.clone();
+        failed.name = "Retried session".into();
+        model.update(cx, |m, cx| m.execute(Command::UpdateSession(failed), cx));
+        let result = super::campaign::wait_saved(model, cx).await;
+        std::fs::set_permissions(&closed_file, std::fs::Permissions::from_mode(0o644))?;
+        ensure!(
+            result
+                .as_ref()
+                .is_err_and(|e| e.to_string().starts_with("Link updates need attention")),
+            "Unreadable closed page did not report a link-maintenance failure: {result:?}"
+        );
+        model.read_with(cx, |m, _| {
+            ensure!(
+                m.error
+                    .as_deref()
+                    .is_some_and(|e| e.starts_with("Link updates need attention")),
+                "Link failure was not shown in the save status"
+            );
+            Ok::<_, anyhow::Error>(())
+        })?;
+        model.update(cx, |m, cx| m.retry(cx));
+        super::campaign::wait_saved(model, cx).await?;
+        let retried = source.replace(&format!("[[{original}"), "[[Retried session");
+        ensure!(
+            texts(cx)? == (retried.clone(), retried),
+            "Retry did not resume link maintenance: {:?}",
+            texts(cx)?
+        );
+        ensure!(
+            model.read_with(cx, |m, _| m.error.is_none() && m.link_error.is_none()),
+            "Retry did not clear the link failure"
+        );
+        model.update(cx, |m, cx| m.undo(cx));
+        super::campaign::wait_saved(model, cx).await?;
+        ensure!(
+            texts(cx)? == (source.clone(), source.clone()),
+            "Undo after a retried rename left stale links"
+        );
+    }
     println!(
-        "Rename rehearsal passed: open-buffer transactions, closed-file journal, wiki labels, portable relative links/headings, structured undo and redo preserve link identity."
+        "Rename rehearsal passed: open-buffer transactions, closed-file journal, wiki labels, portable relative links/headings, structured undo/redo, rename-then-undo during preparation, consecutive renames, and failed link maintenance resumed by Retry."
     );
     Ok(())
 }
@@ -786,27 +1250,64 @@ pub async fn native_note(
         presentation.inline_markers,
         started.elapsed()
     );
-    let mut frames = Vec::new();
-    for index in 0..24 {
-        let start = std::time::Instant::now();
-        press(window, if index % 2 == 0 { "j" } else { "k" }, cx)?;
-        let elapsed = start.elapsed().as_secs_f64() * 1000.;
-        frames.push(elapsed);
-        eprintln!("Native note motion {index}: {elapsed:.2} ms");
+    let millis = |d: std::time::Duration| d.as_secs_f64() * 1000.;
+    // Baseline: an unchanged frame of the same workspace.
+    let mut idle = Vec::new();
+    for _ in 0..8 {
+        idle.push(window.update(cx, |_, window, cx| {
+            let start = std::time::Instant::now();
+            window.refresh();
+            window.draw(cx).clear(cx);
+            millis(start.elapsed())
+        })?);
         cx.background_executor()
             .timer(std::time::Duration::from_millis(16))
             .await;
     }
+    idle.sort_by(f64::total_cmp);
+    // Profiling runs may request more motions; gates always use at least 24.
+    let motions = std::env::var("TTRPGUI_NATIVE_MOTIONS")
+        .ok()
+        .and_then(|n| n.parse::<usize>().ok())
+        .unwrap_or(24)
+        .max(24);
+    let mut frames = Vec::new();
+    for index in 0..motions {
+        let key = if index % 2 == 0 { "j" } else { "k" };
+        let (dispatch, draw) = window.update(cx, |_, window, cx| {
+            let start = std::time::Instant::now();
+            window.dispatch_keystroke(Keystroke::parse(key).unwrap(), cx);
+            let dispatched = start.elapsed();
+            window.refresh();
+            window.draw(cx).clear(cx);
+            (millis(dispatched), millis(start.elapsed() - dispatched))
+        })?;
+        frames.push(dispatch + draw);
+        eprintln!(
+            "Native note motion {index}: {:.2} ms (key dispatch {dispatch:.2} ms, frame {draw:.2} ms)",
+            dispatch + draw
+        );
+        cx.background_executor()
+            .timer(std::time::Duration::from_millis(16))
+            .await;
+    }
+    eprintln!(
+        "Native note idle frame: median={:.2} ms, max={:.2} ms",
+        idle[4], idle[7]
+    );
     frames.sort_by(f64::total_cmp);
+    let percentile =
+        |p: f64| frames[((frames.len() as f64 * p).ceil() as usize).clamp(1, frames.len()) - 1];
+    let (median, p95) = (percentile(0.5), percentile(0.95));
     println!(
-        "Native note interaction timing: 24 Vim motions + CPU frame construction, median={:.2} ms, p95={:.2} ms, max={:.2} ms; private software compositor; excludes presentation latency.",
-        frames[12], frames[22], frames[23]
+        "Native note interaction timing: {} Vim motions + CPU frame construction, median={median:.2} ms, p95={p95:.2} ms, max={:.2} ms; private software compositor; excludes presentation latency.",
+        frames.len(),
+        frames[frames.len() - 1]
     );
     if std::env::var_os("TTRPGUI_CHECK_PERFORMANCE").is_some() {
         ensure!(
-            frames[22] < 1000. / 60.,
-            "Large-note Vim frame p95 exceeded the 60 Hz CPU budget: {:.2} ms",
-            frames[22]
+            p95 < 1000. / 60.,
+            "Large-note Vim frame p95 exceeded the 60 Hz CPU budget: {p95:.2} ms"
         );
     }
     println!("Native note probe completed successfully.");

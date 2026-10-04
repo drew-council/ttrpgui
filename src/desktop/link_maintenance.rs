@@ -1,62 +1,126 @@
 //! Rename and undo link maintenance. File reads and parsing run off the UI;
 //! open buffers receive ordinary editor transactions and closed files use the
 //! storage worker's compare-before-write journal.
-use super::campaign::{CampaignModel, wait_structured_saved};
+use super::campaign::{CampaignModel, RetryLinkMaintenance, wait_structured_saved};
 use campaign_documents::{Catalogue, links_after_change};
 use editor::{Editor, MultiBufferOffset};
 use gpui::{App, AsyncApp, Entity, WeakEntity};
-use std::{collections::BTreeMap, sync::Arc};
+use std::{cell::RefCell, collections::BTreeMap, rc::Rc, sync::Arc};
 use workspace::Workspace;
 
+/// Documents' links reflect `applied`. One loop at a time rewrites them from
+/// `applied` to the newest catalogue, so rapid rename/undo sequences and
+/// retries never skip an intermediate rename.
+struct Maintenance {
+    applied: Arc<Catalogue>,
+    running: bool,
+}
+
+/// Preparation raced a newer rename; rewrite again from the same base.
+#[derive(Debug)]
+struct IdentitiesChanged;
+impl std::fmt::Display for IdentitiesChanged {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Page identities changed while preparing link updates")
+    }
+}
+impl std::error::Error for IdentitiesChanged {}
+
+fn renamed(before: &Catalogue, after: &Catalogue) -> bool {
+    before.documents.iter().any(|(id, old)| {
+        after
+            .documents
+            .get(id)
+            .is_some_and(|new| old.name != new.name || old.path != new.path)
+    })
+}
+
 pub fn init(model: &Entity<CampaignModel>, workspace: &Entity<Workspace>, cx: &mut App) {
-    let mut previous = model.read(cx).catalogue.clone();
+    let state = Rc::new(RefCell::new(Maintenance {
+        applied: model.read(cx).catalogue.clone(),
+        running: false,
+    }));
     let workspace = workspace.downgrade();
-    cx.subscribe(model, move |model, _: &(), cx| {
-        let next = model.read(cx).catalogue.clone();
-        if Arc::ptr_eq(&previous, &next) {
-            return;
-        }
-        let changed = previous.documents.iter().any(|(id, old)| {
-            next.documents
-                .get(id)
-                .is_some_and(|new| old.name != new.name || old.path != new.path)
-        });
-        let before = std::mem::replace(&mut previous, next);
-        if !changed {
-            return;
-        }
-        model.update(cx, |m, cx| {
-            m.link_updates_pending += 1;
-            m.link_error = None;
-            cx.notify();
-        });
+    cx.subscribe(model, {
+        let state = state.clone();
         let workspace = workspace.clone();
-        cx.spawn(async move |cx| {
-            let result = rewrite(before, &model, &workspace, cx).await;
-            model.update(cx, |m, cx| {
-                m.link_updates_pending -= 1;
-                if let Err(error) = result {
-                    let error = format!("Link updates need attention: {error:#}");
-                    m.link_error = Some(error.clone());
-                    m.error = Some(error);
-                }
-                cx.notify();
-            });
-        })
-        .detach();
+        move |model, _: &(), cx| start(&state, model, &workspace, cx)
+    })
+    .detach();
+    cx.subscribe(model, move |model, _: &RetryLinkMaintenance, cx| {
+        start(&state, model, &workspace, cx)
     })
     .detach();
 }
 
-pub(super) async fn rewrite(
+fn start(
+    state: &Rc<RefCell<Maintenance>>,
+    model: Entity<CampaignModel>,
+    workspace: &WeakEntity<Workspace>,
+    cx: &mut App,
+) {
+    {
+        let mut state = state.borrow_mut();
+        let current = model.read(cx).catalogue.clone();
+        if state.running || Arc::ptr_eq(&state.applied, &current) {
+            return;
+        }
+        if !renamed(&state.applied, &current) {
+            state.applied = current;
+            return;
+        }
+        state.running = true;
+    }
+    model.update(cx, |m, cx| {
+        m.link_updates_pending += 1;
+        m.link_error = None;
+        cx.notify();
+    });
+    let state = state.clone();
+    let workspace = workspace.clone();
+    cx.spawn(async move |cx| {
+        let result = loop {
+            let (base, current) = cx.update(|cx| {
+                (
+                    state.borrow().applied.clone(),
+                    model.read(cx).catalogue.clone(),
+                )
+            });
+            if Arc::ptr_eq(&base, &current) || !renamed(&base, &current) {
+                state.borrow_mut().applied = current;
+                break Ok(());
+            }
+            match rewrite(base, &model, &workspace, cx).await {
+                Ok(after) => state.borrow_mut().applied = after,
+                Err(error) if error.is::<IdentitiesChanged>() => continue,
+                Err(error) => break Err(error),
+            }
+        };
+        state.borrow_mut().running = false;
+        model.update(cx, |m, cx| {
+            m.link_updates_pending -= 1;
+            if let Err(error) = result {
+                let error = format!("Link updates need attention: {error:#}");
+                m.link_error = Some(error.clone());
+                m.error = Some(error);
+            }
+            cx.notify();
+        });
+    })
+    .detach();
+}
+
+/// Rewrite links from `before` to the current catalogue; returns the catalogue
+/// the documents now reflect.
+async fn rewrite(
     before: Arc<Catalogue>,
     model: &Entity<CampaignModel>,
     workspace: &WeakEntity<Workspace>,
     cx: &mut AsyncApp,
-) -> anyhow::Result<()> {
+) -> anyhow::Result<Arc<Catalogue>> {
     wait_structured_saved(model, cx).await?;
     let Some(workspace) = workspace.upgrade() else {
-        return Ok(());
+        return Ok(model.read_with(cx, |m, _| m.catalogue.clone()));
     };
     let open = cx.update(|cx| open_editors(&workspace, cx));
     let sources = cx.update(|cx| {
@@ -89,14 +153,15 @@ pub(super) async fn rewrite(
         .await?;
     let closed = cx.update(|cx| -> anyhow::Result<_> {
         let current = model.read(cx);
-        anyhow::ensure!(
-            after.documents.iter().all(|(id, expected)| current
+        if !after.documents.iter().all(|(id, expected)| {
+            current
                 .catalogue
                 .documents
                 .get(id)
-                .is_some_and(|d| d.name == expected.name && d.path == expected.path)),
-            "Page identities changed while preparing link updates"
-        );
+                .is_some_and(|d| d.name == expected.name && d.path == expected.path)
+        }) {
+            return Err(IdentitiesChanged.into());
+        }
         let open = open_editors(&workspace, cx);
         let mut closed = BTreeMap::new();
         for (id, path, source, changes) in edits {
@@ -134,7 +199,8 @@ pub(super) async fn rewrite(
     })?;
     model
         .read_with(cx, |m, _| m.store.edit_documents(closed))
-        .await
+        .await?;
+    Ok(after)
 }
 
 fn open_editors(

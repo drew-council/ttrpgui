@@ -8,13 +8,10 @@ revealed for editing complex blocks, plus an explicit source toggle.
 The application includes campaign pages, session/encounter relationships,
 creature libraries, persistent character health, keyboard combat controls,
 undoable bulk changes, portable TOML/Markdown storage, and native tabs/splits.
-See [verification](docs/verification.md) for measured results and outstanding
-release acceptance work.
-
-For the current stopping point, known failing checks and next-agent instructions,
-read [the handoff](docs/handoff.md). The [original requirements](docs/original-requirements.md)
-and [baseline audit](docs/baseline.md) distinguish the intended release from
-what has been verified.
+[Verification](docs/verification.md) records the checks and measurements,
+[the baseline audit](docs/baseline.md) maps them to the
+[original requirements](docs/original-requirements.md), and
+[the handoff](docs/handoff.md) lists known limits and maintenance notes.
 
 ## Build and run
 
@@ -43,47 +40,67 @@ A new campaign starts with Session 1 and a Welcome note.
 
 ## Keyboard controls
 
-- Ctrl+Alt+C: campaign navigator. Search page names and aliases; arrows and Enter
-  choose a result. Session rows offer encounter creation.
-- Ctrl+Alt+M: source/live Markdown toggle. Vim retains its normal editor behavior.
-- `[[`: campaign link completion; generated links are relative Markdown.
-  Ctrl+Enter follows links, including headings and ambiguous-name resolution.
-- Ctrl+Shift+P: command palette, including pane splits and tab movement.
-  Ctrl+P: file picker. Use the Search command for full-text workspace search.
-- Encounter focus: j/k, g/G, Space selection; +/- health, i initiative,
-  r rename, n create creature, d description, a add from library; u/Ctrl+R undo/redo.
-- Creature picker: type a name or alias, arrows/Enter choose, then enter quantity
-  and optional initiative. Ctrl+N creates an encounter-only creature.
-- Shift+F10: encounter context menu. Escape cancels interactions or clears
-  selection. Quitting is an explicit application action.
-- Ctrl+Shift+Q: quit after saving campaign work and preserving workspace state.
-  Ctrl+Q retains its Vim meaning inside editors.
+Workspace and documents:
 
-Completed encounters retain snapshots. Persistent characters carry health into
-new encounters; monster copies have independent health. Reset health is undoable.
-Save failures remain visible, and unsaved structured work has a recovery copy.
-Explicit recovery backs up conflicting external metadata under `.recovery`.
+- Ctrl+Alt+C: campaign navigator. Type to search names and aliases; arrows and
+  Enter choose. In the browse list j/k move, h/l collapse/expand sessions and the
+  Sessions/Creatures/Locations/Notes groups, n adds an encounter to the selected
+  session, s creates a session, / focuses the filter.
+- Ctrl+Shift+P: command palette (all actions, including Retry save and Restore
+  unsaved recovery). Ctrl+Shift+F: project-wide search in its own tab.
+- Ctrl-W h/j/k/l: move between panes (Vim). Ctrl-W m h/j/k/l: move the active tab
+  to that neighbouring pane. Ctrl-O / Ctrl-I: back and forward through history.
+- Vim is active in every editor, including `/` search with n/N.
+- Ctrl+Alt+M: source/live Markdown toggle. Ctrl+Alt+B / Ctrl+Alt+I: bold / italic
+  for every selection; strike, code, heading, bullet and Insert Image are in the
+  palette. Each formatting action is a single undo step.
+- `[[`: campaign link completion; generated links are relative Markdown.
+  Ctrl+Enter follows links, including headings; ambiguous names open a picker.
+- Session pages list their encounters above the notes.
+
+Encounters (when the encounter list has focus):
+
+- j/k (wrapping), g/G or Home/End, Space to select, Esc to clear.
+- +/- health, i initiative, r rename, n create creature, d description,
+  a add from library, u / Ctrl+R undo/redo, Shift+F10 context menu.
+- Ctrl+Shift+S start, Ctrl+Shift+C complete, Ctrl+Shift+H reset health,
+  Ctrl+Shift+L save the cursor creature to the library.
+- Creature picker: type a name or alias, arrows/Enter choose, then quantity and
+  optional initiative. Ctrl+N creates an encounter-only creature.
+
+Quitting: Ctrl+Shift+Q waits for campaign saves and link updates, then saves the
+workspace. If a save failed, it reports it; Retry save, or press Ctrl+Shift+Q
+again to quit anyway (unsaved structured work stays in the recovery copy).
+Ctrl+Q keeps its Vim meaning inside editors.
+
+Completed encounters retain snapshots and refuse edits. Persistent characters
+carry health into new encounters; monster copies have independent health. Reset
+health is undoable. If an open page changes on disk while it has unsaved edits,
+both versions are kept and the status line says so; saving asks whether to
+overwrite or discard your edits. Explicit recovery backs up conflicting external
+metadata under `.recovery`.
 
 ## Verification and packaging
 
 ```sh
-nu scripts/verify-editor.nu
-nu scripts/verify-editor.nu --neovim
-nu scripts/package.nu
+nix develop
+nu scripts/verify-editor.nu --neovim --performance
+nu scripts/package.nu --release
 ```
 
-Automated application rehearsals use GPUI's headless platform, with a startup
-deadline and isolated data. Neovim is only a comparison-test dependency. For an
-isolated native rendering check, with Weston available in the environment:
+Application rehearsals use GPUI's headless platform with isolated data, and the
+script hides display and session-bus variables so nothing reaches the desktop.
+Neovim is only a comparison-test dependency. For native rendering on a private
+offscreen compositor (it never connects to the desktop display):
 
 ```sh
-uv run scripts/native_check.py
+nix develop -c nix shell --inputs-from . nixpkgs#weston -c \
+  uv run scripts/native_check.py --scenario note --binary target/release/ttrpgui --require-performance
 ```
 
-That supervisor uses a private offscreen compositor and software renderer, then
-terminates its own processes. It never connects to the user's desktop display.
-The package is available at `dist/ttrpgui/bin/ttrpgui`; packaging opens no windows.
-Use `--release` with the packaging script for an optimized build.
+`--scenario combat` and `--scenario session` render the encounter view and a
+session page. The package is at `dist/ttrpgui/bin/ttrpgui`; packaging opens no
+windows.
 
 [Architecture](docs/architecture.md) describes the supported editing surface and
 module boundaries. The [baseline audit](docs/baseline.md) tracks the original

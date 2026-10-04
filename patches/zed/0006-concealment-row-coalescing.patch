@@ -1,0 +1,92 @@
+--- a/crates/editor/src/display_map/fold_map.rs
++++ b/crates/editor/src/display_map/fold_map.rs
+@@ -468,12 +468,35 @@
+         }
+         self.0.snapshot.concealments = tree;
+ 
+-        let edits = consolidate_inlay_edits(edits);
++        let edits = merge_same_row_edits(&snapshot, consolidate_inlay_edits(edits));
+         let edits = self.0.sync(snapshot, edits);
+         (self.0.snapshot.clone(), edits)
+     }
+ }
+ 
++/// Concealment edits never change inlay text (`old == new`), so edits sharing
++/// a row can be widened into one. Tab and wrap maps then rescan each line once
++/// rather than once per concealed marker on it.
++fn merge_same_row_edits(snapshot: &InlaySnapshot, edits: Vec<InlayEdit>) -> Vec<InlayEdit> {
++    let mut merged: Vec<InlayEdit> = Vec::with_capacity(edits.len());
++    let mut last_row = None;
++    for edit in edits {
++        debug_assert_eq!(edit.old, edit.new);
++        let start_row = snapshot.to_point(edit.old.start).row();
++        match merged.last_mut() {
++            Some(previous) if last_row == Some(start_row) => {
++                previous.old.end = edit.old.end;
++                previous.new.end = edit.new.end;
++            }
++            _ => merged.push(edit),
++        }
++        last_row = merged
++            .last()
++            .map(|edit| snapshot.to_point(edit.old.end).row());
++    }
++    merged
++}
++
+ /// Decides where the fold indicators should be; also tracks parts of a source file that are currently folded.
+ ///
+ /// See the [`display_map` module documentation](crate::display_map) for more information.
+@@ -2002,6 +2025,38 @@
+     }
+ 
+     #[gpui::test]
++    fn test_concealment_edits_merge_per_row(cx: &mut gpui::App) {
++        init_test(cx);
++        let text = "**a** and **b**\nplain\n**c**";
++        let buffer = MultiBuffer::build_simple(text, cx);
++        let buffer_snapshot = buffer.read(cx).snapshot(cx);
++        let (_, inlay_snapshot) = InlayMap::new(buffer_snapshot.clone());
++        let mut map = FoldMap::new(inlay_snapshot.clone()).0;
++        let owner = std::any::TypeId::of::<FoldMap>();
++        let markers = text
++            .match_indices("**")
++            .map(|(start, _)| Concealment {
++                range: buffer_snapshot.anchor_after(MultiBufferOffset(start))
++                    ..buffer_snapshot.anchor_before(MultiBufferOffset(start + 2)),
++                placeholder: FoldPlaceholder::test(),
++                content_key: 0,
++            })
++            .collect::<Vec<_>>();
++        assert_eq!(markers.len(), 6);
++
++        // Four markers on the first row and two on the last: one edit per row.
++        let (mut writer, _, _) = map.write(inlay_snapshot.clone(), vec![]);
++        let (snapshot, edits) = writer.set_concealments(owner, markers);
++        assert_eq!(snapshot.text(), "⋯a⋯ and ⋯b⋯\nplain\n⋯c⋯");
++        assert_eq!(edits.len(), 2);
++
++        let (mut writer, _, _) = map.write(inlay_snapshot, vec![]);
++        let (snapshot, edits) = writer.set_concealments(owner, Vec::new());
++        assert_eq!(snapshot.text(), text);
++        assert_eq!(edits.len(), 2);
++    }
++
++    #[gpui::test]
+     fn test_adjacent_folds(cx: &mut gpui::App) {
+         init_test(cx);
+         let buffer = MultiBuffer::build_simple("abcdefghijkl", cx);
+--- a/crates/markdown_live_preview/src/markdown_live_preview.rs
++++ b/crates/markdown_live_preview/src/markdown_live_preview.rs
+@@ -593,7 +593,10 @@
+     let presentation_rows = if markers.inline.len() > 2_000 || markers.blocks.len() > 100 {
+         let display = editor.display_snapshot(cx);
+         let visible = editor.multi_buffer_visible_range(&display, cx);
+-        Some(visible.start.row.saturating_sub(60)..visible.end.row.saturating_add(60))
++        // Scrolling re-applies decorations, so the margin only covers
++        // autoscroll within one frame. Every concealed row is suspended and
++        // restored around each Vim operation, so keep it near a screenful.
++        Some(visible.start.row.saturating_sub(30)..visible.end.row.saturating_add(30))
+     } else {
+         None
+     };

@@ -141,10 +141,26 @@ impl EncounterView {
     pub fn encounter_id(&self) -> EncounterId {
         self.id
     }
+    /// Completed encounters are historical snapshots: explain instead of
+    /// opening a field whose submission the domain would reject.
+    fn refuse_if_completed(&mut self, cx: &mut Context<Self>) -> bool {
+        let completed = self
+            .model
+            .read(cx)
+            .engine
+            .state()
+            .encounters
+            .get(&self.id)
+            .is_some_and(|e| e.status == EncounterStatus::Completed);
+        if completed {
+            self.error =
+                Some("Completed encounters are historical snapshots and cannot be edited".into());
+            cx.notify();
+        }
+        completed
+    }
     fn open_library(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.model.read(cx).engine.state().encounters[&self.id].status
-            == EncounterStatus::Completed
-        {
+        if self.refuse_if_completed(cx) {
             return;
         }
         let filter = cx.new(|cx| {
@@ -309,6 +325,9 @@ impl EncounterView {
         }
     }
     fn begin(&mut self, kind: Edit, window: &mut Window, cx: &mut Context<Self>) {
+        if self.refuse_if_completed(cx) {
+            return;
+        }
         if matches!(kind, Edit::Rename) && !self.selected.is_empty() {
             self.error = Some("Clear selection before renaming a participant".into());
             cx.notify();

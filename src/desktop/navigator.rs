@@ -26,7 +26,9 @@ actions!(
         ExpandSession,
         CreateSession,
         CreateEncounter,
-        FocusPageFilter
+        FocusPageFilter,
+        RetrySave,
+        RestoreUnsavedRecovery
     ]
 );
 pub fn init(cx: &mut App) {
@@ -54,6 +56,46 @@ pub fn init(cx: &mut App) {
         KeyBinding::new("escape", PickerCancel, Some("CampaignPicker > Editor")),
     ]);
 }
+/// Browse-mode page groups. Filtered and picker lists are flat.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+enum Group {
+    Sessions,
+    Creatures,
+    Locations,
+    Notes,
+}
+impl Group {
+    fn of(id: DocumentId) -> Self {
+        match id {
+            DocumentId::Session(_) | DocumentId::Encounter(_) => Self::Sessions,
+            DocumentId::Creature(_) => Self::Creatures,
+            DocumentId::Location(_) => Self::Locations,
+            DocumentId::Note(_) => Self::Notes,
+        }
+    }
+    fn label(self) -> &'static str {
+        match self {
+            Self::Sessions => "Sessions",
+            Self::Creatures => "Creatures",
+            Self::Locations => "Locations",
+            Self::Notes => "Notes",
+        }
+    }
+}
+#[derive(Clone, PartialEq, Debug)]
+enum Row {
+    Group(Group, usize),
+    Page(DocumentId, String),
+}
+impl Row {
+    fn page(&self) -> Option<DocumentId> {
+        match self {
+            Self::Page(id, _) => Some(*id),
+            Self::Group(..) => None,
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 enum Create {
     Creature,
@@ -78,6 +120,7 @@ pub struct Navigator {
     restricted: Option<std::collections::BTreeSet<DocumentId>>,
     heading: Option<String>,
     collapsed_sessions: std::collections::BTreeSet<SessionId>,
+    collapsed_groups: std::collections::BTreeSet<Group>,
 }
 impl Navigator {
     pub(super) fn focus_session(
@@ -87,14 +130,19 @@ impl Navigator {
         cx: &mut Context<Self>,
     ) {
         self.filter.update(cx, |e, cx| e.set_text("", window, cx));
-        self.picker_cursor = self
-            .pages(cx)
-            .iter()
-            .position(|(id, _)| *id == DocumentId::Session(session))
-            .unwrap_or(0);
+        self.collapsed_groups.remove(&Group::Sessions);
+        self.picker_cursor = self.row_of(DocumentId::Session(session), cx).unwrap_or(0);
         self.selected = Some(DocumentId::Session(session));
         window.focus(&self.focus, cx);
         cx.notify();
+    }
+    fn row_of(&self, id: DocumentId, cx: &App) -> Option<usize> {
+        self.pages(cx).iter().position(|row| row.page() == Some(id))
+    }
+    fn row_of_group(&self, group: Group, cx: &App) -> Option<usize> {
+        self.pages(cx)
+            .iter()
+            .position(|row| matches!(row, Row::Group(g, _) if *g == group))
     }
     pub(super) fn filter_handle(&self) -> Entity<editor::Editor> {
         self.filter.clone()
@@ -103,6 +151,10 @@ impl Navigator {
     pub fn show_related(&mut self, id: DocumentId, cx: &mut Context<Self>) {
         self.selected = Some(id);
         cx.notify();
+    }
+    /// Pages currently listed, in order, without group headers.
+    pub fn visible_pages(&self, cx: &App) -> Vec<DocumentId> {
+        self.pages(cx).iter().filter_map(Row::page).collect()
     }
     pub fn link_pending(&self) -> bool {
         self.pending_link.is_some()
@@ -134,6 +186,7 @@ impl Navigator {
             restricted: None,
             heading: None,
             collapsed_sessions: Default::default(),
+            collapsed_groups: Default::default(),
         }
     }
     fn picker_move(&mut self, backwards: bool, cx: &mut Context<Self>) {
@@ -147,11 +200,15 @@ impl Navigator {
             .min(self.pages(cx).len().saturating_sub(1));
         self.scroll
             .scroll_to_item(self.picker_cursor, ScrollStrategy::Nearest);
-        self.selected = self.pages(cx).get(self.picker_cursor).map(|(id, _)| *id);
+        self.selected = self
+            .pages(cx)
+            .get(self.picker_cursor)
+            .and_then(Row::page)
+            .or(self.selected);
         cx.notify();
     }
     fn selected_session(&self, cx: &App) -> Option<SessionId> {
-        match self.pages(cx).get(self.picker_cursor).map(|(id, _)| *id) {
+        match self.pages(cx).get(self.picker_cursor).and_then(Row::page) {
             Some(DocumentId::Session(id)) => Some(id),
             Some(DocumentId::Encounter(id)) => {
                 Some(self.model.read(cx).engine.state().encounters[&id].session)
@@ -159,23 +216,93 @@ impl Navigator {
             _ => None,
         }
     }
+    /// Tree navigation: `h` collapses the nearest expanded parent and moves to
+    /// it; `l` expands the session or group under the cursor.
     fn expand_session(&mut self, expanded: bool, cx: &mut Context<Self>) {
-        if let Some(session) = self.selected_session(cx) {
-            if expanded {
-                self.collapsed_sessions.remove(&session);
-            } else {
-                self.collapsed_sessions.insert(session);
-                self.picker_cursor = self
-                    .pages(cx)
-                    .iter()
-                    .position(|(id, _)| *id == DocumentId::Session(session))
-                    .unwrap_or(0);
+        let row = self.pages(cx).get(self.picker_cursor).cloned();
+        let group = match row {
+            Some(Row::Group(group, _)) => Some(group),
+            Some(Row::Page(DocumentId::Session(session), _)) => {
+                if expanded || !self.collapsed_sessions.contains(&session) {
+                    if expanded {
+                        self.collapsed_sessions.remove(&session);
+                    } else {
+                        self.collapsed_sessions.insert(session);
+                    }
+                    self.selected = Some(DocumentId::Session(session));
+                    cx.notify();
+                    return;
+                }
+                Some(Group::Sessions)
             }
-            self.selected = Some(DocumentId::Session(session));
-            cx.notify();
+            Some(Row::Page(DocumentId::Encounter(_), _)) => {
+                if !expanded && let Some(session) = self.selected_session(cx) {
+                    self.collapsed_sessions.insert(session);
+                    self.picker_cursor = self.row_of(DocumentId::Session(session), cx).unwrap_or(0);
+                    self.selected = Some(DocumentId::Session(session));
+                    cx.notify();
+                }
+                return;
+            }
+            Some(Row::Page(id, _)) => (!expanded).then(|| Group::of(id)),
+            None => None,
+        };
+        if let Some(group) = group {
+            self.set_group_collapsed(group, !expanded, cx);
         }
     }
-    fn pages(&self, cx: &App) -> Vec<(DocumentId, String)> {
+    fn set_group_collapsed(&mut self, group: Group, collapsed: bool, cx: &mut Context<Self>) {
+        if collapsed {
+            self.collapsed_groups.insert(group);
+        } else {
+            self.collapsed_groups.remove(&group);
+        }
+        if let Some(row) = self.row_of_group(group, cx) {
+            self.picker_cursor = row;
+            self.scroll.scroll_to_item(row, ScrollStrategy::Nearest);
+        }
+        cx.notify();
+    }
+    fn browsing(&self, cx: &App) -> bool {
+        self.restricted.is_none()
+            && self.pending_link.is_none()
+            && self.filter.read(cx).text(cx).is_empty()
+    }
+    fn pages(&self, cx: &App) -> Vec<Row> {
+        let pages = self.documents(cx);
+        if !self.browsing(cx) {
+            return pages
+                .into_iter()
+                .map(|(id, name)| Row::Page(id, name))
+                .collect();
+        }
+        let mut rows = Vec::with_capacity(pages.len() + 4);
+        let mut index = 0;
+        for group in [
+            Group::Sessions,
+            Group::Creatures,
+            Group::Locations,
+            Group::Notes,
+        ] {
+            let count = pages[index..]
+                .iter()
+                .take_while(|(id, _)| Group::of(*id) == group)
+                .count();
+            rows.push(Row::Group(group, count));
+            if !self.collapsed_groups.contains(&group) {
+                rows.extend(
+                    pages[index..index + count]
+                        .iter()
+                        .cloned()
+                        .map(|(id, name)| Row::Page(id, name)),
+                );
+            }
+            index += count;
+        }
+        rows
+    }
+    /// Matching documents; browse mode orders them by group and hierarchy.
+    fn documents(&self, cx: &App) -> Vec<(DocumentId, String)> {
         let model = self.model.read(cx);
         let query = self.filter.read(cx).text(cx);
         let mut pages = model
@@ -211,16 +338,25 @@ impl Navigator {
                 DocumentId::Note(_) => (3, String::new(), 0, name.to_lowercase()),
             });
         }
-        pages.truncate(200);
+        if !(query.is_empty() && self.restricted.is_none()) {
+            pages.truncate(200);
+        }
         pages
     }
     fn picker_open(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let results = self.pages(cx);
-        if let Some((id, _)) = results.get(self.picker_cursor.min(results.len().saturating_sub(1)))
-        {
-            let id = *id;
-            self.selected = Some(id);
-            self.choose(id, window, cx);
+        match results.get(self.picker_cursor.min(results.len().saturating_sub(1))) {
+            Some(Row::Page(id, _)) => {
+                let id = *id;
+                self.selected = Some(id);
+                self.choose(id, window, cx);
+            }
+            Some(Row::Group(group, _)) => {
+                let group = *group;
+                let collapsed = !self.collapsed_groups.contains(&group);
+                self.set_group_collapsed(group, collapsed, cx);
+            }
+            None => (),
         }
         cx.notify();
     }
@@ -462,11 +598,13 @@ impl Navigator {
                     }
                     if let Some(id) = created {
                         self.selected = Some(id);
-                        self.picker_cursor = self
-                            .pages(cx)
-                            .iter()
-                            .position(|(page, _)| *page == id)
-                            .unwrap_or(0);
+                        self.collapsed_groups.remove(&Group::of(id));
+                        if let DocumentId::Encounter(encounter) = id {
+                            let session =
+                                self.model.read(cx).engine.state().encounters[&encounter].session;
+                            self.collapsed_sessions.remove(&session);
+                        }
+                        self.picker_cursor = self.row_of(id, cx).unwrap_or(0);
                         self.choose(id, window, cx);
                     }
                     self.form = None;

@@ -1,88 +1,92 @@
-# Original baseline audit
+# Baseline audit
 
-This checklist is the release gate, not a claim that the application is finished.
-“Implemented” means code exists; “verified” requires the named check. Historical
-editor results are distinguished from checks run against the current tree.
+This is the release gate for the brief in
+[original-requirements.md](original-requirements.md). "Verified" names an
+observed check in [verification.md](verification.md). Deliberate limits are
+listed as such rather than as passes; see [handoff.md](handoff.md).
 
-**Handoff update (2026-10-03):** implementation stopped at the user's request.
-The brief is [original-requirements.md](original-requirements.md), and the current
-stopping point is [handoff.md](handoff.md). The formatting editor proof and
-bootstrap idempotence currently fail; this is not a finished baseline.
+Status as of 2026-10-03: **every baseline requirement has a passing check or a
+documented decision.** Decisions that narrow the brief are marked *Decision*.
 
 ## Editor foundation
 
-| Requirement | Implementation / evidence | Remaining acceptance |
-| --- | --- | --- |
-| Native Zed editor and Vim libraries; no external Zed | Pinned linked crates, launcher subprocess tests; current 564 Vim tests pass | Final combined editor acceptance |
-| Exact revisions, one GPUI graph, notices and patches | Zed and GPUI Kit lock TOML, Cargo.lock, notices; fresh five-patch bootstrap passed | Fix overlapping-patch reverse validation and stale local marker |
-| Two Markdown tabs and split, one authoritative buffer | Editor smoke rehearsal; three-view restart rehearsal | Current complete combined rehearsal |
-| Zed counts, operators, objects, registers, marks, search, repeat, macros, visual modes, undo | Current 564 Vim tests and 15 live Neovim command comparisons pass | Final combined application acceptance |
-| Native headings, styled prose, lists, links, tables, images | Live addon; selection reveals source | Long image-rich note and proportional wrapping rehearsal |
-| Parent-document table editing, focus, cancellation, undo | Patch 1 removes separate cell editor; addon tests | Current structural table action coverage audit |
-| Explicit source toggle and unsupported syntax preservation | Ctrl+Alt+M; same Markdown buffer in both modes | Current smoke suite |
-| Incremental rendering, stale parse results rejected | Upstream anchored incremental addon; revision-checked search index | Large document timing |
-| Rich editing experiment and supported-surface decision | ADR 001 accepts source-on-edit fallback; new formatting actions compile | Formatting smoke fails; richer-block experiment review and image import integration |
+| Requirement | Evidence |
+| --- | --- |
+| Linked Zed editor/Vim/workspace crates; no external Zed | Pinned crates; launcher subprocess tests; 564 Vim tests |
+| Exact revisions, one GPUI graph, notices, exported patches | Zed + GPUI Kit lock files; six patches; `bootstrap.nu --strict` byte-identical; fresh and idempotent bootstrap; notices list every patch |
+| Two Markdown tabs and a split on one authoritative buffer | Editor smoke rehearsal; restart rehearsal |
+| Counts, operators, objects, registers, marks, search, repeat, macros, visual modes, undo across presentation | 564 Vim tests; 15 live Neovim scenarios crossing bold text, tables, images, quotes and headings; application-level `/`, `n`, `N` |
+| Headings, styled prose, lists, links, tables, images, Unicode, wrapping | 32 addon tests; native screenshots |
+| Parent-buffer table editing, focus, cancellation, undo | Patch 1 removes the separate cell editor; addon tests for cell clicks without mutation, structural changes, row/column move/delete, keyboard reveal; Vim table parent-undo test |
+| Formatting, links, images and tables edit the same transaction system | Formatting rehearsal (multi-range, toggle, one undo); link completion; image import rehearsal (one undo); table tests |
+| Explicit source toggle, unsupported syntax preserved | Ctrl+Alt+M; Vim source-toggle test |
+| Incremental rendering, stale results rejected | Upstream anchored incremental addon; viewport presentation; revision-checked index |
+| Supported editing surface decided | *Decision*: ADR 001 source-on-edit live Markdown. Rich semantic WYSIWYG editing is not provided |
 
-## Workspace and campaign navigation
+## Workspace and navigation
 
-| Requirement | Implementation / evidence | Remaining acceptance |
-| --- | --- | --- |
-| Tabs, both split axes, pane navigation, tab movement, history, palette | Zed Workspace/Pane/action system reused | Keyboard-only rehearsal of tab movement/history |
-| Restore tabs, active items, focus, cursor and scroll; split consistency | Real two-process session rehearsal; patch 3 flushes views on quit | Rehearsal includes exact pane bounds |
-| Collapsible campaign navigator and typed fuzzy picker with aliases/thumbnails | Native panel; virtual list; name/alias search; portable portraits | Category/session expansion and creation flow parity |
-| Full-text search as workspace item | Zed project search initialized | Keyboard search rehearsal |
-| Contextual shortcuts, focus scoping, Esc cancellation, explicit quit | Encounter contexts; Vim draft fields; Ctrl+Shift+Q; connected keyboard combat route passed | Final workspace/search/ambiguous-link keyboard coverage |
-| Catppuccin Mocha semantic tokens and non-color state indicators | Shared palette, Kit theme, borders, selection count, LOW/DOWN labels | Fresh offscreen screenshot inspection |
-| Session pages list encounters; parent session/location/creature links | Structured related-page navigation and encounter links | In-page encounter listing review |
-| New page types remain ordinary workspace items | Editor documents and SerializableItem EncounterView | No plugin framework required |
+| Requirement | Evidence |
+| --- | --- |
+| Tabs, both split axes, pane navigation, moving tabs between panes, history, palette | Workspace keyboard rehearsal (palette split, Ctrl-W m h, Ctrl-O/Ctrl-I); restart rehearsal |
+| Restore tabs, active items, focus, cursor, scroll, layout | Two-process restart rehearsal |
+| Shared document content, independent cursors/scroll | Editor smoke and restart rehearsals |
+| Collapsible navigator for sessions, encounters, creatures, locations, notes | Navigator rehearsal: session hierarchy and category groups |
+| Fuzzy picker over names/aliases with type and thumbnails | Picker rehearsals; 10k-page gate; portraits in screenshots |
+| Full-text search as a workspace item | Workspace keyboard rehearsal (Ctrl+Shift+F) |
+| Vim inside editors; scoped shortcuts; Esc cancels; explicit quit | Encounter/description rehearsals; Ctrl+Shift+Q; focus-scoping assertion |
+| Contextual shortcuts and mode | Shortcut bars and Vim mode indicator in screenshots |
+| Anchored fields, inline validation, selection counts, portraits, health cues, keyboard menus | Encounter rehearsals; screenshots (LOW label, counts) |
+| Keyboard-operable prompts | Zed's themed in-window prompt (Enter/Esc/h/l); conflict rehearsal |
+| Catppuccin Mocha semantics; non-colour focus/selection/low-health cues | Screenshots |
+| Session pages list their encounters | Session page header block; rehearsal and screenshot |
+| Page types are workspace items without a plugin framework | Editor items and serializable `EncounterView` |
 
-## Combat and original TUI parity
+## Combat parity with `../ttrpgtui`
 
-The reference is the implementation and tests in `../ttrpgtui`, including flows
-omitted from its README. It is read-only reference material.
+| Requirement | Evidence |
+| --- | --- |
+| Session/encounter creation, reopening, automatic roster | Navigator and keyboard session rehearsals |
+| Optional AC/initiative, descending initiative, unknown last | Domain tests |
+| Single and bulk health/initiative/description, one undo each | Domain tests; combat, description and session rehearsals |
+| Heal capped at max, negative HP kept, independent monster copies | Domain tests; combat rehearsal (-2 HP) |
+| Rename, individually identified copies, identity-preserving sort | Combat and session rehearsals |
+| j/k with wrap, first/last, Space, +/-, Esc | Combat rehearsal assertions |
+| Library add with quantity/initiative; create new; save to library | Combat and session rehearsals |
+| Encounter description separate from library notes | Typed model |
+| Persistent HP, reset (undoable), immutable history | Domain tests; session rehearsal |
+| Planned/active/completed; one active; viewing history never mutates | Domain tests; session rehearsal; completed encounters refuse edits with an explanation |
+| Automatic save, visible failures, undo/redo | Worker tests; status line; retry rehearsal |
 
-| Requirement | Implementation / evidence | Remaining acceptance |
-| --- | --- | --- |
-| Session/encounter creation, reopening, automatic campaign roster | Keyboard creation/roster and encounter deserialization passed | Final combined release route |
-| Optional AC/initiative, descending initiative, unknown last | Domain regression tests | Current UI regression |
-| Single/bulk health, initiative and description; one undo per mutation | Domain, multiline description, bulk initiative/damage/reset keyboard checks pass | Final combined release route |
-| Healing capped, negative HP, independent monster copies | Domain tests and library rehearsal | Current tests |
-| Renaming, multiple individually identified copies | r/n shortcuts, UUID participants, local name override; keyboard rename/library copies pass | Final release route |
-| Multiline Vim description, first selected row prefill | Full Zed draft editor; async description rehearsal | Current regression result |
-| j/k and wrap, first/last, Space, +/-/_ adjustment, Esc clear | Encounter key context and stable UUID cursor/selection | Explicit wrap/selection assertion |
-| Initiative reorder retains cursor/selection | Encounter rehearsal | Current combined suite |
-| Library add with quantity/initiative; immediately create new; save local to library | Connected keyboard route passed, including Ctrl+N and Ctrl+Shift+L | Final release route |
-| Encounter description distinct from library notes | Participant.description field | Already covered by typed model |
-| Persistent HP, Reset health, independent copies, immutable history | Domain tests and connected keyboard lifecycle/reset/undo route passed | Final release route |
-| Planned/active/completed; one active per campaign; viewing history never mutates HP | Domain and keyboard start/complete/next-encounter/history checks passed | Final completed-edit rejection UI case |
-| Automatic save, visible errors, recoverable work | Worker queue, status/error UI, storage and worker tests | Failed-save UI/recovery rehearsal |
+## Files, links and persistence
 
-## Files, interconnection and maintainability
+| Requirement | Evidence |
+| --- | --- |
+| Portable UUID directories, TOML, Markdown, assets, templates, roster | Storage tests; image import rehearsal |
+| Definitions vs persistent state vs participants vs history | Domain types and tests |
+| Relative links, `[[page]]`, labels, headings, `[[` completion, ambiguity picker | Link and workspace keyboard rehearsals |
+| Backlinks and structured related navigation | Index tests; navigator details |
+| Link updates on managed renames | Rename rehearsal including rapid rename/undo and failure + Retry |
+| Link updates on managed moves | *Decision*: the application offers no move. Identity is UUID-based and renames never move directories. Path-change rewriting exists and is tested for a future move feature |
+| Atomic replacement, recoverable multi-file batches | Storage journal tests |
+| Clean external reload; dirty conflicts keep both versions | External-change rehearsal (structured); prose conflict rehearsal |
+| Derived indexes; stale results rejected | Index tests; watcher revision guards |
+| GPUI-free domain; storage/documents/editor/desktop boundaries | Crate and module structure |
 
-| Requirement | Implementation / evidence | Remaining acceptance |
-| --- | --- | --- |
-| Portable UUID directories, TOML metadata, Markdown, assets, templates, roster | Storage roundtrip/path checks; template helpers; native image import code and storage test | Image chooser/import/editor undo integration |
-| Creature definitions vs persistent state vs participant state vs history | Distinct domain types and lifecycle tests | Current domain suite |
-| Relative links, wiki labels, headings; [[ completion; ambiguity picker | Link parser/resolver, completion and heading rehearsal | Ambiguous-link GUI rehearsal |
-| Backlinks plus structured related relationships | SearchIndex and Catalogue.related | Current tests |
-| Application-managed rename/move updates links | Open/closed rename, aliases and undo/redo passed; relative move rewrite helper tested | Managed move UI/transaction absent; retry rapid or failed link maintenance |
-| GPUI-free domain; storage/documents/editor/desktop boundaries | Separate crates/modules; entrypoint composes initialization | Keep substantial new features in own modules |
-| Typed IDs/commands/document handles/item factories | Domain IDs, document IDs, entity handles | No whole-state plugin layer |
-| Atomic replacement and recoverable multi-file batches | Journal tests including interruption/conflicting external edits | Current storage suite |
-| External clean reload, dirty conflict preserves both versions | Watcher and recovery tests; external add/delete rehearsal | Dirty prose conflict rehearsal |
-| Derived indexes/thumbnails; revision rejects stale results | Document index tests and watcher revision guards | Large campaign responsiveness |
-| Linux/Wayland native packaging; GPL-3.0-or-later and notices | Nix package script, source recipe, LICENSE/notices | Fresh packaged binary check |
+## Performance and release
 
-## Performance and final rehearsal
+| Requirement | Evidence |
+| --- | --- |
+| 10,000 pages, warm fuzzy results < 50 ms | Max 3.6 ms (CPU frame included) |
+| 100 participants at 60 Hz | p95 4.4–5.5 ms CPU frame |
+| Long image-rich note | 619 KB / 100 images: Vim motion p95 13.4–13.9 ms CPU frame on a software compositor |
+| Large campaign saves stay responsive and durable | 120 frame-rate mutations p95 ≤ 6.6 ms; drain ≤ 0.33 s; disk equals memory |
+| Packaged native application | `dist/ttrpgui`; packaged headless, performance and native checks pass |
+| Complete keyboard-only campaign session | Campaign rehearsal chain plus restart rehearsal |
 
-| Required scenario | Existing evidence | Remaining acceptance |
-| --- | --- | --- |
-| 10,000 pages, warm fuzzy search within 50 ms | Optimized input + query + CPU frame max 2.91 ms, passed | Final packaged runtime measurement |
-| 100 encounter participants, smooth 60 Hz interaction | Optimized navigation CPU frame p95 4.72 ms, max 5.41 ms | Actual presentation limits documented; packaged check |
-| Long image-rich note | 619 KB / 100 PNG native fixture verified; debug motion/frame max 483.79 ms before final Vim settings optimization | Optimized native run and 60 Hz CPU gate still outstanding |
-| Large campaign saves remain responsive | Ordered worker/coalescing tests pass; optimized health mutation + frame 5.15 ms | Sustained queue pressure/durability measurement |
-| Complete keyboard-only campaign session | Connected creation/start/copy/edit/reset/undo/complete/next/history route passed | Final release route with workspace/search/restart/failure flows |
+*Limit*: frame figures are CPU construction times measured headless or on a
+software compositor. They are not hardware presentation latency, and nothing
+was measured on the user's display, by design (no desktop launches).
 
-Out of scope remains D&D Beyond, Logseq migration, multiplayer, cloud sync and
-full D&D rules automation. Basic stats are HP, AC and initiative; prose stores
-richer stat blocks. Fresh campaign data is the default.
+Out of scope, unchanged: D&D Beyond, Logseq migration, multiplayer, cloud sync,
+full rules automation. Structured stats are HP, AC and initiative; richer stat
+blocks are Markdown prose.

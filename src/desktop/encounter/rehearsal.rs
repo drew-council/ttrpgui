@@ -113,6 +113,44 @@ pub fn verify(
         view.read(cx).selected.is_empty(),
         "Escape did not clear selection"
     );
+    // Cursor movement is by participant identity in initiative order, wrapping
+    // at both ends; g/G and Home/End jump to the first and last rows.
+    let order = model.read(cx).engine.state().encounters[&encounter]
+        .sorted_participants()
+        .iter()
+        .map(|p| p.id)
+        .collect::<Vec<_>>();
+    let (first, last) = (order[0], order[order.len() - 1]);
+    for (key, expected, message) in [
+        ("g", first, "g did not move to the first row"),
+        ("k", last, "k did not wrap from the first to the last row"),
+        ("j", first, "j did not wrap from the last to the first row"),
+        ("j", order[1], "j did not move down one row"),
+        ("shift-g", last, "G did not move to the last row"),
+        ("home", first, "Home did not move to the first row"),
+        ("end", last, "End did not move to the last row"),
+        ("up", order[order.len() - 2], "Up did not move up one row"),
+    ] {
+        press(key, window, cx);
+        ensure!(view.read(cx).cursor == Some(expected), "{message}");
+    }
+    press("space", window, cx);
+    press("down", window, cx);
+    press("space", window, cx);
+    ensure!(
+        view.read(cx).selected == [order[order.len() - 2], last].into(),
+        "Space did not build an explicit two-row selection"
+    );
+    press("space", window, cx);
+    ensure!(
+        view.read(cx).selected == [order[order.len() - 2]].into(),
+        "Space did not toggle the cursor row out of the selection"
+    );
+    press("escape", window, cx);
+    ensure!(
+        view.read(cx).selected.is_empty(),
+        "Escape did not clear the selection"
+    );
     let wolf = Creature::new("Wolf", 11, Some(13), CreatureKind::Template);
     model.update(cx, |m, cx| {
         m.execute(Command::CreateCreature(wolf), cx);

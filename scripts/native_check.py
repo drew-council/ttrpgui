@@ -68,7 +68,7 @@ def main():
     root = Path(__file__).resolve().parent.parent
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, default=root / "target/debug/ttrpgui")
-    parser.add_argument("--scenario", choices=["combat", "note"], default="combat")
+    parser.add_argument("--scenario", choices=["combat", "note", "session"], default="combat")
     parser.add_argument("--require-performance", action="store_true", help="Enforce the 60 Hz CPU-frame budget for the note scenario")
     args = parser.parse_args()
     weston = shutil.which("weston")

@@ -242,6 +242,18 @@ pub async fn verify_session(
         "Next encounter did not resolve persistent HP"
     );
     focus(&view, workspace, window, cx)?;
+    // Editing keys on history explain why instead of opening fields.
+    for key in ["end", "-", "i", "a"] {
+        press(window, key, cx)?;
+    }
+    ensure!(
+        view.read_with(cx, |v, _| v.edit.is_none()
+            && !v.library
+            && v.error
+                .as_deref()
+                .is_some_and(|e| e.contains("historical snapshots"))),
+        "Completed encounter offered an edit instead of explaining it is history"
+    );
     ensure!(
         model.read_with(cx, |m, _| m.engine.state().character_hp[&hero] == carried
             && m.engine.state().encounters[&encounter] == snapshot),
@@ -251,7 +263,7 @@ pub async fn verify_session(
     press(window, "ctrl-shift-c", cx)?;
     wait_saved(model, cx).await?;
     println!(
-        "Keyboard session rehearsal passed: creation, start, local/library copies, bulk initiative/damage/reset and undo, rename, completion, next-encounter persistent HP and immutable history."
+        "Keyboard session rehearsal passed: creation, start, local/library copies, bulk initiative/damage/reset and undo, rename, completion, next-encounter persistent HP, immutable history and refused edits on completed encounters."
     );
     Ok(())
 }

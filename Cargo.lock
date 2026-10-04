@@ -10739,6 +10739,7 @@ dependencies = [
  "theme_settings",
  "tree-sitter-md",
  "ui",
+ "ui_prompt",
  "util",
  "uuid",
  "vim",
@@ -10835,6 +10836,20 @@ version = "0.1.0"
 dependencies = [
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "ui_prompt"
+version = "0.1.0"
+dependencies = [
+ "gpui",
+ "markdown 0.1.0",
+ "menu",
+ "settings",
+ "theme",
+ "theme_settings",
+ "ui",
+ "workspace",
 ]
 
 [[package]]

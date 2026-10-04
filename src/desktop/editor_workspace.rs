@@ -11,6 +11,24 @@ pub fn init(cx: &mut App) -> anyhow::Result<()> {
         markdown_live_preview::ToggleLivePreview,
         Some("Editor"),
     )]);
+    // Zed binds whole-pane moves under Ctrl-W; add moving the active tab to
+    // the neighbouring pane alongside them.
+    for (key, direction) in [
+        ("h", workspace::SplitDirection::Left),
+        ("j", workspace::SplitDirection::Down),
+        ("k", workspace::SplitDirection::Up),
+        ("l", workspace::SplitDirection::Right),
+    ] {
+        cx.bind_keys([KeyBinding::new(
+            &format!("ctrl-w m {key}"),
+            workspace::MoveItemToPaneInDirection {
+                direction,
+                focus: true,
+                clone: false,
+            },
+            Some("VimControl && !menu || !Editor && !Terminal"),
+        )]);
+    }
     cx.set_global(workspace::PaneSearchBarCallbacks {
         setup_search_bar: |languages, toolbar, window, cx| {
             let search = cx.new(|cx| search::BufferSearchBar::new(languages, window, cx));
@@ -24,9 +42,39 @@ pub fn init(cx: &mut App) -> anyhow::Result<()> {
         workspace.status_bar().update(cx, |bar, cx| {
             bar.add_right_item(indicator, window, cx);
         });
+        // As in Zed, every document pane carries the search toolbars: Vim's
+        // `/` drives the buffer search bar and project search tabs render
+        // their query input in the project search bar.
+        for pane in workspace.panes().to_vec() {
+            initialize_pane(workspace, &pane, window, cx);
+        }
+        cx.subscribe_in(&cx.entity(), window, |workspace, _, event, window, cx| {
+            if let workspace::Event::PaneAdded(pane) = event {
+                initialize_pane(workspace, pane, window, cx);
+            }
+        })
+        .detach();
     })
     .detach();
     Ok(())
+}
+
+fn initialize_pane(
+    workspace: &workspace::Workspace,
+    pane: &gpui::Entity<workspace::Pane>,
+    window: &mut gpui::Window,
+    cx: &mut gpui::Context<workspace::Workspace>,
+) {
+    let languages = workspace.project().read(cx).languages().clone();
+    pane.update(cx, |pane, cx| {
+        pane.toolbar().update(cx, |toolbar, cx| {
+            let buffer_search =
+                cx.new(|cx| search::BufferSearchBar::new(Some(languages), window, cx));
+            toolbar.add_item(buffer_search, window, cx);
+            let project_search = cx.new(|_| search::project_search::ProjectSearchBar::new());
+            toolbar.add_item(project_search, window, cx);
+        })
+    });
 }
 
 /// Exercise the actual workspace composition without a compositor or GPU.
@@ -132,6 +180,94 @@ pub fn verify(
     );
     println!(
         "Editor smoke test passed: two tabs, independent views, shared edit/undo, Vim Normal mode, focus working."
+    );
+    Ok(())
+}
+
+/// Vim `/` search drives the pane's buffer search bar; it must exist in the
+/// application's panes, not only in upstream test fixtures.
+pub async fn verify_vim_search(
+    workspace: &gpui::Entity<workspace::Workspace>,
+    window: gpui::AnyWindowHandle,
+    cx: &mut gpui::AsyncApp,
+) -> anyhow::Result<()> {
+    use super::rehearsal::press;
+    use anyhow::{Context as _, ensure};
+    use editor::ToOffset as _;
+    use gpui::Focusable as _;
+    let editor = workspace
+        .read_with(cx, |w, cx| w.active_item_as::<editor::Editor>(cx))
+        .context("Search editor missing")?;
+    window.update(cx, |_, window, cx| {
+        window.focus(&editor.focus_handle(cx), cx);
+        editor.update(cx, |e, cx| {
+            e.set_text("alpha beta gamma\nbeta again\n", window, cx);
+            let start = editor::MultiBufferOffset(0);
+            e.change_selections(Default::default(), window, cx, |s| {
+                s.select_ranges([start..start])
+            });
+        });
+        window.refresh();
+        window.draw(cx).clear(cx);
+    })?;
+    let cursor = |cx: &mut gpui::AsyncApp| {
+        editor.read_with(cx, |e, cx| {
+            e.selections
+                .newest_anchor()
+                .head()
+                .to_offset(&e.buffer().read(cx).snapshot(cx))
+                .0
+        })
+    };
+    for key in ["/", "b", "e", "t", "a"] {
+        press(window, key, cx)?;
+    }
+    // Matches are computed in the background before Enter can jump.
+    for _ in 0..100 {
+        cx.background_executor()
+            .timer(std::time::Duration::from_millis(10))
+            .await;
+        let searching = window.update(cx, |_, window, _| {
+            window
+                .context_stack()
+                .iter()
+                .any(|context| context.contains("BufferSearchBar"))
+        })?;
+        ensure!(searching, "Vim / did not focus the pane search bar");
+        if cursor(cx) == 6 {
+            break;
+        }
+    }
+    press(window, "enter", cx)?;
+    for _ in 0..100 {
+        if cursor(cx) == 6 {
+            break;
+        }
+        cx.background_executor()
+            .timer(std::time::Duration::from_millis(10))
+            .await;
+    }
+    ensure!(
+        cursor(cx) == 6,
+        "Vim / did not move to the first match: {}",
+        cursor(cx)
+    );
+    ensure!(
+        window.update(cx, |_, window, cx| editor
+            .focus_handle(cx)
+            .is_focused(window))?,
+        "Vim / search did not return focus to the document"
+    );
+    press(window, "n", cx)?;
+    ensure!(
+        cursor(cx) == 17,
+        "Vim n did not move to the next match: {}",
+        cursor(cx)
+    );
+    press(window, "shift-n", cx)?;
+    ensure!(cursor(cx) == 6, "Vim N did not move back: {}", cursor(cx));
+    println!(
+        "Vim search rehearsal passed: / opens the pane search bar, Enter jumps and returns focus, n/N repeat."
     );
     Ok(())
 }

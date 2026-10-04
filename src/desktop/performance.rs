@@ -152,6 +152,51 @@ pub async fn verify(
         "10,000-page campaign health mutation + queued save + CPU frame: {mutation_ms:.2} ms."
     );
     super::campaign::wait_saved(model, cx).await?;
+
+    // Sustained pressure: a mutation every frame. The UI thread only queues
+    // snapshots; the worker coalesces contiguous saves. Afterwards the disk
+    // must hold exactly the final in-memory state.
+    let mut burst = Vec::new();
+    for index in 0..120 {
+        let start = Instant::now();
+        model.update(cx, |m, cx| {
+            m.execute(
+                Command::AdjustHealth {
+                    encounter,
+                    participants: [target].into(),
+                    delta: if index % 2 == 0 { -1 } else { 1 },
+                },
+                cx,
+            );
+        });
+        window.update(cx, |_, window, cx| {
+            window.refresh();
+            window.draw(cx).clear(cx);
+        })?;
+        burst.push(start.elapsed().as_secs_f64() * 1000.);
+        cx.background_executor()
+            .timer(std::time::Duration::from_millis(16))
+            .await;
+    }
+    let drain = Instant::now();
+    super::campaign::wait_saved(model, cx).await?;
+    let drain = drain.elapsed();
+    burst.sort_by(f64::total_cmp);
+    let (expected, store) = model.read_with(cx, |m, _| (m.engine.state().clone(), m.store.clone()));
+    let reloaded = store.request(|store| store.reload()).await?;
+    ensure!(
+        reloaded == expected,
+        "Durable campaign differs from memory after sustained saves"
+    );
+    println!(
+        "Sustained saves: 120 mutations at frame rate on 10,000 pages, mutation + queued save + CPU frame p50={:.2} ms, p95={:.2} ms, max={:.2} ms; queue drained {:?} after the last edit; reloaded disk state matches memory.",
+        burst[60], burst[114], burst[119], drain
+    );
+    ensure!(
+        burst[114] < 1000. / 60.,
+        "Sustained mutation p95 exceeded the 60 Hz CPU budget: {:.2} ms",
+        burst[114]
+    );
     window.update(cx, |_, window, cx| window.focus(&focus, cx))?;
     ensure!(
         searches[7] < 50.,

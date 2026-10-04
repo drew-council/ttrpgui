@@ -30,7 +30,7 @@ fn main() -> anyhow::Result<()> {
         }
         [arg] if arg == "--help" || arg == "-h" => {
             println!(
-                "ttrpgui\n\nUsage: ttrpgui [--campaign DIRECTORY | --help | --printenv | --smoke-test | --campaign-smoke-test]\n\nLaunches the native campaign workspace. --campaign opens or creates a portable campaign.\nSmoke tests use GPUI's headless platform and exit after verification."
+                "ttrpgui\n\nUsage: ttrpgui [--campaign DIRECTORY]\n       ttrpgui --smoke-test | --campaign-smoke-test | --performance-smoke-test\n       ttrpgui --session-smoke-test prepare|restore\n       ttrpgui --help\n\nLaunches the native campaign workspace. Without arguments it opens the campaign in\n$TTRPGUI_DATA_DIR, $XDG_DATA_HOME/ttrpgui or ~/.local/share/ttrpgui; --campaign opens or\ncreates a portable campaign directory.\n\nSmoke tests use GPUI's headless platform with isolated data and exit after\nverification; run both session phases with the same TTRPGUI_DATA_DIR."
             );
             Ok(())
         }

@@ -1,14 +1,68 @@
 use super::*;
 use crate::desktop::visuals::palette;
 
+impl Navigator {
+    fn group_row(
+        &self,
+        group: Group,
+        count: usize,
+        index: usize,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let collapsed = self.collapsed_groups.contains(&group);
+        let current = (self.filter.read(cx).focus_handle(cx).is_focused(window)
+            || self.focus.is_focused(window))
+            && self.picker_cursor == index;
+        div()
+            .h(px(88.))
+            .flex()
+            .items_end()
+            .pb_1()
+            .border_b_1()
+            .border_color(rgb(if current {
+                palette::ACCENT
+            } else {
+                palette::SURFACE
+            }))
+            .child(button(
+                format!("group-{}", group.label()),
+                &format!(
+                    "{} {} ({count}){}",
+                    if collapsed { "▸" } else { "▾" },
+                    group.label(),
+                    if collapsed { " · collapsed" } else { "" }
+                ),
+                cx.listener(move |this, _, _, cx| {
+                    let collapsed = !this.collapsed_groups.contains(&group);
+                    this.set_group_collapsed(group, collapsed, cx);
+                }),
+            ))
+            .into_any_element()
+    }
+}
+
 impl Render for Navigator {
     fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+        let conflicts = self
+            .workspace
+            .upgrade()
+            .map(|w| crate::desktop::watcher::prose_conflicts(&w, cx))
+            .unwrap_or_default();
         let model = self.model.read(cx);
         let title = model.engine.state().config.name.clone();
         let status = model
             .error
             .clone()
             .or_else(|| self.error.clone())
+            .or_else(|| {
+                (!conflicts.is_empty()).then(|| {
+                    format!(
+                        "Changed on disk while you were editing: {}. Both versions are kept; save (Ctrl+S or :w) to overwrite or discard your edits.",
+                        conflicts.join(", ")
+                    )
+                })
+            })
             .unwrap_or_else(|| {
                 if model.saves_pending > 0 || model.link_updates_pending > 0 {
                     "Saving…".into()
@@ -252,7 +306,12 @@ impl Render for Navigator {
             cx.processor(move |this, range: std::ops::Range<usize>, window, cx| {
                 range
                     .map(|index| {
-                        let (id, name) = pages[index].clone();
+                        let (id, name) = match pages[index].clone() {
+                            Row::Page(id, name) => (id, name),
+                            Row::Group(group, count) => {
+                                return this.group_row(group, count, index, window, cx);
+                            }
+                        };
                         let portrait = this
                             .model
                             .read(cx)
@@ -344,7 +403,7 @@ impl Render for Navigator {
         content.child(list).child(div().text_xs().child("Esc: browse · j/k: move · h/l: collapse/expand · n: encounter · s: session · /: find")).child(button(
             "retry-save",
             "Retry save",
-            cx.listener(|this, _, _, cx| this.model.update(cx, |m, cx| m.save(cx))),
+            cx.listener(|this, _, _, cx| this.model.update(cx, |m, cx| m.retry(cx))),
         ))
     }
 }

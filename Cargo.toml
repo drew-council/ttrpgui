@@ -4,6 +4,7 @@ campaign_storage = {path = "crates/storage"}
 campaign_documents = {path = "crates/documents"}
 gpui-component = {path = "upstream/gpui-component"}
 ui = {path = "upstream/zed/crates/ui"}
+ui_prompt = {path = "upstream/zed/crates/ui_prompt"}
 anyhow = "1"
 futures = "0.3"
 serde = {version = "1", features = ["derive"]}
