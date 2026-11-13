@@ -1,6 +1,7 @@
 // Notes grouped by kind, and combats, with a filter. Adding a group is one entry in `groups`.
 import { cn } from "cn";
-import { useMemo, useRef, useState } from "react";
+import { type RefObject, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { Input } from "#components/ui/input.tsx";
 import { Kbd } from "#components/ui/kbd.tsx";
 import type { GameState } from "../shared/state.ts";
@@ -33,6 +34,16 @@ const groups: { label: string; tabs: (game: GameState) => string[] }[] = [
 	},
 ];
 
+/** The list, while the sidebar shows. */
+let list: RefObject<HTMLDivElement | null> | undefined;
+
+/** Shows the sidebar and focuses its list. */
+export function focusSidebar() {
+	// The list must mount before it can take focus.
+	flushSync(() => ui.set({ sidebar: true }));
+	list?.current?.focus();
+}
+
 export function Sidebar() {
 	const game = useGame((game) => game);
 	const active = ui.use((s) => s.active);
@@ -53,6 +64,7 @@ export function Sidebar() {
 	const nav = useListNav(flat.length, (i, newTab) =>
 		openTab(flat[i] as string, newTab),
 	);
+	list = nav.ref;
 
 	return (
 		<nav
@@ -79,7 +91,6 @@ export function Sidebar() {
 				<Kbd className="absolute top-1/2 right-5 -translate-y-1/2">/</Kbd>
 			</div>
 			<div
-				data-sidebar-list
 				className={cn(listClass, "flex-1 overflow-y-auto px-2 pb-4")}
 				role="listbox"
 				ref={nav.ref}

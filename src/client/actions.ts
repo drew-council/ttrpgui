@@ -1,7 +1,6 @@
 // The Action registry: everything the user can do. Every available Action is in the command palette.
 // Ids and default binds live in `src/shared/keys.ts`; the user config overrides them.
 import { useEffect } from "react";
-import { flushSync } from "react-dom";
 import type { SearchHit } from "../server/game.ts";
 import type { Mutation } from "../server/mutations.ts";
 import { activeAtmosphere } from "../shared/display.ts";
@@ -20,6 +19,7 @@ import type { GameState, Note } from "../shared/state.ts";
 import { atmosphereTab } from "./Atmospheres.tsx";
 import { isTextField } from "./list.ts";
 import { followLink, linkUnderCursor } from "./MarkdownBox.tsx";
+import { focusSidebar } from "./Sidebar.tsx";
 import {
 	addEntry,
 	addSection,
@@ -402,13 +402,7 @@ export const actions: Record<ActionId, Action> = {
 		title: "Toggle sidebar",
 		run: () => ui.set({ sidebar: !ui.get().sidebar }),
 	},
-	"focus-sidebar": {
-		title: "Focus sidebar",
-		run() {
-			flushSync(() => ui.set({ sidebar: true }));
-			document.querySelector<HTMLElement>("[data-sidebar-list]")?.focus();
-		},
-	},
+	"focus-sidebar": { title: "Focus sidebar", run: focusSidebar },
 	"close-tab": {
 		title: "Close tab",
 		when: () => ui.get().active !== undefined,

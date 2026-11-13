@@ -25,7 +25,7 @@ A headless Node server owns the Game directory and the one shared state tree. Cl
   - `ui.ts`: per-client state (tabs, sidebar, picker) in a tiny store from `store.ts`. Tabs and the sidebar persist in localStorage. `toast()` shows a Sonner toast.
   - `actions.ts`: the `Action` registry and keybind dispatch. `Picker.tsx`: the one fuzzy picker (shadcn Command in a Dialog; fuzzysort ranks and highlights, cmdk's filter is off), also used for prompts and confirmations. `list.ts`: the one list behavior (`j`/`k`, arrows, `g`/`G`, Enter, Ctrl+Enter for a new tab) and its classes (`listClass`, `rowClass`).
   - `MarkdownBox.tsx`: the one markdown text box (CodeMirror 6). See "Text editing".
-  - `views.tsx`: tab views (note, combat, atmosphere, problems). The note view holds the body's `MarkdownBox`, then its images and backlinks as lists. A Creature adds an aside with its portrait and `StatBlock`; a Location shows its main picture; a Session lists its combats. `Sidebar.tsx`: notes grouped by kind, and combats.
+  - `views.tsx`: tab views (note, combat, atmosphere, problems). The note view holds the body's `MarkdownBox`, then its images and backlinks as lists. A Creature adds an aside with its portrait and `StatBlock`; a Location shows its main picture; a Session lists its combats. `Sidebar.tsx`: notes grouped by kind, and combats; `focusSidebar()`.
   - `Tracker.tsx`: the combat view (tracker left; the cursor's note and `StatBlock` right) and the helpers tracker Actions use: `target()` (the selection, else the cursor row), `askNumber`, and the add-combatant and condition pickers.
   - `Display.tsx`: the player display. `main.tsx` sets one rem to 1/54 of the screen's short side on `/display`, so every size scales to any screen. `Fade` crossfades the wallpaper and the shown image (`data-layer`).
   - `Atmospheres.tsx`: the atmosphere tab view.
@@ -60,13 +60,22 @@ An Atmosphere is `atmospheres/<Name>/`: an optional `atmosphere.toml` (links, `d
 
 ## Text editing
 
-All text editing MUST use `MarkdownBox`: `<MarkdownBox value={text} onSave={(t) => send(...)} />`. Optional: `imageBase` (URL that relative image paths resolve against), `onImage` (store a pasted or dropped image, resolve to its path), `placeholder`, `autoFocus`, `view` (a ref to the `EditorView`). Without `onSave` it is read-only.
+All text editing MUST use `MarkdownBox`: `<MarkdownBox value={text} onSave={(t) => send(...)} />`. Optional: `imageBase` (URL that relative image paths resolve against), `onImage` (store a pasted or dropped image, resolve to its path), `placeholder`, `view` (a ref to the `EditorView`). Without `onSave` it is read-only.
 
 - The text is plain and round-trips byte for byte. Live preview is decorations only: markup hides unless the cursor touches it.
 - It saves 500 ms after typing stops, on blur, on unmount, and before unload. A new `value` that echoes one of its own saves is ignored. Any other new `value` replaces the text with a minimal change, so the cursor stays; unsaved edits lose to it.
 - `[[` completes titles. A link shows its label; a missing target looks dashed. Click or `follow-link` (Alt+Enter, Ctrl+Alt+Enter for a new tab) opens it, creating a plain note if missing.
 - Images use relative markdown (`![](file.png)`) and render inline. A pasted or dropped image goes through the `addImage` mutation into the note directory. Roles live in `metadata.toml` (`setImageRole`).
 - Tab and Shift+Tab indent. Escape focuses the box itself (Enter returns), and the next Tab moves past the editor.
+
+## Focus
+
+Where focus sits decides which keys work. Code moves focus by ref, never with a document-wide query.
+
+- A view's `Body` names its main element once with `useTabFocus(() => ref.current?.focus())` (`views.tsx`). It runs when the tab shows, and again each time `openTab` opens the tab (it bumps `refocus` in `ui.ts`). `ui.ts` knows nothing about views.
+- A note's wrapper passes focus to its editor. Until the text loads it holds focus, and hands it over on load only if focus is still there.
+- `pick` remembers what had focus; `closePicker` unmounts the dialog with `flushSync` (Radix traps focus while it is open), then returns focus there. The chosen item's `run` may then move it.
+- Leaving goes back by ref: Escape in the combatant note focuses the tracker; closing the stat block form focuses the note's text box.
 
 ## On-disk format
 
@@ -77,7 +86,7 @@ All text editing MUST use `MarkdownBox`: `<MarkdownBox value={text} onSave={(t) 
 - **Add a mutation:** add a function to `mutations` in `src/server/mutations.ts` that edits files. Its payload type becomes part of `Mutation` automatically. Throw to reject; the client toasts the message.
 - **Add a combatant operation:** add a rule to `rules` in `src/shared/combat.ts`, a line `name: onCombatants(rules.name)` to `mutations`, and an Action (`sendFor`, `amount`, or `onTracker`).
 - **Add an Action:** add its id and default bind (`""` for none) to `defaultKeys` in `src/shared/keys.ts`, then its title, optional `when`, and `run` to `actions` in `src/client/actions.ts`. TypeScript enforces that both lists match. It appears in the palette automatically. Use `pick()` for any choice, and `ask()` for text input (`load` fetches rows per query, as search does). `onNote`, `inCombatTab`, and `inAtmosphereTab` make an Action on the active tab; `rename` and `confirmDelete` are the shared prompts.
-- **Add a view:** add an entry to `views` in `src/client/views.tsx` (`Label`, `Body`, optional `exists`; `Body` renders only while `exists`, so it need not handle a missing target). Open it with `openTab("<view>:<arg>")`. Lists inside it use `useListNav` with `listClass` and `rowClass`.
+- **Add a view:** add an entry to `views` in `src/client/views.tsx` (`Label`, `Body`, optional `exists`; `Body` renders only while `exists`, so it need not handle a missing target). Its `Body` calls `useTabFocus` if it has a main element to focus. Open it with `openTab("<view>:<arg>")`. Lists inside it use `useListNav` with `listClass` and `rowClass`.
 - **Add a sidebar group:** add an entry to `groups` in `src/client/Sidebar.tsx` that returns tab ids.
 - **Add a file type** (for example `atmospheres/*.toml`): add a strict schema to `schema.ts`, load it in `loadGame` with `readToml` (it reports problems), add its key to `GameState`, and allow its path in `loadGame`'s top-level entry check. Mutations write it. Add a broken case to `fixtures/broken-game` and to the validator test.
 
@@ -89,8 +98,8 @@ Tailwind CSS 4 and shadcn/ui (Radix, cmdk, Sonner, lucide icons). `src/client/th
 - Everything else is Tailwind utilities in JSX, merged with `cn` from the `cn` package. No new CSS files. Share a class string as a constant only when it truly repeats.
 - `markdown.css` styles CodeMirror content and decorations, which utilities cannot reach. It is unlayered so it outranks CodeMirror's own theme, and it reads theme variables. Since utilities cannot override it, a wrapper opts in with a styling class: `note-body` (tall text box), `md-small` (stat block and combatant note text), `md-entry` (an entry name, from `--name`, runs in before the text).
 - Shared: `listClass` and `rowClass` (`list.ts`), `page`, `pageTitle`, and `pageMeta` (`views.tsx`), and `fieldBox` (`StatBlock.tsx`). `Section` (`views.tsx`) is the titled block under a page. Chips are shadcn `Badge`; the kind lozenge is `KindMark`.
-- Class names are for styling only. Code finds elements with refs, or with `data-*` attributes when the lookup crosses components (`data-note-body`, `data-tracker`, `data-combatant-note`, `data-sidebar-list`, `data-statblock`, `data-section`, `data-entry`, `data-picked`, `data-turn`, `data-layer`). Tests use roles, labels, and these attributes.
-- Radix overlays trap focus and catch keys. The picker turns off cmdk's vim keys so app binds still fire, and `closePicker` unmounts the dialog with `flushSync` before returning focus.
+- Class names are for styling only. Code finds elements with refs, or with `data-*` attributes when the lookup crosses components (`data-tracker`, `data-statblock`, `data-section`, `data-entry`, `data-picked`, `data-turn`, `data-layer`). Tests use roles, labels, and these attributes.
+- Radix overlays trap focus and catch keys. The picker turns off cmdk's vim keys so app binds still fire; see "Focus" for `closePicker`.
 
 ## Commands
 

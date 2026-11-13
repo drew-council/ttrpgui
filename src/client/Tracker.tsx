@@ -1,7 +1,8 @@
 // The combat view: the tracker on the left; the note and stat block of the Combatant under the cursor on the right.
 // Tracker Actions (in actions.ts) act on `target()`: the selection, else the cursor row.
+import type { EditorView } from "@codemirror/view";
 import { cn } from "cn";
-import { useEffect, useMemo, useRef } from "react";
+import { createRef, useEffect, useMemo, useRef } from "react";
 import { Badge } from "#components/ui/badge.tsx";
 import { Button } from "#components/ui/button.tsx";
 import { Progress } from "#components/ui/progress.tsx";
@@ -23,12 +24,21 @@ import { MarkdownBox } from "./MarkdownBox.tsx";
 import { fieldBox, StatBlock } from "./StatBlock.tsx";
 import { getGame, send, useGame } from "./sync.ts";
 import { ask, type Item, noteTab, openTab, toast, ui } from "./ui.ts";
-import { KindMark, kindLabels, kindOf, pageMeta, pageTitle } from "./views.tsx";
+import {
+	KindMark,
+	kindLabels,
+	kindOf,
+	pageMeta,
+	pageTitle,
+	useTabFocus,
+} from "./views.tsx";
 
 export const combatTab = (name: string) => `combat:${name}`;
 
 /** The tracker as last rendered: its Combat, labels in turn order, and the cursor row. */
 let tracker: { combat: string; labels: string[]; cursor?: string } | undefined;
+/** The editor of the cursor row's note. */
+const noteEditor = createRef<EditorView>();
 
 export const trackerFocused = () =>
 	tracker !== undefined && !!document.activeElement?.closest("[data-tracker]");
@@ -61,13 +71,7 @@ export function toggleSelect() {
 	});
 }
 
-export const focusNote = () =>
-	document
-		.querySelector<HTMLElement>("[data-combatant-note] .cm-content")
-		?.focus();
-
-const focusTracker = () =>
-	document.querySelector<HTMLElement>("[data-tracker]")?.focus();
+export const focusNote = () => noteEditor.current?.focus();
 
 const combatantsOf = ({ combat, labels }: Target) =>
 	labels.map((l) => getGame().combats[combat]?.combatants?.[l]);
@@ -212,10 +216,8 @@ export function CombatView({ arg: name }: { arg: string }) {
 	const cursor = labels[nav.index];
 	tracker = { combat: name, labels, cursor };
 	const { ref, setIndex } = nav;
-	useEffect(() => {
-		ref.current?.focus();
-		return () => ui.set({ selected: [] });
-	}, [ref]);
+	useTabFocus(() => ref.current?.focus());
+	useEffect(() => () => ui.set({ selected: [] }), []);
 	// The cursor follows the turn; otherwise it stays on its Combatant when the order changes, even when renamed.
 	const turn = combat.turn;
 	const last = useRef<{ turn?: string; cursor?: string; labels?: string[] }>(
@@ -326,11 +328,10 @@ export function CombatView({ arg: name }: { arg: string }) {
 					{/* biome-ignore lint/a11y/noStaticElementInteractions: Escape in the note returns to the tracker. */}
 					<div
 						className={cn(fieldBox, "md-small mb-4 px-2 py-1")}
-						data-combatant-note
 						onKeyDown={(e) => {
 							if (e.key === "Escape") {
 								e.preventDefault();
-								focusTracker();
+								ref.current?.focus();
 							}
 						}}
 					>
@@ -338,6 +339,7 @@ export function CombatView({ arg: name }: { arg: string }) {
 							key={`${name}\0${cursor}`}
 							value={c.note ?? ""}
 							placeholder="Notes on this combatant"
+							view={noteEditor}
 							onSave={(note) =>
 								send({
 									type: "setCombatantNote",

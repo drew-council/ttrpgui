@@ -2,7 +2,7 @@
 // Each field saves on blur through `saveStatblock`; the server validates it against the schema.
 import { cn } from "cn";
 import { produce } from "immer";
-import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { type CSSProperties, createRef, useEffect, useState } from "react";
 import { Input } from "#components/ui/input.tsx";
 import type { Statblock } from "../shared/schema.ts";
 import {
@@ -67,6 +67,9 @@ const sectionNames = [
 	"Legendary Actions",
 ];
 
+/** The open form. Only the active note can open one. */
+const form = createRef<HTMLDivElement>();
+
 /** Shows the stat block of the creature titled `title`. `editing` turns every field into an input. */
 export function StatBlock({
 	title,
@@ -80,9 +83,8 @@ export function StatBlock({
 	const broken = useGame((game) =>
 		game.problems.some((p) => p.file === `notes/${title}/statblock.toml`),
 	);
-	const root = useRef<HTMLDivElement>(null);
 	useEffect(() => {
-		if (editing) root.current?.querySelector("input")?.focus();
+		if (editing) form.current?.querySelector("input")?.focus();
 	}, [editing]);
 
 	if (!statblock && !editing)
@@ -120,7 +122,7 @@ export function StatBlock({
 			data-statblock
 			data-editing={editing || undefined}
 			data-title={title}
-			ref={root}
+			ref={editing ? form : undefined}
 			onKeyDown={(e) => {
 				if (!editing || e.key !== "Escape" || e.isDefaultPrevented()) return;
 				e.preventDefault();
@@ -371,22 +373,19 @@ export function formCursor(): Cursor | undefined {
 	};
 }
 
+/** Closes the form. The note view then focuses its text box. */
 export function stopEditing() {
+	// Blurring saves the field being edited before it unmounts.
 	(document.activeElement as HTMLElement | null)?.blur();
 	ui.set({ editing: undefined });
-	// The note text box, around the editor, as Escape in the editor leaves it.
-	document.querySelector("[data-note-body] .cm-editor")?.parentElement?.focus();
 }
 
-/** Focuses the name of a section, or of an entry in it, once it renders. Falls back to the first field. */
+/** Focuses the name of a section, or of an entry in it. Falls back to the first field. */
 function focusName(section: number, entry?: number) {
-	setTimeout(() => {
-		const form = document.querySelector("[data-statblock][data-editing]");
-		const s = form?.querySelector(`[data-section="${section}"]`);
-		const target =
-			entry === undefined ? s : s?.querySelector(`[data-entry="${entry}"]`);
-		(target ?? form)?.querySelector("input")?.focus();
-	});
+	const s = form.current?.querySelector(`[data-section="${section}"]`);
+	const target =
+		entry === undefined ? s : s?.querySelector(`[data-entry="${entry}"]`);
+	(target ?? form.current)?.querySelector("input")?.focus();
 }
 
 /** Runs `op` at the cursor, after the field being edited saves: blurring saves it, and edits run in order. */

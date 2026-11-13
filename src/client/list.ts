@@ -1,6 +1,6 @@
 // The one list behavior: j/k or arrows move, g/G jump to the ends, Enter opens (Ctrl+Enter in a new tab).
 // Letter keys are ignored while typing, so a list can sit under a text box.
-import { type KeyboardEvent, useRef, useState } from "react";
+import { type KeyboardEvent, useCallback, useRef, useState } from "react";
 
 /** Classes for a `useListNav` list and its rows: the cursor row shows while the list has focus. */
 export const listClass = "group/list outline-none";
@@ -17,29 +17,37 @@ export function useListNav(
 	open: (index: number, newTab: boolean) => void,
 ) {
 	const [cursor, setCursor] = useState(0);
-	const index = Math.max(0, Math.min(cursor, count - 1));
+	// The cursor as of the last key, which may not have rendered yet.
+	const latest = useRef(0);
+	const setIndex = useCallback((i: number) => {
+		latest.current = i;
+		setCursor(i);
+	}, []);
+	const clamp = (i: number) => Math.max(0, Math.min(i, count - 1));
+	const index = clamp(cursor);
 	const ref = useRef<HTMLDivElement>(null);
 
 	function onKeyDown(e: KeyboardEvent) {
+		const at = clamp(latest.current);
 		const letters =
 			!e.ctrlKey && !e.altKey && !e.metaKey && !isTextField(e.target);
 		const moves: Record<string, number> = {
-			ArrowDown: index + 1,
-			ArrowUp: index - 1,
-			...(letters && { j: index + 1, k: index - 1, g: 0, G: count - 1 }),
+			ArrowDown: at + 1,
+			ArrowUp: at - 1,
+			...(letters && { j: at + 1, k: at - 1, g: 0, G: count - 1 }),
 		};
 		const move = moves[e.key];
 		if (move !== undefined) {
-			const next = Math.max(0, Math.min(move, count - 1));
-			setCursor(next);
+			const next = clamp(move);
+			setIndex(next);
 			// Scrolls only on keys, so a list low on a page never pulls the page down.
 			ref.current
 				?.querySelectorAll('[role="option"]')
 				[next]?.scrollIntoView({ block: "nearest" });
-		} else if (e.key === "Enter" && count) open(index, e.ctrlKey || e.metaKey);
+		} else if (e.key === "Enter" && count) open(at, e.ctrlKey || e.metaKey);
 		else return;
 		e.preventDefault();
 	}
 
-	return { index, setIndex: setCursor, ref, onKeyDown };
+	return { index, setIndex, ref, onKeyDown };
 }

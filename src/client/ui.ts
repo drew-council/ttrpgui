@@ -36,6 +36,8 @@ type Ui = {
 	reveal?: { tab: string; line: number; column: number };
 	/** Labels of the Combatants selected in the open tracker. */
 	selected: string[];
+	/** Bumped by `openTab`: the shown view focuses its main element again. See `useTabFocus`. */
+	refocus: number;
 };
 
 const storageKey = "ttrpgui.ui";
@@ -51,6 +53,7 @@ export const ui = createStore<Ui>({
 	tabs: [],
 	sidebar: true,
 	selected: [],
+	refocus: 0,
 	...restore(),
 });
 ui.subscribe(() => {
@@ -60,16 +63,9 @@ ui.subscribe(() => {
 
 export const noteTab = (title: string) => `note:${title}`;
 
-/** Focuses `tab` if it is open. Otherwise it replaces the active tab, or opens beside it when `newTab`. */
+/** Shows `tab` and focuses its main element. A tab not yet open replaces the active one, or opens beside it when `newTab`. */
 export function openTab(tab: string, newTab = false) {
-	const { active } = ui.get();
-	// A newly shown view focuses its main element itself; an already active one needs a nudge.
-	if (tab === active)
-		document
-			.querySelector<HTMLElement>(
-				"[data-note-body] .cm-content, [data-tracker]",
-			)
-			?.focus();
+	const { active, refocus } = ui.get();
 	const tabs = [...ui.get().tabs];
 	if (!tabs.includes(tab)) {
 		const at = active ? tabs.indexOf(active) : -1;
@@ -79,7 +75,7 @@ export function openTab(tab: string, newTab = false) {
 			tab,
 		);
 	}
-	ui.set({ tabs, active: tab });
+	ui.set({ tabs, active: tab, refocus: refocus + 1 });
 }
 
 export function closeTab(tab: string) {

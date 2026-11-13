@@ -45,7 +45,6 @@ type Props = {
 	/** Stores a pasted or dropped image; resolves to the path to reference, or undefined on failure. */
 	onImage?: (file: File) => Promise<string | undefined>;
 	placeholder?: string;
-	autoFocus?: boolean;
 	view?: RefObject<EditorView | null>;
 };
 
@@ -60,13 +59,7 @@ export function MarkdownBox(props: Props) {
 	const notes = useGame((game) => game.notes);
 
 	useEffect(() => {
-		const {
-			value,
-			imageBase = "",
-			placeholder,
-			autoFocus,
-			onSave,
-		} = latest.current;
+		const { value, imageBase = "", placeholder, onSave } = latest.current;
 		// Texts we saved whose echo may still arrive as `value`.
 		const sent: string[] = [];
 		let timer: ReturnType<typeof setTimeout> | undefined;
@@ -199,7 +192,6 @@ export function MarkdownBox(props: Props) {
 
 		editor.current = view;
 		if (latest.current.view) latest.current.view.current = view;
-		if (autoFocus) view.focus();
 		window.addEventListener("beforeunload", flush);
 		return () => {
 			window.removeEventListener("beforeunload", flush);

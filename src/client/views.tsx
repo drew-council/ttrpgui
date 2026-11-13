@@ -42,6 +42,15 @@ export const views: Record<string, View> = {
 	problems: { Label: () => "Problems", Body: ProblemsView },
 };
 
+/** Focuses a view's main element when its tab shows, and again each time `openTab` opens it. Not while the picker is open. */
+export function useTabFocus(focus: () => void) {
+	const refocus = ui.use((s) => s.refocus);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: runs on mount and on each refocus.
+	useEffect(() => {
+		if (!ui.get().picker) focus();
+	}, [refocus]);
+}
+
 export function parseTab(tab: string): [view: string, arg: string] {
 	const at = tab.indexOf(":");
 	return at < 0 ? [tab, ""] : [tab.slice(0, at), tab.slice(at + 1)];
@@ -137,7 +146,9 @@ function NoteView({ arg: title }: { arg: string }) {
 	const combats = useGame((game) => game.combats);
 	const note = notes[title] as Note;
 	const [body, setBody] = useState<string>();
+	const loaded = body !== undefined;
 	const editor = useRef<EditorView>(null);
+	const wrapper = useRef<HTMLDivElement>(null);
 	const tab = noteTab(title);
 	const reveal = ui.use((s) => (s.reveal?.tab === tab ? s.reveal : undefined));
 	const editing = ui.use((s) => s.editing === title);
@@ -153,9 +164,22 @@ function NoteView({ arg: title }: { arg: string }) {
 		};
 	}, [title, version]);
 
+	// The wrapper passes focus to the editor. Until the text loads it holds focus, and hands it over on load if it still has it.
+	useTabFocus(() => (editor.current ?? wrapper.current)?.focus());
+	useEffect(() => {
+		if (loaded && document.activeElement === wrapper.current)
+			editor.current?.focus();
+	}, [loaded]);
+	// Closing the stat block form returns to the text box, as Escape in the editor does.
+	useEffect(() => {
+		if (!editing) return;
+		return () =>
+			(editor.current?.dom.parentElement ?? wrapper.current)?.focus();
+	}, [editing]);
+
 	useEffect(() => {
 		const view = editor.current;
-		if (!reveal || !view || body === undefined) return;
+		if (!reveal || !view || !loaded) return;
 		const { doc } = view.state;
 		const line = doc.line(Math.min(reveal.line + 1, doc.lines));
 		const pos = Math.min(line.from + reveal.column, line.to);
@@ -163,9 +187,8 @@ function NoteView({ arg: title }: { arg: string }) {
 			selection: { anchor: pos },
 			effects: EditorView.scrollIntoView(pos, { y: "center" }),
 		});
-		view.focus();
 		ui.set({ reveal: undefined });
-	}, [reveal, body]);
+	}, [reveal, loaded]);
 
 	const { metadata, images } = note;
 	const kind = kindOf(note);
@@ -212,15 +235,22 @@ function NoteView({ arg: title }: { arg: string }) {
 				</aside>
 			)}
 			<div>
-				<div data-note-body className="note-body mt-6">
-					{body !== undefined && (
+				{/* biome-ignore lint/a11y/noStaticElementInteractions: focus passes through to the editor. */}
+				<div
+					className="note-body mt-6 outline-none"
+					ref={wrapper}
+					tabIndex={-1}
+					onFocus={(e) =>
+						e.target === e.currentTarget && editor.current?.focus()
+					}
+				>
+					{loaded && (
 						<MarkdownBox
 							value={body}
 							onSave={(text) => send({ type: "saveNote", title, body: text })}
 							imageBase={noteDir(title)}
 							onImage={(file) => addImage(title, file)}
 							placeholder="Empty note. Start writing…"
-							autoFocus={!ui.get().picker}
 							view={editor}
 						/>
 					)}
@@ -388,8 +418,7 @@ function ProblemsView() {
 		const title = noteOf(problems[index]?.file ?? "");
 		if (title) openTab(noteTab(title), newTab);
 	});
-	const { ref } = nav;
-	useEffect(() => ref.current?.focus(), [ref]);
+	useTabFocus(() => nav.ref.current?.focus());
 
 	return (
 		<section className={page}>
