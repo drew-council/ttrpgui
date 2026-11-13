@@ -41,6 +41,7 @@ import {
 	ShieldPlusIcon,
 	SkipForwardIcon,
 	SkullIcon,
+	SquareCheckIcon,
 	SquarePenIcon,
 	SquareXIcon,
 	StarIcon,
@@ -814,7 +815,10 @@ export const actions: Record<ActionId, Action> = {
 		...onTracker("Edit combatant note", focusNote),
 		icon: NotebookPenIcon,
 	},
-	"toggle-select": onTracker("Select or deselect combatant", toggleSelect),
+	"toggle-select": {
+		...onTracker("Select or deselect combatant", () => toggleSelect()),
+		icon: SquareCheckIcon,
+	},
 	"clear-selection": {
 		...onTracker(
 			"Clear selection",

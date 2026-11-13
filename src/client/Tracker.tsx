@@ -2,10 +2,16 @@
 // Tracker Actions (in actions.ts) act on `target()`: the selection, else the cursor row.
 import type { EditorView } from "@codemirror/view";
 import { cn } from "cn";
+import { CrosshairIcon } from "lucide-react";
 import { createRef, useEffect, useMemo, useRef } from "react";
 import { Badge } from "#components/ui/badge.tsx";
 import { Button } from "#components/ui/button.tsx";
+import {
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+} from "#components/ui/dropdown-menu.tsx";
 import { Progress } from "#components/ui/progress.tsx";
+import { Separator } from "#components/ui/separator.tsx";
 import {
 	concentrationDC,
 	conditionNames,
@@ -19,6 +25,7 @@ import {
 import type { Combat, Combatant } from "../shared/schema.ts";
 import { toInt } from "../shared/statblock.ts";
 import type { Note } from "../shared/state.ts";
+import { ActionButton, ActionItem, ActionMenu } from "./controls.tsx";
 import { useListNav } from "./list.ts";
 import { MarkdownBox } from "./MarkdownBox.tsx";
 import { fieldBox, StatBlock } from "./StatBlock.tsx";
@@ -68,14 +75,14 @@ export const cursorLabel = () => tracker?.cursor;
 export const describe = (labels: string[]) =>
 	labels.length > 3 ? `${labels.length} combatants` : labels.join(", ");
 
-export function toggleSelect() {
-	const { cursor } = tracker ?? {};
-	if (!cursor) return;
+/** Selects or deselects a Combatant, by default the cursor row. */
+export function toggleSelect(label = tracker?.cursor) {
+	if (!label) return;
 	const { selected } = ui.get();
 	ui.set({
-		selected: selected.includes(cursor)
-			? selected.filter((l) => l !== cursor)
-			: [...selected, cursor],
+		selected: selected.includes(label)
+			? selected.filter((l) => l !== label)
+			: [...selected, label],
 	});
 }
 
@@ -251,10 +258,10 @@ export function CombatView({ arg: name }: { arg: string }) {
 
 	const c = cursor === undefined ? undefined : combat.combatants?.[cursor];
 	return (
-		<section className="mx-auto grid h-full max-w-[110rem] grid-cols-[minmax(0,1fr)_minmax(20rem,28rem)] grid-rows-[auto_auto_minmax(0,1fr)] gap-x-6 px-6 pt-4 @min-[100rem]:grid-cols-[minmax(0,1fr)_34rem] @max-[52rem]:h-auto @max-[52rem]:grid-cols-[minmax(0,1fr)] @max-[52rem]:grid-rows-none">
-			<header>
+		<section className="mx-auto grid h-full max-w-[110rem] grid-cols-[minmax(0,1fr)_minmax(20rem,28rem)] grid-rows-[auto_auto_auto_minmax(0,1fr)] gap-x-6 px-6 pt-3 @min-[100rem]:grid-cols-[minmax(0,1fr)_34rem] @max-[52rem]:h-auto @max-[52rem]:grid-cols-[minmax(0,1fr)] @max-[52rem]:grid-rows-none">
+			<header className="col-span-full flex flex-wrap items-baseline gap-x-5">
 				<h1 className={cn(pageTitle, "text-2xl/[1.1]")}>{name}</h1>
-				<p className={cn(pageMeta, "mb-3")}>
+				<p className={cn(pageMeta, "mt-0")}>
 					<span className={cn(running && "font-bold text-primary")}>
 						{running ? `Round ${combat.round}` : "Not running"}
 					</span>
@@ -271,6 +278,10 @@ export function CombatView({ arg: name }: { arg: string }) {
 					)}
 				</p>
 			</header>
+			<Toolbar
+				running={running}
+				focusTracker={() => trackerFocused() || ref.current?.focus()}
+			/>
 			<div
 				className={cn(
 					columns,
@@ -303,11 +314,23 @@ export function CombatView({ arg: name }: { arg: string }) {
 							aria-selected={i === nav.index}
 							data-turn={active || undefined}
 							data-picked={selected.includes(label) || undefined}
-							// A plain click moves the cursor; a new-tab click opens the Creature.
+							// A plain click moves the cursor; a new-tab click opens the Creature; a Shift+click selects.
 							{...clickOpens((newTab) => {
 								nav.setIndex(i);
 								if (newTab) openCreature(i, true);
 							})}
+							onClickCapture={(e) => {
+								if (!e.shiftKey) return;
+								e.stopPropagation();
+								nav.setIndex(i);
+								toggleSelect(label);
+							}}
+							onMouseDownCapture={(e) => {
+								if (!e.shiftKey) return;
+								// Not a text selection; the tracker keeps focus.
+								e.preventDefault();
+								ref.current?.focus();
+							}}
 							// Cursor: an outline, brighter while the tracker has focus. Selection: blue. Active turn: amber. They combine.
 							className={cn(
 								columns,
@@ -326,11 +349,11 @@ export function CombatView({ arg: name }: { arg: string }) {
 			</div>
 			{!labels.length && (
 				<p className="py-4 text-muted-foreground">
-					No combatants. Run “Add combatant”.
+					No combatants. Add some with “Add” above.
 				</p>
 			)}
 			{c && cursor && (
-				<aside className="col-start-2 row-span-full min-h-0 overflow-y-auto border-l pb-6 pl-6 @max-[52rem]:col-auto @max-[52rem]:row-auto @max-[52rem]:mt-6 @max-[52rem]:border-0 @max-[52rem]:pl-0">
+				<aside className="col-start-2 row-span-2 row-start-3 min-h-0 overflow-y-auto border-l pb-6 pl-6 @max-[52rem]:col-auto @max-[52rem]:row-auto @max-[52rem]:row-start-auto @max-[52rem]:mt-6 @max-[52rem]:border-0 @max-[52rem]:pl-0">
 					<h2 className="mb-2 flex flex-wrap items-baseline gap-x-3 font-serif text-2xl/[1.2] font-semibold italic">
 						{cursor}
 						{c.creature !== cursor && (
@@ -368,6 +391,84 @@ export function CombatView({ arg: name }: { arg: string }) {
 				</aside>
 			)}
 		</section>
+	);
+}
+
+/** The combat's Actions, then those on the tracker's target: the selection, else the cursor row. A press first focuses
+ * the tracker, unless it has focus, so the keys work after and a picker returns there. */
+function Toolbar({
+	running,
+	focusTracker,
+}: {
+	running: boolean;
+	focusTracker: () => void;
+}) {
+	const who = describe(target().labels);
+	const lead = "border-primary/50 text-primary dark:border-primary/50";
+	return (
+		<div
+			role="toolbar"
+			aria-label="Combat"
+			className="sticky top-0 z-10 col-span-full mt-2 mb-3 flex flex-wrap items-center gap-0.5 border-y bg-background py-1"
+			onPointerDownCapture={(e) => {
+				// Menus render elsewhere in the page, but their events pass through here.
+				if (e.currentTarget.contains(e.target as Node)) focusTracker();
+			}}
+		>
+			{running ? (
+				<ActionButton id="end-combat" />
+			) : (
+				<ActionButton id="start-combat" variant="outline" className={lead} />
+			)}
+			<ActionButton
+				id="next-turn"
+				variant={running ? "outline" : "ghost"}
+				className={cn(running && lead)}
+			/>
+			<ActionButton id="roll-initiative" />
+			<ActionButton id="add-combatant" />
+			<ActionButton id="undo-combat" />
+			<ActionButton id="redo-combat" />
+			<Separator orientation="vertical" className="mx-1.5 my-1" />
+			<span
+				className="mr-1 flex max-w-52 min-w-0 items-center gap-1.5 text-sm text-foreground"
+				title={who}
+			>
+				<CrosshairIcon className="size-4 flex-none text-faint" />
+				<span className="truncate">
+					{who || <span className="text-faint">No combatant</span>}
+				</span>
+			</span>
+			<ActionButton id="damage" />
+			<ActionButton id="heal" />
+			<ActionButton id="toggle-condition" />
+			<ActionButton id="set-temp-hp" />
+			<ActionButton id="set-initiative" />
+			<ActionButton id="toggle-concentration" />
+			<ActionButton id="toggle-select" />
+			<span className="ml-auto" />
+			<ActionMenu>
+				<DropdownMenuLabel>{who || "Combatant"}</DropdownMenuLabel>
+				<ActionItem id="set-max-hp-adjustment" />
+				<ActionItem id="death-save-success" />
+				<ActionItem id="death-save-failure" />
+				<ActionItem id="spend-legendary-action" />
+				<ActionItem id="spend-legendary-resistance" />
+				<ActionItem id="rename-combatant" />
+				<ActionItem id="edit-combatant-note" />
+				<ActionItem id="clear-selection" />
+				<ActionItem id="remove-combatant" destructive />
+				<DropdownMenuSeparator />
+				<DropdownMenuLabel>Combat</DropdownMenuLabel>
+				<ActionItem id="set-combat-atmosphere" />
+				<ActionItem id="clear-combat-atmosphere" />
+				<ActionItem id="attach-session" />
+				<ActionItem id="detach-session" />
+				<ActionItem id="party-rest" />
+				<ActionItem id="rename-combat" />
+				<ActionItem id="delete-combat" destructive />
+			</ActionMenu>
+		</div>
 	);
 }
 

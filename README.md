@@ -9,7 +9,7 @@ It is a headless server that owns a Game directory, with web clients for the con
 1. `bun start` (inside the dev shell). It reopens the last Game; `bun start -- --game DIR` opens another, and an empty directory becomes a new Game.
 2. "Go live" in the table bar (or "Go live with a session" in Ctrl+P) picks or creates the Session. Its name in the bar, or Ctrl+L, opens it.
 3. The monitor button in the bar ("Open the player display") opens the second window. Drag it to the TV and press F for fullscreen. Music and wallpaper start there.
-4. Open a prepared combat with Ctrl+K and press Shift+S to start it. Closing the control window quits everything.
+4. Open a prepared combat from the sidebar or with Ctrl+K, and press "Start combat" (Shift+S). Closing the control window quits everything.
 
 Table state lives in the Game (`runtime.toml`), so a restart picks up the running combat, the shown image, and the music. Undo history does not survive a restart.
 
@@ -19,6 +19,7 @@ Every command is in the palette (Ctrl+P) with its key. The ones you would look f
 
 - **Table bar**, along the bottom: connection, the live session (Go live, its name, End session), the running combat and round, the player display (open, close; Electron only), the active atmosphere as a switcher, music (play or pause, skip, the track, a volume slider), the shown image (show, its name, hide), problems, and Commands.
 - **Tab bar**: the sidebar toggle, back, forward, and new tab.
+- **Combat view**, a toolbar under the title: start or end, next turn, roll, add, undo, redo; then, for the selection or the cursor row, damage, heal, condition, temp HP, initiative, concentration, and select. The ⋯ menu holds the rest: max HP, death saves, legendary counters, rename, note, clear selection, remove, and the combat's atmosphere, session, party rest, rename, and delete. Shift+click selects rows.
 
 ## Server alone
 

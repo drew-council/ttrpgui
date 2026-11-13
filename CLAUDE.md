@@ -28,7 +28,7 @@ A headless Node server owns the Game directory and the one shared state tree. Cl
   - `MarkdownBox.tsx`: the one markdown text box (CodeMirror 6). See "Text editing".
   - `views.tsx`: tab views (note, combat, atmosphere, problems). The note view holds the body's `MarkdownBox`, then its images and backlinks as lists. A Creature adds an aside with its portrait and `StatBlock`; a Location shows its main picture; a Session lists its combats. `Sidebar.tsx`: notes grouped by kind, and combats; `focusSidebar()`.
   - `Bar.tsx`: the table bar along the bottom, the game master's remote: session, running combat, display, atmosphere switcher, music, shown image, problems, Commands.
-  - `Tracker.tsx`: the combat view (tracker left; the cursor's note and `StatBlock` right) and the helpers tracker Actions use: `target()` (the selection, else the cursor row), `askNumber`, and the add-combatant and condition pickers.
+  - `Tracker.tsx`: the combat view (toolbar on top; tracker left; the cursor's note and `StatBlock` right) and the helpers tracker Actions use: `target()` (the selection, else the cursor row), `askNumber`, and the add-combatant and condition pickers.
   - `Display.tsx`: the player display. On `/display`, one rem is 1/54 of the screen's short side times the page zoom (`applyZoom` in `ui.ts`), so every size scales to any screen. It handles F and the zoom binds itself. `Fade` crossfades the wallpaper and the shown image (`data-layer`).
   - `Atmospheres.tsx`: the atmosphere tab view.
   - `StatBlock.tsx`: `<StatBlock title={t} editing? />`, the one stat block, read-only or as a form with the same rows. Fields save on blur; edits run one at a time so each builds on the last. The section and entry Actions act at `formCursor()`, read from where focus is. Also `SaveInput`, the one-line field that saves on blur, and `fieldBox`, the classes that make a box around a `MarkdownBox` look like an input.
@@ -52,7 +52,7 @@ A Combat is `combats/<Name>.toml`; Combatants reference Creature notes by title 
 
 Undo: before a combat mutation writes, `onCombat` records what each file it changes held (a PC's metadata included); undo restores them and records the reverse for redo. One stack per Combat, in server memory. Combat creation, rename, and deletion are not undoable; renaming a Combat, or a note it references, clears its history, since entries name files.
 
-Tracker Actions use `onTracker` in `actions.ts`: available only while the tracker has focus, acting on `target()`.
+Tracker Actions use `onTracker` in `actions.ts`: from the keyboard available only while the tracker has focus, from the combat view's toolbar always; both act on `target()`. Shift+click toggles a row's selection.
 
 ## Display and atmospheres
 
@@ -89,6 +89,7 @@ Where focus sits decides which keys work. Code moves focus by ref, never with a 
 - A view's `Body` names its main element once with `useTabFocus(() => ref.current?.focus())` (`views.tsx`). It runs when the tab shows, and again each time `openTab` opens the tab (it bumps `refocus` in `ui.ts`). `ui.ts` knows nothing about views.
 - A note's wrapper passes focus to its editor. Until the text loads it holds focus, and hands it over on load only if focus is still there.
 - `pick` remembers what had focus; `closePicker` unmounts the dialog with `flushSync` (Radix traps focus while it is open), then returns focus there. The chosen item's `run` may then move it.
+- Controls never take focus on a press (see "Controls"). The combat toolbar focuses the tracker on a press unless it has focus, so tracker keys work after it.
 - Leaving goes back by ref: Escape in the combatant note focuses the tracker; closing the stat block form focuses the note's text box.
 
 ## Controls
