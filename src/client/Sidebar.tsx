@@ -9,7 +9,7 @@ import { atmosphereTab } from "./Atmospheres.tsx";
 import { listClass, rowClass, useListNav } from "./list.ts";
 import { useGame } from "./sync.ts";
 import { combatTab } from "./Tracker.tsx";
-import { noteTab, openTab, ui } from "./ui.ts";
+import { clickOpens, noteTab, openTab, ui } from "./ui.ts";
 import { type DisplayKind, kindOf, parseTab, TabLabel } from "./views.tsx";
 
 const notesOf = (kind: DisplayKind) => (game: GameState) =>
@@ -112,7 +112,6 @@ export function Sidebar() {
 						{group.tabs.map((tab) => {
 							const i = flat.indexOf(tab);
 							return (
-								// biome-ignore lint/a11y/useKeyWithClickEvents: the list handles keys.
 								<div
 									key={tab}
 									role="option"
@@ -123,10 +122,10 @@ export function Sidebar() {
 										rowClass,
 										"py-[0.2rem] pr-2 pl-3 text-muted-foreground aria-[current]:bg-accent aria-[current]:font-medium aria-[current]:text-foreground",
 									)}
-									onClick={(e) => {
+									{...clickOpens((newTab) => {
 										nav.setIndex(i);
-										openTab(tab, e.ctrlKey || e.metaKey);
-									}}
+										openTab(tab, newTab);
+									})}
 								>
 									<TabLabel tab={tab} />
 								</div>

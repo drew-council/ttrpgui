@@ -10,6 +10,7 @@ export const defaultKeys = {
 	"close-tab": "ctrl+w",
 	"next-tab": "ctrl+tab",
 	"previous-tab": "ctrl+shift+tab",
+	"new-tab": "ctrl+t",
 	"new-note": "ctrl+n",
 	"new-session": "",
 	"new-creature": "",
@@ -145,3 +146,16 @@ export const formatKey = (bind: string) =>
 /** Whether a canonical `bind` includes the canonical `key`. */
 export const bindHas = (bind: string, key: string) =>
 	bind.split(" ").includes(key);
+
+/** Each Action's canonical bind ("" if unbound): the user config's `keys` over the defaults. */
+export function binds(
+	keys: Record<string, string> = {},
+): Record<ActionId, string> {
+	const merged: Record<string, string> = { ...defaultKeys, ...keys };
+	return Object.fromEntries(
+		Object.keys(defaultKeys).map((id) => [
+			id,
+			normalizeKey(merged[id] ?? "") ?? "",
+		]),
+	) as Record<ActionId, string>;
+}

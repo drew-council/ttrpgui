@@ -1,5 +1,6 @@
 // Per-client UI state: tabs, sidebar, the open picker, stat block editing, and the tracker selection.
 // Tabs and the sidebar survive a reload.
+import type { MouseEvent } from "react";
 import { flushSync } from "react-dom";
 import { toast as sonner } from "sonner";
 import { createStore } from "./store.ts";
@@ -25,7 +26,7 @@ export type PickerSpec = {
 };
 
 type Ui = {
-	/** Tab ids like `note:Cinder Drake` or `problems`. See `views.tsx`. */
+	/** Tab ids like `note:Cinder Drake`, `problems`, or `new:k3j9x` for an empty tab. See `views.tsx`. */
 	tabs: string[];
 	active?: string;
 	sidebar: boolean;
@@ -63,7 +64,8 @@ ui.subscribe(() => {
 
 export const noteTab = (title: string) => `note:${title}`;
 
-/** Shows `tab` and focuses its main element. A tab not yet open replaces the active one, or opens beside it when `newTab`. */
+/** Shows `tab` and focuses its main element. A tab not yet open replaces the active one, or opens beside it when `newTab`.
+ * Every way of opening something ends here. */
 export function openTab(tab: string, newTab = false) {
 	const { active, refocus } = ui.get();
 	const tabs = [...ui.get().tabs];
@@ -77,6 +79,25 @@ export function openTab(tab: string, newTab = false) {
 	}
 	ui.set({ tabs, active: tab, refocus: refocus + 1 });
 }
+
+/** Opens an empty tab beside the active one. The next plain open fills it. */
+export const newTab = () =>
+	openTab(`new:${Math.random().toString(36).slice(2, 8)}`, true);
+
+/** Whether a click asks for a new tab: Ctrl or Cmd held, or the middle button. */
+export const wantsNewTab = (e: {
+	ctrlKey: boolean;
+	metaKey: boolean;
+	button: number;
+}) => e.ctrlKey || e.metaKey || e.button === 1;
+
+/** Mouse handlers for something that opens: a click opens it, Ctrl/Cmd+click or a middle-click in a new tab. */
+export const clickOpens = (open: (newTab: boolean) => void) => ({
+	onClick: (e: MouseEvent) => open(wantsNewTab(e)),
+	onAuxClick: (e: MouseEvent) => e.button === 1 && open(true),
+	// A middle press would otherwise paste the primary selection or start autoscroll.
+	onMouseDown: (e: MouseEvent) => e.button === 1 && e.preventDefault(),
+});
 
 export function closeTab(tab: string) {
 	const { tabs, active } = ui.get();

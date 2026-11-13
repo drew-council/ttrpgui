@@ -14,7 +14,7 @@ A headless Node server owns the Game directory and the one shared state tree. Cl
 - `src/shared/statblock.ts`: ability modifiers and the text forms of bonuses (`Dex +6, Con +8`), as shown and as typed.
 - `src/shared/combat.ts`: the pure combat rules over Combat data: turn order, turns, per-Combatant `rules` (damage, conditions, ...), initiative rolls. Unit tested.
 - `src/shared/display.ts`: the pure display rules: track names (`parseTracks`), the active Atmosphere, shuffle (`nextTrack`), switching around combat, and `playerTracker`, the one place that decides what players may see. Unit tested.
-- `src/shared/keys.ts`: every `Action` id with its default bind, and the key syntax (`ctrl+k`, `shift+g` or `G`, `j`, `+`, `f2`; alternatives separated by spaces: `= +`).
+- `src/shared/keys.ts`: every `Action` id with its default bind, the key syntax (`ctrl+k`, `shift+g` or `G`, `j`, `+`, `f2`; alternatives separated by spaces: `= +`), and `binds(config.keys)`, the user config over the defaults.
 - `src/server/game.ts`: `loadGame` loads and validates the Game in one pass; a file with problems loads its valid parts and reports only its schema problems; `loadConfig` does the same for the user config; `reconcile` for reloads; `searchNotes` for full-text search.
 - `src/server/mutations.ts`: mutations, the only way clients change the Game. Each one edits files. Metadata, stat block, and atmosphere writes go through `saveToml`: it validates against the schema and refuses to overwrite a file that has problems. Combat mutations wrap `combat.ts` rules with `onCombat`/`onCombatants`, which also keep undo history. See "Combat".
 - `src/server/download.ts`: runs `yt-dlp` for an Atmosphere's links, outside the mutation queue.
@@ -22,7 +22,7 @@ A headless Node server owns the Game directory and the one shared state tree. Cl
 - `src/cli.ts`: `serve` and `validate`. `src/electron.ts` and `src/preload.cjs`: start the server in-process, open the control window, open and close the display window, and switch Games.
 - `src/client/`: one React app (Vite). `/control` → `Control.tsx`, `/display` → `Display.tsx`.
   - `sync.ts`: the state mirror. `useGame(selector)`, `getGame()`, `useStatus()`, and `send(mutation)`, which resolves `true` once applied or toasts the error and resolves `false`.
-  - `ui.ts`: per-client state (tabs, sidebar, picker) in a tiny store from `store.ts`. Tabs and the sidebar persist in localStorage. `toast()` shows a Sonner toast.
+  - `ui.ts`: per-client state (tabs, sidebar, picker) in a tiny store from `store.ts`. Tabs and the sidebar persist in localStorage. `toast()` shows a Sonner toast. See "Tabs".
   - `actions.ts`: the `Action` registry and keybind dispatch. `Picker.tsx`: the one fuzzy picker (shadcn Command in a Dialog; fuzzysort ranks and highlights, cmdk's filter is off), also used for prompts and confirmations. `list.ts`: the one list behavior (`j`/`k`, arrows, `g`/`G`, Enter, Ctrl+Enter for a new tab) and its classes (`listClass`, `rowClass`).
   - `MarkdownBox.tsx`: the one markdown text box (CodeMirror 6). See "Text editing".
   - `views.tsx`: tab views (note, combat, atmosphere, problems). The note view holds the body's `MarkdownBox`, then its images and backlinks as lists. A Creature adds an aside with its portrait and `StatBlock`; a Location shows its main picture; a Session lists its combats. `Sidebar.tsx`: notes grouped by kind, and combats; `focusSidebar()`.
@@ -67,6 +67,13 @@ All text editing MUST use `MarkdownBox`: `<MarkdownBox value={text} onSave={(t) 
 - `[[` completes titles. A link shows its label; a missing target looks dashed. Click or `follow-link` (Alt+Enter, Ctrl+Alt+Enter for a new tab) opens it, creating a plain note if missing.
 - Images use relative markdown (`![](file.png)`) and render inline. A pasted or dropped image goes through the `addImage` mutation into the note directory. Roles live in `metadata.toml` (`setImageRole`).
 - Tab and Shift+Tab indent. Escape focuses the box itself (Enter returns), and the next Tab moves past the editor.
+
+## Tabs
+
+A tab id is `view:arg` (see `views.tsx`); an empty tab is `new:<random>`, whose view shows the welcome hints. Ids are unique, so opening something already open switches to its tab.
+
+- `openTab(tab, newTab)` is the one way to open anything: a tab not yet open replaces the active one, or opens beside it when `newTab`. `newTab()` opens an empty tab beside the active one.
+- Every mouse open goes through `clickOpens(open)` (spread on the row): a click opens, Ctrl/Cmd+click or a middle-click opens in a new tab, and a middle press does not paste the primary selection. Code that sees the raw event (the picker, wiki links in `MarkdownBox`) uses `wantsNewTab(e)`. Keyboard: Enter, and Ctrl+Enter for a new tab, in `useListNav` and the picker.
 
 ## Focus
 

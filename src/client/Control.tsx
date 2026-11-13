@@ -1,6 +1,6 @@
 // The control window: sidebar, tabs, status line, plus the picker and toasts on top.
 import { cn } from "cn";
-import { XIcon } from "lucide-react";
+import { PlusIcon, XIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Button } from "#components/ui/button.tsx";
 import { Kbd } from "#components/ui/kbd.tsx";
@@ -12,15 +12,23 @@ import {
 	TooltipTrigger,
 } from "#components/ui/tooltip.tsx";
 import { activeAtmosphere, nowPlaying } from "../shared/display.ts";
-import { formatKey } from "../shared/keys.ts";
+import { binds, formatKey } from "../shared/keys.ts";
 import { atmosphereTab } from "./Atmospheres.tsx";
-import { binds, useKeybinds } from "./actions.ts";
+import { useKeybinds } from "./actions.ts";
 import { Picker } from "./Picker.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 import { getGame, send, useGame, useStatus } from "./sync.ts";
 import { combatTab } from "./Tracker.tsx";
-import { closeTab, noteTab, openTab, toast, ui } from "./ui.ts";
-import { pageTitle, parseTab, TabBody, TabLabel, views } from "./views.tsx";
+import {
+	clickOpens,
+	closeTab,
+	newTab,
+	noteTab,
+	openTab,
+	toast,
+	ui,
+} from "./ui.ts";
+import { parseTab, TabBody, TabLabel, views, Welcome } from "./views.tsx";
 
 export function Control() {
 	useKeybinds();
@@ -61,6 +69,7 @@ export function Control() {
 function TabBar() {
 	const tabs = ui.use((s) => s.tabs);
 	const active = ui.use((s) => s.active);
+	const newTabKey = binds(getGame().config.keys)["new-tab"];
 	return (
 		<div
 			role="tablist"
@@ -75,6 +84,7 @@ function TabBar() {
 					aria-selected={tab === active}
 					onClick={() => ui.set({ active: tab })}
 					onAuxClick={(e) => e.button === 1 && closeTab(tab)}
+					onMouseDown={(e) => e.button === 1 && e.preventDefault()}
 					className="group flex max-w-60 min-w-0 flex-none cursor-pointer items-center gap-2 border-r pr-1 pl-3 text-muted-foreground aria-selected:-mb-px aria-selected:bg-background aria-selected:text-foreground aria-selected:shadow-[inset_0_2px_var(--primary)]"
 				>
 					<TabLabel tab={tab} />
@@ -92,36 +102,22 @@ function TabBar() {
 					</Button>
 				</div>
 			))}
-		</div>
-	);
-}
-
-/** Shown when no tab is open: the few keys worth knowing. */
-function Welcome() {
-	const keys = binds();
-	const hints: [string, string][] = [
-		[keys["quick-open"], "Open or create a note"],
-		[keys["command-palette"], "Show all commands"],
-		[keys["focus-sidebar"], "Browse notes in the sidebar"],
-	];
-	return (
-		<div className="grid h-full place-content-center gap-6 p-8">
-			<h1 className={cn(pageTitle, "text-faint")}>No note open</h1>
-			<dl className="grid gap-2">
-				{hints
-					.filter(([key]) => key)
-					.map(([key, what]) => (
-						<div
-							key={what}
-							className="grid grid-cols-[5.5rem_1fr] items-baseline"
-						>
-							<dt>
-								<Kbd>{formatKey(key)}</Kbd>
-							</dt>
-							<dd className="text-muted-foreground">{what}</dd>
-						</div>
-					))}
-			</dl>
+			<Tooltip>
+				<TooltipTrigger asChild>
+					<Button
+						variant="ghost"
+						size="icon-sm"
+						aria-label="New tab"
+						className="mx-1 flex-none self-center text-muted-foreground"
+						onClick={newTab}
+					>
+						<PlusIcon />
+					</Button>
+				</TooltipTrigger>
+				<TooltipContent>
+					New tab {newTabKey && <Kbd>{formatKey(newTabKey)}</Kbd>}
+				</TooltipContent>
+			</Tooltip>
 		</div>
 	);
 }
@@ -139,7 +135,7 @@ function StatusLine() {
 	const track = useGame((g) => nowPlaying(g.atmospheres, g.runtime));
 	const { paused, volume } = useGame((game) => game.runtime.music) ?? {};
 	const image = useGame((game) => game.runtime.image);
-	const palette = binds()["command-palette"];
+	const palette = binds(getGame().config.keys)["command-palette"];
 	return (
 		<footer className="col-span-full flex h-6.5 items-center gap-4 border-t bg-card px-3 text-xs text-muted-foreground">
 			<span
@@ -155,7 +151,7 @@ function StatusLine() {
 					variant="ghost"
 					size="xs"
 					className={cn(statusButton, "font-bold text-primary")}
-					onClick={() => openTab(noteTab(live))}
+					{...clickOpens((n) => openTab(noteTab(live), n))}
 				>
 					Live: {live}
 				</Button>
@@ -165,7 +161,7 @@ function StatusLine() {
 					variant="ghost"
 					size="xs"
 					className={statusButton}
-					onClick={() => openTab(combatTab(combat))}
+					{...clickOpens((n) => openTab(combatTab(combat), n))}
 				>
 					{combat}, round {round}
 				</Button>
@@ -175,7 +171,7 @@ function StatusLine() {
 					variant="ghost"
 					size="xs"
 					className={statusButton}
-					onClick={() => openTab(atmosphereTab(atmosphere))}
+					{...clickOpens((n) => openTab(atmosphereTab(atmosphere), n))}
 				>
 					{atmosphere}
 				</Button>
@@ -208,7 +204,7 @@ function StatusLine() {
 					variant="ghost"
 					size="xs"
 					className={cn(statusButton, "font-bold text-destructive")}
-					onClick={() => openTab("problems")}
+					{...clickOpens((n) => openTab("problems", n))}
 				>
 					{problems === 1 ? "1 problem" : `${problems} problems`}
 				</Button>

@@ -12,7 +12,7 @@ import {
 } from "#components/ui/command.tsx";
 import { Dialog, DialogContent, DialogTitle } from "#components/ui/dialog.tsx";
 import { Kbd } from "#components/ui/kbd.tsx";
-import { closePicker, type Item, type PickerSpec } from "./ui.ts";
+import { closePicker, type Item, type PickerSpec, wantsNewTab } from "./ui.ts";
 
 export function Picker({ spec }: { spec: PickerSpec }) {
 	const [query, setQuery] = useState(spec.value ?? "");
@@ -41,7 +41,7 @@ export function Picker({ spec }: { spec: PickerSpec }) {
 		const extra = spec.fromQuery?.(query.trim());
 		return extra ? [...found, { item: extra, label: extra.label }] : found;
 	}, [query, items, spec]);
-	// Whether the Enter or click that selects a row asked for a new tab.
+	// Whether the Enter or click that selects a row asked for a new tab. See `wantsNewTab`.
 	const newTab = useRef(false);
 	const choose = (item: Item) => {
 		closePicker();
@@ -86,8 +86,12 @@ export function Picker({ spec }: { spec: PickerSpec }) {
 								value={String(i)}
 								onSelect={() => choose(item)}
 								onMouseDown={(e) => {
-									newTab.current = e.ctrlKey || e.metaKey;
+									newTab.current = wantsNewTab(e);
+									// A middle press would otherwise paste the primary selection or start autoscroll.
+									if (e.button === 1) e.preventDefault();
 								}}
+								// cmdk selects on a primary click only.
+								onAuxClick={(e) => e.button === 1 && choose(item)}
 								className="gap-2 px-3 py-2 text-base data-selected:bg-primary/14 data-selected:shadow-[inset_2px_0_var(--primary)]"
 							>
 								<span className="min-w-0 flex-1 truncate">{label}</span>

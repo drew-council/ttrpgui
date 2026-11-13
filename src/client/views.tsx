@@ -3,6 +3,8 @@ import { EditorView } from "@codemirror/view";
 import { cn } from "cn";
 import { type FC, type ReactNode, useEffect, useRef, useState } from "react";
 import { Badge } from "#components/ui/badge.tsx";
+import { Kbd } from "#components/ui/kbd.tsx";
+import { binds, formatKey } from "../shared/keys.ts";
 import { backlinks, imageFile, mainImage } from "../shared/notes.ts";
 import { type ImageRole, imageRoles } from "../shared/schema.ts";
 import type { GameState, Note } from "../shared/state.ts";
@@ -12,7 +14,7 @@ import { MarkdownBox } from "./MarkdownBox.tsx";
 import { StatBlock } from "./StatBlock.tsx";
 import { getGame, send, useGame } from "./sync.ts";
 import { CombatView, combatTab } from "./Tracker.tsx";
-import { noteTab, openTab, pick, ui } from "./ui.ts";
+import { clickOpens, noteTab, openTab, pick, ui } from "./ui.ts";
 
 type View = {
 	/** Shown in tabs and the sidebar. */
@@ -40,6 +42,8 @@ export const views: Record<string, View> = {
 		exists: (name, game) => Object.hasOwn(game.atmospheres, name),
 	},
 	problems: { Label: () => "Problems", Body: ProblemsView },
+	/** An empty tab: `new:<unique>`. */
+	new: { Label: () => "New tab", Body: Welcome },
 };
 
 /** Focuses a view's main element when its tab shows, and again each time `openTab` opens it. Not while the picker is open. */
@@ -362,17 +366,16 @@ function ListBox<T extends string>({
 				onKeyDown={nav.onKeyDown}
 			>
 				{items.map((item, i) => (
-					// biome-ignore lint/a11y/useKeyWithClickEvents: the list handles keys.
 					<div
 						key={item}
 						role="option"
 						tabIndex={-1}
 						aria-selected={i === nav.index}
 						className={cn(rowClass, "px-2 py-1")}
-						onClick={(e) => {
+						{...clickOpens((newTab) => {
 							nav.setIndex(i);
-							open(item, e.ctrlKey || e.metaKey);
-						}}
+							open(item, newTab);
+						})}
 					>
 						{children(item)}
 					</div>
@@ -436,18 +439,17 @@ function ProblemsView() {
 					onKeyDown={nav.onKeyDown}
 				>
 					{problems.map((problem, i) => (
-						// biome-ignore lint/a11y/useKeyWithClickEvents: the list handles keys.
 						<div
 							key={JSON.stringify(problem)}
 							role="option"
 							tabIndex={-1}
 							aria-selected={i === nav.index}
 							className={cn(rowClass, "flex-col items-start gap-0 px-3 py-2")}
-							onClick={(e) => {
+							{...clickOpens((newTab) => {
 								nav.setIndex(i);
 								const title = noteOf(problem.file);
-								if (title) openTab(noteTab(title), e.ctrlKey || e.metaKey);
-							}}
+								if (title) openTab(noteTab(title), newTab);
+							})}
 						>
 							<span className="flex flex-wrap gap-2 font-medium wrap-anywhere">
 								{problem.file}
@@ -466,5 +468,37 @@ function ProblemsView() {
 				</div>
 			)}
 		</section>
+	);
+}
+
+/** No tab open, or an empty one: the few keys worth knowing. */
+export function Welcome() {
+	const keys = binds(getGame().config.keys);
+	const hints: [string, string][] = [
+		[keys["quick-open"], "Open or create a note"],
+		[keys["command-palette"], "Show all commands"],
+		[keys["focus-sidebar"], "Browse notes in the sidebar"],
+		["ctrl+enter", "Open in a new tab. So do Ctrl+click and middle-click."],
+		[keys["new-tab"], "New tab"],
+	];
+	return (
+		<div className="grid h-full place-content-center gap-6 p-8">
+			<h1 className={cn(pageTitle, "text-faint")}>No note open</h1>
+			<dl className="grid gap-2">
+				{hints
+					.filter(([key]) => key)
+					.map(([key, what]) => (
+						<div
+							key={what}
+							className="grid grid-cols-[5.5rem_1fr] items-baseline"
+						>
+							<dt>
+								<Kbd>{formatKey(key)}</Kbd>
+							</dt>
+							<dd className="text-muted-foreground">{what}</dd>
+						</div>
+					))}
+			</dl>
+		</div>
 	);
 }

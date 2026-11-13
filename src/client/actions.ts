@@ -7,10 +7,9 @@ import { activeAtmosphere } from "../shared/display.ts";
 import {
 	type ActionId,
 	bindHas,
-	defaultKeys,
+	binds,
 	eventKey,
 	formatKey,
-	normalizeKey,
 } from "../shared/keys.ts";
 import { localDate } from "../shared/notes.ts";
 import type { Kind } from "../shared/schema.ts";
@@ -48,6 +47,7 @@ import {
 	closeTab,
 	cycleTab,
 	type Item,
+	newTab,
 	noteTab,
 	openTab,
 	pick,
@@ -354,7 +354,7 @@ export const actions: Record<ActionId, Action> = {
 	"command-palette": {
 		title: "Show all commands",
 		run() {
-			const keys = binds();
+			const keys = binds(getGame().config.keys);
 			pick({
 				title: "Run a command",
 				items: available().map((id) => ({
@@ -418,6 +418,7 @@ export const actions: Record<ActionId, Action> = {
 		when: () => ui.get().tabs.length > 1,
 		run: () => cycleTab(-1),
 	},
+	"new-tab": { title: "New tab", run: newTab },
 	"new-note": newNote(undefined, "note"),
 	"new-session": newNote("session", "session"),
 	"new-creature": newNote("creature", "creature"),
@@ -832,14 +833,6 @@ export const actions: Record<ActionId, Action> = {
 const ids = Object.keys(actions) as ActionId[];
 const available = () => ids.filter((id) => actions[id].when?.() ?? true);
 
-/** Each Action's canonical bind ("" if unbound): the user config over the defaults. */
-export function binds(): Record<ActionId, string> {
-	const merged = { ...defaultKeys, ...getGame().config.keys };
-	return Object.fromEntries(
-		ids.map((id) => [id, normalizeKey(merged[id]) ?? ""]),
-	) as Record<ActionId, string>;
-}
-
 /** Runs bound Actions. While the user types, only binds with Ctrl, Alt, or Meta, and function keys, fire. */
 export function useKeybinds() {
 	useEffect(() => {
@@ -853,7 +846,7 @@ export function useKeybinds() {
 			);
 			if (typing && isTextField(e.target)) return;
 			const key = eventKey(e);
-			const keys = binds();
+			const keys = binds(getGame().config.keys);
 			const id = available().find((id) => bindHas(keys[id], key));
 			if (!id) return;
 			e.preventDefault();

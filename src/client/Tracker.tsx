@@ -23,7 +23,15 @@ import { useListNav } from "./list.ts";
 import { MarkdownBox } from "./MarkdownBox.tsx";
 import { fieldBox, StatBlock } from "./StatBlock.tsx";
 import { getGame, send, useGame } from "./sync.ts";
-import { ask, type Item, noteTab, openTab, toast, ui } from "./ui.ts";
+import {
+	ask,
+	clickOpens,
+	type Item,
+	noteTab,
+	openTab,
+	toast,
+	ui,
+} from "./ui.ts";
 import {
 	KindMark,
 	kindLabels,
@@ -209,10 +217,11 @@ export function CombatView({ arg: name }: { arg: string }) {
 	const running = useGame((game) => game.runtime.combat === name);
 	const selected = ui.use((s) => s.selected);
 	const labels = useMemo(() => order(combat, notes), [combat, notes]);
-	const nav = useListNav(labels.length, (i, newTab) => {
+	const openCreature = (i: number, newTab: boolean) => {
 		const c = combat.combatants?.[labels[i] as string];
 		if (c) openTab(noteTab(c.creature), newTab);
-	});
+	};
+	const nav = useListNav(labels.length, openCreature);
 	const cursor = labels[nav.index];
 	tracker = { combat: name, labels, cursor };
 	const { ref, setIndex } = nav;
@@ -253,7 +262,9 @@ export function CombatView({ arg: name }: { arg: string }) {
 						<Button
 							variant="link"
 							className="h-auto p-0 font-normal text-muted-foreground hover:text-foreground"
-							onClick={() => openTab(noteTab(combat.session as string))}
+							{...clickOpens((newTab) =>
+								openTab(noteTab(combat.session as string), newTab),
+							)}
 						>
 							{combat.session}
 						</Button>
@@ -285,7 +296,6 @@ export function CombatView({ arg: name }: { arg: string }) {
 				{labels.map((label, i) => {
 					const active = running && label === turn;
 					return (
-						// biome-ignore lint/a11y/useKeyWithClickEvents: the list handles keys.
 						<div
 							key={label}
 							role="option"
@@ -293,7 +303,11 @@ export function CombatView({ arg: name }: { arg: string }) {
 							aria-selected={i === nav.index}
 							data-turn={active || undefined}
 							data-picked={selected.includes(label) || undefined}
-							onClick={() => nav.setIndex(i)}
+							// A plain click moves the cursor; a new-tab click opens the Creature.
+							{...clickOpens((newTab) => {
+								nav.setIndex(i);
+								if (newTab) openCreature(i, true);
+							})}
 							// Cursor: an outline, brighter while the tracker has focus. Selection: blue. Active turn: amber. They combine.
 							className={cn(
 								columns,

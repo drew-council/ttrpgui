@@ -33,7 +33,7 @@ import type { MarkdownConfig } from "@lezer/markdown";
 import { type RefObject, useEffect, useRef } from "react";
 import { parseLinks } from "../shared/notes.ts";
 import { getGame, send, useGame } from "./sync.ts";
-import { noteTab, openTab } from "./ui.ts";
+import { noteTab, openTab, wantsNewTab } from "./ui.ts";
 
 type Props = {
 	/** The saved text. A change that is not an echo of our own save replaces the text, keeping the cursor. */
@@ -63,6 +63,7 @@ export function MarkdownBox(props: Props) {
 		// Texts we saved whose echo may still arrive as `value`.
 		const sent: string[] = [];
 		let timer: ReturnType<typeof setTimeout> | undefined;
+		let followedByMiddle = false;
 		const flush = () => {
 			if (timer === undefined) return;
 			clearTimeout(timer);
@@ -103,14 +104,27 @@ export function MarkdownBox(props: Props) {
 					placeholder ? placeholderText(placeholder) : [],
 					EditorView.domEventHandlers({
 						blur: flush,
+						// A click follows a shown link. A new-tab click follows any link, even one being edited.
 						mousedown: (e) => {
-							const link = (e.target as HTMLElement).closest("[data-link]");
-							if (!link) return false;
+							if (e.button > 1) return false;
+							const newTab = wantsNewTab(e);
+							const pos = view.posAtCoords({ x: e.clientX, y: e.clientY });
+							const title =
+								(e.target as HTMLElement)
+									.closest("[data-link]")
+									?.getAttribute("data-link") ??
+								(newTab && pos !== null ? linkAt(view.state, pos) : undefined);
+							if (title === undefined) return false;
 							e.preventDefault();
-							void followLink(
-								link.getAttribute("data-link") as string,
-								e.ctrlKey || e.metaKey,
-							);
+							followedByMiddle = e.button === 1;
+							void followLink(title, newTab);
+							return true;
+						},
+						// Linux pastes the primary selection on a middle release, which must not follow a link.
+						mouseup: (e) => {
+							if (e.button !== 1 || !followedByMiddle) return false;
+							followedByMiddle = false;
+							e.preventDefault();
 							return true;
 						},
 						paste: (e) => insertImages(e.clipboardData?.files),
@@ -229,11 +243,13 @@ export function linkUnderCursor() {
 		focused?.closest(".cm-editor") ??
 		focused?.querySelector(":scope > .cm-editor");
 	const view = dom instanceof HTMLElement && EditorView.findFromDOM(dom);
-	if (!view) return;
-	const { state } = view;
-	const head = state.selection.main.head;
-	const line = state.doc.lineAt(head);
-	const at = head - line.from;
+	if (view) return linkAt(view.state, view.state.selection.main.head);
+}
+
+/** The title of the wiki link at `pos`, including its edges. */
+function linkAt(state: EditorState, pos: number) {
+	const line = state.doc.lineAt(pos);
+	const at = pos - line.from;
 	return parseLinks(line.text).find((l) => l.from <= at && at <= l.to)?.title;
 }
 

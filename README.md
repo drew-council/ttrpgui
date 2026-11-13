@@ -17,7 +17,7 @@ Table state lives in the Game (`runtime.toml`), so a restart picks up the runnin
 
 `bun run cli serve --game DIR` serves `/control` and `/display` on `localhost:7373` for any browser. `--lan` listens on every interface and prints the display URL for each LAN address; there is no auth. `--port N` picks another port. Starting a second copy on a port in use fails with an error.
 
-In a browser tab, the browser keeps Ctrl+W, Ctrl+N, Ctrl+Tab, and Ctrl+Shift+Tab for itself; rebind those Actions (see Keys) or use the desktop app. Opening and closing the display window are desktop-app Actions; in a browser, open `/display` yourself.
+In a browser tab, the browser keeps Ctrl+W, Ctrl+N, Ctrl+T, Ctrl+Tab, and Ctrl+Shift+Tab for itself; rebind those Actions (see Keys), use the tab bar's + button, or use the desktop app. Opening and closing the display window are desktop-app Actions; in a browser, open `/display` yourself.
 
 ## Development
 
@@ -251,6 +251,10 @@ Operations apply to the selection, or to the cursor row when nothing is selected
 
 "New atmosphere", "Set the default atmosphere", "Sync atmosphere media", and "Set the combat's atmosphere" are in the palette. The sidebar lists atmospheres; each opens a view of its links and media.
 
+## Tabs
+
+Tabs work as in a browser or Obsidian. A click or Enter on a note, combat, or atmosphere shows it in the current tab, or switches to its tab if it is already open. Ctrl+click, middle-click, or Ctrl+Enter opens it in a new tab next to the current one. That works in the sidebar, the pickers (Ctrl+K, search, and the rest), wiki links in note text, the lists in a note, the problems list, the status line, and the combat tracker, where a plain click only moves the cursor and Ctrl+click or middle-click opens the creature. The + at the end of the tab bar, or Ctrl+T, opens an empty tab; the next thing you open fills it. Close a tab with its ×, a middle-click, or Ctrl+W. Tabs survive a restart.
+
 ## Keys
 
 Ctrl+P lists every command with its key; the palette shows only the commands that apply where focus is. Ctrl+K opens a note, combat, or atmosphere by title (it matches word starts and initials, like `cdra` or `cd` for Cinder Drake) or creates a note. Plain-letter keys never fire while typing; Escape leaves a text box so they work again.
@@ -261,12 +265,13 @@ Ctrl+P lists every command with its key; the palette shows only the commands tha
 |                     | `Ctrl+N`                  | new note                                         |
 |                     | `Ctrl+Shift+F`            | search note text                                 |
 |                     | `Ctrl+B` / `Ctrl+E`       | toggle / focus the sidebar (`/` filters it)      |
-|                     | `Ctrl+W`                  | close tab                                        |
+|                     | `Ctrl+T` / `Ctrl+W`       | new tab / close tab                              |
 |                     | `Ctrl+Tab` / `Ctrl+Shift+Tab` | next / previous tab                          |
 |                     | `Ctrl+L`                  | open the live session                            |
 |                     | `F2`                      | rename the note, combat, or atmosphere in the tab |
 | Lists               | `j` `k` `g` `G`, arrows   | move                                             |
 |                     | `Enter` / `Ctrl+Enter`    | open / open in a new tab                         |
+| Anything you open   | click / `Ctrl+click`, middle-click | open / open in a new tab                 |
 | Note text           | `Alt+Enter` / `Ctrl+Alt+Enter` | follow the link under the cursor / in a new tab |
 |                     | `Escape` / `Enter`        | leave the text box / go back in                  |
 | Creature note       | `Ctrl+Shift+E`            | edit the stat block (Escape leaves the form)     |
