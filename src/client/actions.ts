@@ -378,6 +378,9 @@ function atmosphereItems(run: (name: string) => void) {
 		}));
 }
 
+export const switchAtmosphere = (name: string) =>
+	send({ type: "switchAtmosphere", name });
+
 /** An Action on the Atmosphere in the active tab, else on one picked. */
 const onAtmosphere = (title: string, run: (name: string) => void): Action => ({
 	title,
@@ -970,9 +973,11 @@ export const actions: Record<ActionId, Action> = {
 		),
 		icon: PlusIcon,
 	},
-	"switch-atmosphere": onAtmosphere("Switch atmosphere", (name) =>
-		send({ type: "switchAtmosphere", name }),
-	),
+	"switch-atmosphere": {
+		...onAtmosphere("Switch atmosphere", switchAtmosphere),
+		icon: CloudFogIcon,
+		label: "Make active",
+	},
 	"set-default-atmosphere": {
 		...onAtmosphere("Set the default atmosphere", (name) =>
 			send({ type: "setDefaultAtmosphere", name }),

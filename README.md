@@ -7,8 +7,8 @@ It is a headless server that owns a Game directory, with web clients for the con
 ## Game night
 
 1. `bun start` (inside the dev shell). It reopens the last Game; `bun start -- --game DIR` opens another, and an empty directory becomes a new Game.
-2. "Go live with a session" (Ctrl+P) picks or creates the Session. Ctrl+L opens it.
-3. "Open the player display" opens the second window. Drag it to the TV and press F for fullscreen. Music and wallpaper start there.
+2. "Go live" in the table bar (or "Go live with a session" in Ctrl+P) picks or creates the Session. Its name in the bar, or Ctrl+L, opens it.
+3. The monitor button in the bar ("Open the player display") opens the second window. Drag it to the TV and press F for fullscreen. Music and wallpaper start there.
 4. Open a prepared combat with Ctrl+K and press Shift+S to start it. Closing the control window quits everything.
 
 Table state lives in the Game (`runtime.toml`), so a restart picks up the running combat, the shown image, and the music. Undo history does not survive a restart.
@@ -17,6 +17,7 @@ Table state lives in the Game (`runtime.toml`), so a restart picks up the runnin
 
 Every command is in the palette (Ctrl+P) with its key. The ones you would look for on screen also have a control, with the command and its key in a tooltip:
 
+- **Table bar**, along the bottom: connection, the live session (Go live, its name, End session), the running combat and round, the player display (open, close; Electron only), the active atmosphere as a switcher, music (play or pause, skip, the track, a volume slider), the shown image (show, its name, hide), problems, and Commands.
 - **Tab bar**: the sidebar toggle, back, forward, and new tab.
 
 ## Server alone
@@ -252,7 +253,7 @@ volume = 80                                # percent; absent means 100
 
 Operations apply to the selection, or to the cursor row when nothing is selected. Undo history is per combat and shared by every control window. It is lost on restart and when the combat is renamed. Restarting an ended combat keeps NPC damage; NPCs added later start at full.
 
-"Go live with a session" marks the Session being run; Ctrl+L opens its note, and a combat started while live joins it.
+"Go live" marks the Session being run; Ctrl+L opens its note, and a combat started while live joins it.
 
 ## Player display
 
@@ -270,7 +271,7 @@ On the display itself, F or a double-click toggles fullscreen, and `Ctrl+=` `Ctr
 
 ## Tabs
 
-Tabs work as in a browser or Obsidian. A click or Enter on a note, combat, or atmosphere shows it in the current tab, or switches to its tab if it is already open. Ctrl+click, middle-click, or Ctrl+Enter opens it in a new tab next to the current one. That works in the sidebar, the pickers (Ctrl+K, search, and the rest), wiki links in note text, the lists in a note, the problems list, the status line, and the combat tracker, where a plain click only moves the cursor and Ctrl+click or middle-click opens the creature. The + at the end of the tab bar, or Ctrl+T, opens an empty tab; the next thing you open fills it. Close a tab with its ×, a middle-click, or Ctrl+W.
+Tabs work as in a browser or Obsidian. A click or Enter on a note, combat, or atmosphere shows it in the current tab, or switches to its tab if it is already open. Ctrl+click, middle-click, or Ctrl+Enter opens it in a new tab next to the current one. That works in the sidebar, the pickers (Ctrl+K, search, and the rest), wiki links in note text, the lists in a note, the problems list, the table bar, and the combat tracker, where a plain click only moves the cursor and Ctrl+click or middle-click opens the creature. The + at the end of the tab bar, or Ctrl+T, opens an empty tab; the next thing you open fills it. Close a tab with its ×, a middle-click, or Ctrl+W.
 
 Each tab has its own history. The arrows at the left of the tab bar, Alt+Left and Alt+Right (also in note text), or the mouse's back and forward buttons go back and forward in the current tab. Back skips what was deleted or renamed outside the app, and what is open in another tab; close that tab to go back to it there. A new tab starts with no history. Tabs and their history survive a restart.
 

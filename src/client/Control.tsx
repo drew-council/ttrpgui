@@ -1,26 +1,17 @@
-// The control window: sidebar, tabs, status line, plus the picker and toasts on top.
+// The control window: sidebar, tabs, the table bar, plus the picker and toasts on top.
 import { cn } from "cn";
 import { XIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { Button } from "#components/ui/button.tsx";
-import { Kbd } from "#components/ui/kbd.tsx";
 import { Toaster } from "#components/ui/sonner.tsx";
-import {
-	Tooltip,
-	TooltipContent,
-	TooltipProvider,
-	TooltipTrigger,
-} from "#components/ui/tooltip.tsx";
-import { activeAtmosphere, nowPlaying } from "../shared/display.ts";
-import { binds, formatKey } from "../shared/keys.ts";
-import { atmosphereTab } from "./Atmospheres.tsx";
+import { TooltipProvider } from "#components/ui/tooltip.tsx";
 import { useKeybinds } from "./actions.ts";
+import { Bar } from "./Bar.tsx";
 import { ActionButton } from "./controls.tsx";
 import { Picker } from "./Picker.tsx";
 import { Sidebar } from "./Sidebar.tsx";
-import { getGame, send, useGame, useStatus } from "./sync.ts";
-import { combatTab } from "./Tracker.tsx";
-import { clickOpens, closeTab, noteTab, openTab, toast, ui } from "./ui.ts";
+import { getGame, useGame } from "./sync.ts";
+import { closeTab, toast, ui } from "./ui.ts";
 import { TabBody, TabLabel, tabExists, Welcome } from "./views.tsx";
 
 export function Control() {
@@ -45,12 +36,12 @@ export function Control() {
 						{active ? <TabBody key={active} tab={active} /> : <Welcome />}
 					</div>
 				</main>
-				<StatusLine />
+				<Bar />
 			</div>
 			{picker && <Picker key={picker.title} spec={picker} />}
 			<Toaster
 				position="bottom-right"
-				offset={{ right: "1rem", bottom: "2.625rem" }}
+				offset={{ right: "1rem", bottom: "2.75rem" }}
 				duration={6000}
 				expand
 				closeButton
@@ -105,102 +96,6 @@ function TabBar() {
 				</span>
 			</div>
 		</div>
-	);
-}
-
-/** A status line entry that opens or does something. */
-const statusButton = "-mx-2 font-normal text-muted-foreground";
-
-function StatusLine() {
-	const status = useStatus();
-	const problems = useGame((game) => game.problems.length);
-	const live = useGame((game) => game.runtime.session);
-	const combat = useGame((game) => game.runtime.combat);
-	const round = useGame((game) => game.combats[combat ?? ""]?.round);
-	const atmosphere = useGame((g) => activeAtmosphere(g.atmospheres, g.runtime));
-	const track = useGame((g) => nowPlaying(g.atmospheres, g.runtime));
-	const { paused, volume } = useGame((game) => game.runtime.music) ?? {};
-	const image = useGame((game) => game.runtime.image);
-	const palette = binds(getGame().config.keys)["command-palette"];
-	return (
-		<footer className="col-span-full flex h-6.5 items-center gap-4 border-t bg-card px-3 text-xs text-muted-foreground">
-			<span
-				className={cn(
-					"flex items-center gap-2 before:size-[0.45rem] before:rounded-full before:bg-kind-pc",
-					status !== "connected" && "text-destructive before:bg-destructive",
-				)}
-			>
-				{status === "connected" ? "Connected" : "Reconnecting…"}
-			</span>
-			{live && (
-				<Button
-					variant="ghost"
-					size="xs"
-					className={cn(statusButton, "font-bold text-primary")}
-					{...clickOpens((n) => openTab(noteTab(live), n))}
-				>
-					Live: {live}
-				</Button>
-			)}
-			{combat && (
-				<Button
-					variant="ghost"
-					size="xs"
-					className={statusButton}
-					{...clickOpens((n) => openTab(combatTab(combat), n))}
-				>
-					{combat}, round {round}
-				</Button>
-			)}
-			{atmosphere && (
-				<Button
-					variant="ghost"
-					size="xs"
-					className={statusButton}
-					{...clickOpens((n) => openTab(atmosphereTab(atmosphere), n))}
-				>
-					{atmosphere}
-				</Button>
-			)}
-			{track && (
-				<span className="min-w-0 truncate">
-					♪ {track.title}
-					{track.artist && `, ${track.artist}`}
-					{paused && " (paused)"}
-					{volume !== undefined && ` at ${volume}%`}
-				</span>
-			)}
-			{image && (
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<Button
-							variant="ghost"
-							size="xs"
-							className={statusButton}
-							onClick={() => send({ type: "showImage" })}
-						>
-							Showing {image}
-						</Button>
-					</TooltipTrigger>
-					<TooltipContent>Hide it</TooltipContent>
-				</Tooltip>
-			)}
-			{problems > 0 && (
-				<Button
-					variant="ghost"
-					size="xs"
-					className={cn(statusButton, "font-bold text-destructive")}
-					{...clickOpens((n) => openTab("problems", n))}
-				>
-					{problems === 1 ? "1 problem" : `${problems} problems`}
-				</Button>
-			)}
-			{palette && (
-				<span className="ml-auto flex items-center gap-1">
-					<Kbd>{formatKey(palette)}</Kbd> Commands
-				</span>
-			)}
-		</footer>
 	);
 }
 
