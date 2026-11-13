@@ -1,7 +1,7 @@
 // The control window: sidebar, tabs, status line, plus the picker and toasts on top.
 import { cn } from "cn";
-import { PlusIcon, XIcon } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { ArrowLeftIcon, ArrowRightIcon, PlusIcon, XIcon } from "lucide-react";
+import { type ReactNode, useEffect, useRef } from "react";
 import { Button } from "#components/ui/button.tsx";
 import { Kbd } from "#components/ui/kbd.tsx";
 import { Toaster } from "#components/ui/sonner.tsx";
@@ -12,23 +12,15 @@ import {
 	TooltipTrigger,
 } from "#components/ui/tooltip.tsx";
 import { activeAtmosphere, nowPlaying } from "../shared/display.ts";
-import { binds, formatKey } from "../shared/keys.ts";
+import { type ActionId, binds, formatKey } from "../shared/keys.ts";
 import { atmosphereTab } from "./Atmospheres.tsx";
-import { useKeybinds } from "./actions.ts";
+import { actions, useKeybinds } from "./actions.ts";
 import { Picker } from "./Picker.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 import { getGame, send, useGame, useStatus } from "./sync.ts";
 import { combatTab } from "./Tracker.tsx";
-import {
-	clickOpens,
-	closeTab,
-	newTab,
-	noteTab,
-	openTab,
-	toast,
-	ui,
-} from "./ui.ts";
-import { parseTab, TabBody, TabLabel, views, Welcome } from "./views.tsx";
+import { clickOpens, closeTab, noteTab, openTab, toast, ui } from "./ui.ts";
+import { TabBody, TabLabel, tabExists, Welcome } from "./views.tsx";
 
 export function Control() {
 	useKeybinds();
@@ -66,58 +58,80 @@ export function Control() {
 	);
 }
 
+/** A tab bar button that runs an Action, with its bind in a tooltip. Disabled while the Action is unavailable. */
+function ActionButton({ id, children }: { id: ActionId; children: ReactNode }) {
+	const action = actions[id];
+	const key = binds(getGame().config.keys)[id];
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<Button
+					variant="ghost"
+					size="icon-sm"
+					aria-label={action.title}
+					className="mx-1 flex-none self-center text-muted-foreground"
+					disabled={!(action.when?.() ?? true)}
+					onClick={action.run}
+				>
+					{children}
+				</Button>
+			</TooltipTrigger>
+			<TooltipContent>
+				{action.title} {key && <Kbd>{formatKey(key)}</Kbd>}
+			</TooltipContent>
+		</Tooltip>
+	);
+}
+
 function TabBar() {
 	const tabs = ui.use((s) => s.tabs);
 	const active = ui.use((s) => s.active);
-	const newTabKey = binds(getGame().config.keys)["new-tab"];
+	// Back and forward depend on the history and on what exists.
+	ui.use((s) => s.history);
+	useGame((game) => game);
 	return (
-		<div
-			role="tablist"
-			className="flex h-9 flex-none overflow-x-auto border-b bg-card [scrollbar-width:none]"
-		>
-			{tabs.map((tab) => (
-				// biome-ignore lint/a11y/useKeyWithClickEvents: keyboard users switch tabs with Actions.
-				<div
-					key={tab}
-					role="tab"
-					tabIndex={-1}
-					aria-selected={tab === active}
-					onClick={() => ui.set({ active: tab })}
-					onAuxClick={(e) => e.button === 1 && closeTab(tab)}
-					onMouseDown={(e) => e.button === 1 && e.preventDefault()}
-					className="group flex max-w-60 min-w-0 flex-none cursor-pointer items-center gap-2 border-r pr-1 pl-3 text-muted-foreground aria-selected:-mb-px aria-selected:bg-background aria-selected:text-foreground aria-selected:shadow-[inset_0_2px_var(--primary)]"
-				>
-					<TabLabel tab={tab} />
-					<Button
-						variant="ghost"
-						size="icon-xs"
-						aria-label="Close tab"
-						className="invisible text-faint group-hover:visible group-aria-selected:visible"
-						onClick={(e) => {
-							e.stopPropagation();
-							closeTab(tab);
-						}}
+		<div className="flex h-9 flex-none border-b bg-card">
+			<ActionButton id="go-back">
+				<ArrowLeftIcon />
+			</ActionButton>
+			<ActionButton id="go-forward">
+				<ArrowRightIcon />
+			</ActionButton>
+			<div
+				role="tablist"
+				className="flex min-w-0 flex-1 overflow-x-auto border-l [scrollbar-width:none]"
+			>
+				{tabs.map((tab) => (
+					// biome-ignore lint/a11y/useKeyWithClickEvents: keyboard users switch tabs with Actions.
+					<div
+						key={tab}
+						role="tab"
+						tabIndex={-1}
+						aria-selected={tab === active}
+						onClick={() => ui.set({ active: tab })}
+						onAuxClick={(e) => e.button === 1 && closeTab(tab)}
+						onMouseDown={(e) => e.button === 1 && e.preventDefault()}
+						className="group flex max-w-60 min-w-0 flex-none cursor-pointer items-center gap-2 border-r pr-1 pl-3 text-muted-foreground aria-selected:-mb-px aria-selected:bg-background aria-selected:text-foreground aria-selected:shadow-[inset_0_2px_var(--primary)]"
 					>
-						<XIcon />
-					</Button>
-				</div>
-			))}
-			<Tooltip>
-				<TooltipTrigger asChild>
-					<Button
-						variant="ghost"
-						size="icon-sm"
-						aria-label="New tab"
-						className="mx-1 flex-none self-center text-muted-foreground"
-						onClick={newTab}
-					>
-						<PlusIcon />
-					</Button>
-				</TooltipTrigger>
-				<TooltipContent>
-					New tab {newTabKey && <Kbd>{formatKey(newTabKey)}</Kbd>}
-				</TooltipContent>
-			</Tooltip>
+						<TabLabel tab={tab} />
+						<Button
+							variant="ghost"
+							size="icon-xs"
+							aria-label="Close tab"
+							className="invisible text-faint group-hover:visible group-aria-selected:visible"
+							onClick={(e) => {
+								e.stopPropagation();
+								closeTab(tab);
+							}}
+						>
+							<XIcon />
+						</Button>
+					</div>
+				))}
+				<ActionButton id="new-tab">
+					<PlusIcon />
+				</ActionButton>
+			</div>
 		</div>
 	);
 }
@@ -236,16 +250,16 @@ function useProblemToasts() {
 	}, [problems]);
 }
 
-/** Drops saved tabs whose target is gone, such as notes deleted while the app was closed. */
+/** Drops saved tabs whose target is gone, such as notes deleted while the app was closed, and their history. */
 function forgetMissingTabs() {
 	const game = getGame();
-	const { tabs, active } = ui.get();
-	const kept = tabs.filter((tab) => {
-		const [view, arg] = parseTab(tab);
-		return views[view]?.exists?.(arg, game) ?? view in views;
-	});
+	const { tabs, active, history } = ui.get();
+	const kept = tabs.filter((tab) => tabExists(tab, game));
 	ui.set({
 		tabs: kept,
 		active: active && kept.includes(active) ? active : kept[0],
+		history: Object.fromEntries(
+			Object.entries(history).filter(([tab]) => kept.includes(tab)),
+		),
 	});
 }

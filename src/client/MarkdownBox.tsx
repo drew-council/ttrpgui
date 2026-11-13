@@ -89,7 +89,14 @@ export function MarkdownBox(props: Props) {
 							},
 						]),
 					),
-					keymap.of([indentWithTab, ...defaultKeymap, ...historyKeymap]),
+					keymap.of([
+						indentWithTab,
+						// Alt+Left and Alt+Right go back and forward in the tab.
+						...defaultKeymap.filter(
+							(b) => !/^Alt-Arrow(Left|Right)$/.test(b.key ?? ""),
+						),
+						...historyKeymap,
+					]),
 					onSave
 						? []
 						: [EditorState.readOnly.of(true), EditorView.editable.of(false)],

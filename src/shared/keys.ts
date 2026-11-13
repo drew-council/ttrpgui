@@ -11,6 +11,8 @@ export const defaultKeys = {
 	"next-tab": "ctrl+tab",
 	"previous-tab": "ctrl+shift+tab",
 	"new-tab": "ctrl+t",
+	"go-back": "alt+arrowleft",
+	"go-forward": "alt+arrowright",
 	"zoom-in": "ctrl+= ctrl++",
 	"zoom-out": "ctrl+-",
 	"reset-zoom": "ctrl+0",
@@ -134,13 +136,14 @@ export function eventKey(e: KeyEventLike): string {
 	return combine(mods, key);
 }
 
-/** `ctrl+shift+p` → `Ctrl+Shift+P`; `= +` → `= / +`. */
+/** `ctrl+shift+p` → `Ctrl+Shift+P`; `alt+arrowleft` → `Alt+Left`; `= +` → `= / +`. */
 export const formatKey = (bind: string) =>
 	bind
 		.split(" ")
 		.map((key) =>
 			key
 				.split(/\+(?!$)/)
+				.map((part) => part.replace(/^arrow(?=.)/, ""))
 				.map((part) => part.charAt(0).toUpperCase() + part.slice(1))
 				.join("+"),
 		)

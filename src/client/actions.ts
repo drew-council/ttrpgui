@@ -53,6 +53,8 @@ import {
 	pick,
 	replaceTab,
 	toast,
+	travel,
+	travelTarget,
 	ui,
 	zoom,
 } from "./ui.ts";
@@ -62,6 +64,7 @@ import {
 	kindOf,
 	parseTab,
 	roleLabel,
+	tabExists,
 } from "./views.tsx";
 
 declare global {
@@ -352,6 +355,15 @@ const volume = (step: number) => () =>
 
 const electron = () => window.ttrpgui !== undefined;
 
+/** Goes back (-1) or forward (1) in the active tab, past what no longer exists or is open in another tab. */
+const go = (direction: -1 | 1) => {
+	const exists = (tab: string) => tabExists(tab, getGame());
+	return {
+		when: () => travelTarget(direction, exists) !== undefined,
+		run: () => travel(direction, exists),
+	};
+};
+
 const zoomBy = (step: -1 | 0 | 1) => () =>
 	toast(`Zoom ${Math.round(zoom(step) * 100)}%`, "zoom");
 
@@ -424,6 +436,8 @@ export const actions: Record<ActionId, Action> = {
 		run: () => cycleTab(-1),
 	},
 	"new-tab": { title: "New tab", run: newTab },
+	"go-back": { title: "Go back", ...go(-1) },
+	"go-forward": { title: "Go forward", ...go(1) },
 	"zoom-in": { title: "Zoom in", run: zoomBy(1) },
 	"zoom-out": { title: "Zoom out", run: zoomBy(-1) },
 	"reset-zoom": { title: "Reset zoom", run: zoomBy(0) },
@@ -841,7 +855,14 @@ export const actions: Record<ActionId, Action> = {
 const ids = Object.keys(actions) as ActionId[];
 const available = () => ids.filter((id) => actions[id].when?.() ?? true);
 
-/** Runs bound Actions. While the user types, only binds with Ctrl, Alt, or Meta, and function keys, fire. */
+/** The mouse's back and forward buttons. */
+const mouseActions: Record<number, ActionId> = {
+	3: "go-back",
+	4: "go-forward",
+};
+
+/** Runs bound Actions, and back and forward for the mouse's buttons. While the user types, only binds with Ctrl, Alt, or
+ * Meta, and function keys, fire. */
 export function useKeybinds() {
 	useEffect(() => {
 		function onKeyDown(e: KeyboardEvent) {
@@ -860,7 +881,18 @@ export function useKeybinds() {
 			e.preventDefault();
 			actions[id].run();
 		}
+		// The page itself MUST NOT navigate, which a browser does on the release unless prevented.
+		function onMouseUp(e: MouseEvent) {
+			const id = mouseActions[e.button];
+			if (!id) return;
+			e.preventDefault();
+			if (actions[id].when?.() ?? true) actions[id].run();
+		}
 		window.addEventListener("keydown", onKeyDown);
-		return () => window.removeEventListener("keydown", onKeyDown);
+		window.addEventListener("mouseup", onMouseUp);
+		return () => {
+			window.removeEventListener("keydown", onKeyDown);
+			window.removeEventListener("mouseup", onMouseUp);
+		};
 	}, []);
 }

@@ -60,6 +60,12 @@ export function parseTab(tab: string): [view: string, arg: string] {
 	return at < 0 ? [tab, ""] : [tab.slice(0, at), tab.slice(at + 1)];
 }
 
+/** Whether a tab id still points at something, such as a note that was not deleted or renamed. */
+export function tabExists(tab: string, game: GameState) {
+	const [view, arg] = parseTab(tab);
+	return views[view]?.exists?.(arg, game) ?? view in views;
+}
+
 export function TabLabel({ tab }: { tab: string }) {
 	const [view, arg] = parseTab(tab);
 	const Label = views[view]?.Label;

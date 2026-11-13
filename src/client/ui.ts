@@ -1,8 +1,15 @@
-// Per-client UI state: tabs, sidebar, the open picker, stat block editing, the tracker selection, and zoom.
-// Tabs, the sidebar, and each page's zoom survive a reload.
+// Per-client UI state: tabs and their history, sidebar, the open picker, stat block editing, the tracker selection, and
+// zoom. Tabs, their history, the sidebar, and each page's zoom survive a reload.
 import type { MouseEvent } from "react";
 import { flushSync } from "react-dom";
 import { toast as sonner } from "sonner";
+import {
+	emptyHistory,
+	type History,
+	pushed,
+	renamed,
+	step,
+} from "./history.ts";
 import { createStore } from "./store.ts";
 
 /** A picker row. `run` gets whether the user asked for a new tab. */
@@ -29,6 +36,8 @@ type Ui = {
 	/** Tab ids like `note:Cinder Drake`, `problems`, or `new:k3j9x` for an empty tab. See `views.tsx`. */
 	tabs: string[];
 	active?: string;
+	/** Each tab's back and forward history, by tab id. A tab without one has none. */
+	history: Record<string, History>;
 	sidebar: boolean;
 	picker?: PickerSpec;
 	/** The creature whose stat block is open as a form. */
@@ -52,32 +61,81 @@ function restore(): Partial<Ui> {
 
 export const ui = createStore<Ui>({
 	tabs: [],
+	history: {},
 	sidebar: true,
 	selected: [],
 	refocus: 0,
 	...restore(),
 });
 ui.subscribe(() => {
-	const { tabs, active, sidebar } = ui.get();
-	localStorage.setItem(storageKey, JSON.stringify({ tabs, active, sidebar }));
+	const { tabs, active, history, sidebar } = ui.get();
+	localStorage.setItem(
+		storageKey,
+		JSON.stringify({ tabs, active, history, sidebar }),
+	);
 });
 
 export const noteTab = (title: string) => `note:${title}`;
 
-/** Shows `tab` and focuses its main element. A tab not yet open replaces the active one, or opens beside it when `newTab`.
- * Every way of opening something ends here. */
+/** Shows `tab` and focuses its main element. A tab not yet open replaces the active one, which goes on that tab's back
+ * history, or opens beside it with no history when `newTab`. Every way of opening something ends here. */
 export function openTab(tab: string, newTab = false) {
 	const { active, refocus } = ui.get();
 	const tabs = [...ui.get().tabs];
+	let { history } = ui.get();
 	if (!tabs.includes(tab)) {
 		const at = active ? tabs.indexOf(active) : -1;
+		const replaced = newTab || at < 0 ? undefined : active;
 		tabs.splice(
 			at < 0 ? tabs.length : at + Number(newTab),
-			newTab ? 0 : 1,
+			replaced ? 1 : 0,
 			tab,
 		);
+		// An empty tab is nothing to go back to.
+		if (replaced && !replaced.startsWith("new:"))
+			history = {
+				...withoutHistory(history, replaced),
+				[tab]: pushed(history[replaced] ?? emptyHistory, replaced),
+			};
 	}
-	ui.set({ tabs, active: tab, refocus: refocus + 1 });
+	ui.set({ tabs, active: tab, history, refocus: refocus + 1 });
+}
+
+const withoutHistory = (history: Ui["history"], tab: string) => {
+	const { [tab]: _, ...rest } = history;
+	return rest;
+};
+
+/** Where the active tab's history leads back (-1) or forward (1): the nearest entry that `exists` and is not open in a
+ * tab, since tab ids are unique. Undefined when there is none. */
+export function travelTarget(
+	direction: -1 | 1,
+	exists: (tab: string) => boolean,
+) {
+	const { tabs, active, history } = ui.get();
+	if (!active) return;
+	return step(
+		history[active] ?? emptyHistory,
+		active,
+		direction,
+		(tab) => exists(tab) && !tabs.includes(tab),
+	);
+}
+
+/** Goes back (-1) or forward (1) in the active tab and focuses what it shows. */
+export function travel(direction: -1 | 1, exists: (tab: string) => boolean) {
+	const target = travelTarget(direction, exists);
+	const { tabs, active, history, refocus } = ui.get();
+	if (!target || !active) return;
+	ui.set({
+		tabs: tabs.map((t) => (t === active ? target.tab : t)),
+		active: target.tab,
+		history: {
+			...withoutHistory(history, active),
+			[target.tab]: target.history,
+		},
+		refocus: refocus + 1,
+	});
 }
 
 /** Opens an empty tab beside the active one. The next plain open fills it. */
@@ -100,17 +158,29 @@ export const clickOpens = (open: (newTab: boolean) => void) => ({
 });
 
 export function closeTab(tab: string) {
-	const { tabs, active } = ui.get();
+	const { tabs, active, history } = ui.get();
 	const rest = tabs.filter((t) => t !== tab);
 	const next = rest[Math.min(tabs.indexOf(tab), rest.length - 1)];
-	ui.set({ tabs: rest, active: active === tab ? next : active });
+	ui.set({
+		tabs: rest,
+		active: active === tab ? next : active,
+		history: withoutHistory(history, tab),
+	});
 }
 
+/** Renames `from` to `to` in the tabs and every tab's history, as after renaming what they show. */
 export function replaceTab(from: string, to: string) {
-	const { tabs, active } = ui.get();
+	const { tabs, active, history } = ui.get();
+	const rename = (t: string) => (t === from ? to : t);
 	ui.set({
-		tabs: tabs.map((t) => (t === from ? to : t)),
-		active: active === from ? to : active,
+		tabs: tabs.map(rename),
+		active: active && rename(active),
+		history: Object.fromEntries(
+			Object.entries(history).map(([t, h]) => [
+				rename(t),
+				renamed(h, from, to),
+			]),
+		),
 	});
 }
 

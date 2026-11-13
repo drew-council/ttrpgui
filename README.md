@@ -264,7 +264,9 @@ On the display itself, F or a double-click toggles fullscreen, and `Ctrl+=` `Ctr
 
 ## Tabs
 
-Tabs work as in a browser or Obsidian. A click or Enter on a note, combat, or atmosphere shows it in the current tab, or switches to its tab if it is already open. Ctrl+click, middle-click, or Ctrl+Enter opens it in a new tab next to the current one. That works in the sidebar, the pickers (Ctrl+K, search, and the rest), wiki links in note text, the lists in a note, the problems list, the status line, and the combat tracker, where a plain click only moves the cursor and Ctrl+click or middle-click opens the creature. The + at the end of the tab bar, or Ctrl+T, opens an empty tab; the next thing you open fills it. Close a tab with its ×, a middle-click, or Ctrl+W. Tabs survive a restart.
+Tabs work as in a browser or Obsidian. A click or Enter on a note, combat, or atmosphere shows it in the current tab, or switches to its tab if it is already open. Ctrl+click, middle-click, or Ctrl+Enter opens it in a new tab next to the current one. That works in the sidebar, the pickers (Ctrl+K, search, and the rest), wiki links in note text, the lists in a note, the problems list, the status line, and the combat tracker, where a plain click only moves the cursor and Ctrl+click or middle-click opens the creature. The + at the end of the tab bar, or Ctrl+T, opens an empty tab; the next thing you open fills it. Close a tab with its ×, a middle-click, or Ctrl+W.
+
+Each tab has its own history. The arrows at the left of the tab bar, Alt+Left and Alt+Right (also in note text), or the mouse's back and forward buttons go back and forward in the current tab. Back skips what was deleted or renamed outside the app, and what is open in another tab; close that tab to go back to it there. A new tab starts with no history. Tabs and their history survive a restart.
 
 ## Zoom
 
@@ -281,6 +283,7 @@ Ctrl+P lists every command with its key; the palette shows only the commands tha
 |                     | `Ctrl+Shift+F`            | search note text                                 |
 |                     | `Ctrl+B` / `Ctrl+E`       | toggle / focus the sidebar (`/` filters it)      |
 |                     | `Ctrl+T` / `Ctrl+W`       | new tab / close tab                              |
+|                     | `Alt+Left` / `Alt+Right`, mouse back / forward | back / forward in the tab   |
 |                     | `Ctrl+Tab` / `Ctrl+Shift+Tab` | next / previous tab                          |
 |                     | `Ctrl+=` `Ctrl+-` / `Ctrl+0` | zoom in, out / reset                          |
 |                     | `Ctrl+L`                  | open the live session                            |

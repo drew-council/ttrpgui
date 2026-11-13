@@ -34,6 +34,7 @@ test("eventKey matches the canonical bind", () => {
 	expect(formatKey("ctrl+shift+p")).toBe("Ctrl+Shift+P");
 	expect(formatKey("ctrl++")).toBe("Ctrl++");
 	expect(formatKey("= +")).toBe("= / +");
+	expect(formatKey("alt+arrowleft")).toBe("Alt+Left");
 });
 
 test("binds puts the user config over the defaults", () => {
