@@ -70,8 +70,26 @@ async function ytDlp(dir: string, args: string[]) {
 	if (code !== 0) {
 		const lines = errors.trim().split("\n");
 		const last = lines.findLast((l) => l.startsWith("ERROR:")) ?? lines.at(-1);
-		throw new Error(
-			last?.replace(/^ERROR: /, "") || `yt-dlp exited with ${code}`,
-		);
+		const message =
+			last?.replace(/^ERROR: /, "") || `yt-dlp exited with ${code}`;
+		throw new Error(message + help(message));
 	}
 }
+
+/** Advice for a failure we recognize, else "". */
+const help = (message: string) =>
+	needsSignIn.test(message)
+		? signInHelp
+		: refused.test(message)
+			? refusedHelp
+			: "";
+
+/** What YouTube says when it wants a signed-in user, such as for a private playlist or Liked Music. */
+const needsSignIn = /does not exist|private|sign in|members/i;
+const signInHelp =
+	' A private playlist works once it is Unlisted. Otherwise, and for Liked Music, let yt-dlp sign in with your browser\'s cookies: ytdlp_args = ["--cookies-from-browser", "firefox"] in the user config. See the README.';
+
+/** YouTube sometimes refuses media for a while, then serves it again minutes later. */
+const refused = /HTTP Error 403/;
+const refusedHelp =
+	'. This is usually temporary: YouTube refuses downloads now and then, for a few minutes. Run "Sync media" again later; it only fetches what is missing.';

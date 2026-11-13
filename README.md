@@ -21,7 +21,7 @@ In a browser tab, the browser keeps Ctrl+W, Ctrl+N, Ctrl+T, Ctrl+Tab, and Ctrl+S
 
 ## Development
 
-This project uses Nix and direnv. Run `direnv allow`, or prefix commands with `nix develop -c`. The shell provides Bun, Node.js, Biome, Electron, Xvfb, Playwright's browsers, and `yt-dlp` and `ffmpeg` for syncing atmospheres.
+This project uses Nix and direnv. Run `direnv allow`, or prefix commands with `nix develop -c`. The shell provides Bun, Node.js, Biome, Electron, Xvfb, Playwright's browsers, and `yt-dlp` and `ffmpeg` for syncing atmospheres. Nixpkgs builds `yt-dlp` with Deno, which it needs to solve YouTube's JavaScript challenges.
 
 ```sh
 bun install
@@ -198,7 +198,16 @@ music = "https://music.youtube.com/playlist?list=..."
 
 A track's file name gives its artist and title: `Artist - Title.opus`, optionally with an id, `Artist - Title [id].opus`. Without ` - `, the whole name is the title. Cover art is an image beside it with the same name, such as `Artist - Title.jpg`. Audio may be opus, ogg, oga, mp3, m4a, aac, flac, or wav; opus, ogg, mp3, and flac play everywhere.
 
-Sync runs `yt-dlp` in the background and fetches only what is missing: the wallpaper if there is no `wallpaper.*` (delete it to fetch a new one), and tracks not yet in `music/`. The wallpaper is video only, SDR, at most 1080p, preferring VP9 WebM. Tracks are Opus audio with their thumbnail as cover art. A notice reports when it ends or why it failed; files appear as they finish. Private playlists need cookies: add `ytdlp_args = ["--cookies-from-browser", "firefox"]` to the user config (see Keys).
+Sync runs `yt-dlp` in the background and fetches only what is missing: the wallpaper if there is no `wallpaper.*` (delete it to fetch a new one), and tracks not yet in `music/`. The wallpaper is video only, SDR, at most 1080p, preferring VP9 WebM. Tracks are Opus audio with their thumbnail as cover art. A notice reports when it ends or why it failed; files appear as they finish. Links from `www.youtube.com` and `music.youtube.com` both work, for a public or Unlisted video or playlist.
+
+YouTube shows a private playlist, and your Liked Music, only to you, so without sign-in sync fails with "The playlist does not exist". Either:
+
+- make the playlist Unlisted in YouTube Music (its menu, then Edit playlist, then Privacy), which works for any playlist except Liked Music; or
+- let `yt-dlp` sign in as you with your browser's cookies: add `ytdlp_args = ["--cookies-from-browser", "firefox"]` to the user config (see Keys), naming the browser where you are signed in to YouTube (`firefox`, `chrome`, `chromium`, `brave`, ...). It reads the cookies on each sync. Close the browser first if `yt-dlp` cannot read its cookie database.
+
+YouTube now and then refuses downloads with "HTTP Error 403: Forbidden" for a few minutes, even ones that worked before. Sync again later; it fetches only what is missing.
+
+To limit how much a sync fetches, add `"--playlist-items", "1-20"` to `ytdlp_args`.
 
 ### `runtime.toml`
 
