@@ -7,14 +7,6 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     treefmt-nix.url = "github:numtide/treefmt-nix";
-    fenix = {
-      url = "github:nix-community/fenix";
-      inputs = {
-        nixpkgs = {
-          follows = "nixpkgs";
-        };
-      };
-    };
   };
   outputs =
     inputs@{
@@ -31,7 +23,6 @@
         pkgs = import nixpkgs {
           inherit system;
         };
-        rustToolchain = with inputs.fenix.packages.${system}; combine [ stable.toolchain ];
         treefmtEval = treefmt-nix.lib.evalModule pkgs {
           imports = [
             topiary-nushell.treefmtModules.default
@@ -44,8 +35,13 @@
           packages = with pkgs; [
             (aspellWithDicts (ps: with ps; [ en ]))
             nushell
-            rustToolchain
+            bun
+            biome
+            nodejs
+            electron
           ];
+          ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
+          ELECTRON_OVERRIDE_DIST_PATH = pkgs.electron.dist;
         };
 
         formatter = treefmtEval.config.build.wrapper;

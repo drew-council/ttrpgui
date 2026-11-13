@@ -9,6 +9,7 @@
     };
     jsonfmt = {
       enable = true;
+      excludes = [ "tsconfig.json" ];
     };
     shellcheck = {
       enable = true;
@@ -28,7 +29,7 @@
     topiary-nushell = {
       enable = true;
     };
-    rustfmt = {
+    biome = {
       enable = true;
     };
   };
