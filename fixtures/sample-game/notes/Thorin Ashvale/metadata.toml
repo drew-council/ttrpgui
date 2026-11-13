@@ -1,0 +1,6 @@
+kind = "creature"
+pc = true
+hp = { current = 38, temp = 0, max_adjust = 0 }
+
+[images]
+"portrait.png" = "main"

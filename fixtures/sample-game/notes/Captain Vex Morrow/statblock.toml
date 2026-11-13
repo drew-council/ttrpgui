@@ -1,0 +1,43 @@
+ac = 17
+hp = 68
+speed = "30 ft."
+initiative = 3
+abilities = { str = 12, dex = 16, con = 14, int = 11, wis = 10, cha = 16 }
+saves = { str = 4, con = 5 }
+skills = { deception = 6, intimidation = 6, acrobatics = 6 }
+
+[[sections]]
+name = "Fighter Features"
+
+[[sections.entries]]
+name = "Extra Attack"
+text = "Attacks twice when taking the Attack action."
+
+[[sections.entries]]
+name = "Riposte"
+text = "Reaction: when a creature misses Vex with a melee attack, make one melee attack against it."
+
+[[sections]]
+name = "Pact Magic"
+
+[[sections.entries]]
+name = "Slots"
+text = "Two 1st-level slots, regained on a short rest. Spell save DC 14."
+
+[[sections.entries]]
+name = "Spells"
+text = "*hex*, *armor of Agathys*, *eldritch blast* (cantrip)"
+
+[[sections]]
+name = "Attacks"
+
+[[sections.entries]]
+name = "Rapier"
+text = "*Melee:* +6 to hit, 1d8 + 3 piercing."
+
+[[sections]]
+name = "Tactics"
+
+[[sections.entries]]
+name = "Opening"
+text = "Casts *armor of Agathys* before boarding, then targets whoever looks most dangerous with *hex*."

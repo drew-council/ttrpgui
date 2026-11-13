@@ -1,0 +1,21 @@
+session = "Session 1"
+
+[combatants."Thorin Ashvale"]
+creature = "Thorin Ashvale"
+initiative = 14
+
+[combatants."Mira Quickfoot"]
+creature = "Mira Quickfoot"
+initiative = 19
+
+[combatants."Goblin Skulker A"]
+creature = "Goblin Skulker"
+initiative = 12
+hp = { current = 0 }
+
+[combatants."Goblin Skulker B"]
+creature = "Goblin Skulker"
+initiative = 12
+hp = { current = 4 }
+conditions = { Frightened = true }
+note = "Fled toward the courtyard with a bronze bell."

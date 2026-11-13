@@ -1,0 +1,7 @@
+kind = "session"
+date = "next tuesday"
+
+[images]
+"a.png" = "main"
+"missing.png" = "main"
+"b.png" = "hero"

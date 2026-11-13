@@ -4,3 +4,6 @@
 # TypeScript
 node_modules/
 dist/
+
+# Harness screenshots
+shots/

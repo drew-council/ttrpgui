@@ -1,0 +1,10 @@
+atmosphere = "Dragonfire"
+
+[combatants."Thorin Ashvale"]
+creature = "Thorin Ashvale"
+
+[combatants."Mira Quickfoot"]
+creature = "Mira Quickfoot"
+
+[combatants."Cinder Drake"]
+creature = "Cinder Drake"

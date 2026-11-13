@@ -1,4 +1,5 @@
 {
+  pkgs,
   ...
 }:
 {
@@ -29,13 +30,28 @@
     topiary-nushell = {
       enable = true;
     };
-    biome = {
-      enable = true;
-    };
   };
 
   settings = {
-    excludes = [ ];
-    formatter = { };
+    # Game data, including deliberately invalid files.
+    excludes = [ "fixtures/**" ];
+    # Biome reads the repo's biome.json, as `bun run check` does; the treefmt-nix module would pass its own config.
+    formatter.biome = {
+      command = pkgs.lib.getExe pkgs.biome;
+      options = [
+        "check"
+        "--write"
+        "--no-errors-on-unmatched"
+      ];
+      includes = [
+        "*.ts"
+        "*.tsx"
+        "*.js"
+        "*.cjs"
+        "*.mjs"
+        "*.json"
+        "*.css"
+      ];
+    };
   };
 }

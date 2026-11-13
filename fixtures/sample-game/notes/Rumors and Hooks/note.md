@@ -1,0 +1,2 @@
+- The drake's bells ring before an eruption. See [[Cinder Drake]].
+- Someone is buying bells in [[The Drowned Market]].

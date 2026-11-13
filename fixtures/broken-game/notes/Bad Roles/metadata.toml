@@ -1,0 +1,5 @@
+kind = "location"
+
+[images]
+"a.png" = "main"
+"missing.png" = "main"

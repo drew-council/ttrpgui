@@ -39,9 +39,16 @@
             biome
             nodejs
             electron
+            xvfb-run
+            # Atmosphere sync downloads with these at runtime.
+            yt-dlp
+            ffmpeg
           ];
           ELECTRON_SKIP_BINARY_DOWNLOAD = "1";
           ELECTRON_OVERRIDE_DIST_PATH = pkgs.electron.dist;
+          # The npm `playwright` version MUST match nixpkgs' playwright-driver.
+          PLAYWRIGHT_BROWSERS_PATH = pkgs.playwright-driver.browsers;
+          PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS = "1";
         };
 
         formatter = treefmtEval.config.build.wrapper;

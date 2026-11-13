@@ -1,0 +1,53 @@
+ac = 17
+hp = 136
+speed = "40 ft., climb 40 ft., fly 80 ft."
+initiative = 2
+cr = 9
+senses = "blindsight 30 ft., darkvision 120 ft., passive Perception 18"
+languages = "Common, Draconic"
+immunities = "fire"
+vulnerabilities = "cold"
+legendary_actions = 3
+legendary_resistances = 2
+abilities = { str = 21, dex = 14, con = 19, int = 12, wis = 13, cha = 17 }
+saves = { dex = 6, con = 8, wis = 5 }
+skills = { perception = 8, stealth = 6 }
+
+[[sections]]
+name = "Traits"
+
+[[sections.entries]]
+name = "Heated Body"
+text = "A creature that touches the drake or hits it with a melee attack within 5 feet takes 2d6 fire damage."
+
+[[sections]]
+name = "Actions"
+
+[[sections.entries]]
+name = "Multiattack"
+text = "The drake makes one **Bite** and two **Claw** attacks."
+
+[[sections.entries]]
+name = "Bite"
+text = "*Melee:* +9 to hit, reach 10 ft. 2d10 + 5 piercing plus 1d6 fire."
+
+[[sections.entries]]
+name = "Claw"
+text = "*Melee:* +9 to hit, reach 5 ft. 2d6 + 5 slashing."
+
+[[sections.entries]]
+name = "Cinder Breath (Recharge 5-6)"
+text = """
+Exhales embers in a 40-foot cone. Each creature there makes a DC 16 Dexterity save,
+taking 12d6 fire damage on a failure or half as much on a success."""
+
+[[sections]]
+name = "Legendary Actions"
+
+[[sections.entries]]
+name = "Tail Sweep"
+text = "The drake makes one Claw attack."
+
+[[sections.entries]]
+name = "Ash Cloud (Costs 2 Actions)"
+text = "Ash fills a 20-foot sphere centered on the drake. The area is heavily obscured until the start of its next turn."

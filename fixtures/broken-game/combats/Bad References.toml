@@ -1,0 +1,10 @@
+session = "Fine Note"
+atmosphere = "Nowhere"
+turn = "Nobody"
+
+[combatants.Ghost]
+creature = "Missing Creature"
+
+[combatants.Hero]
+creature = "Fine PC"
+hp = { current = 3 }

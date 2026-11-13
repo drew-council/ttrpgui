@@ -1,0 +1,7 @@
+round = "two"
+colour = "red"
+
+[combatants.Goblin]
+creature = "Goblin"
+hp = { current = "low" }
+conditions = { Prone = false }

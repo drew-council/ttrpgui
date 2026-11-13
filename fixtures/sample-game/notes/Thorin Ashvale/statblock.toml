@@ -1,0 +1,28 @@
+ac = 18
+hp = 44
+speed = "25 ft."
+initiative = 1
+senses = "darkvision 60 ft., passive Perception 13"
+languages = "Common, Dwarvish"
+resistances = "poison"
+abilities = { str = 17, dex = 12, con = 16, int = 10, wis = 12, cha = 8 }
+saves = { str = 6, con = 6 }
+skills = { athletics = 6, perception = 3 }
+
+[[sections]]
+name = "Features"
+
+[[sections.entries]]
+name = "Second Wind"
+text = "Bonus action: regain 1d10 + 5 HP. Once per short rest."
+
+[[sections.entries]]
+name = "Action Surge"
+text = "Take one additional action on your turn. Once per short rest."
+
+[[sections]]
+name = "Attacks"
+
+[[sections.entries]]
+name = "Warhammer"
+text = "*Melee:* +6 to hit, 1d8 + 3 bludgeoning (1d10 + 3 two-handed)."

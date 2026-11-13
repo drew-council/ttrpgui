@@ -1,0 +1,5 @@
+kind = "creature"
+display_name = "The Masked Captain"
+
+[images]
+"portrait.png" = "main"

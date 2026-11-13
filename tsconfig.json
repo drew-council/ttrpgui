@@ -1,20 +1,21 @@
 {
 	"compilerOptions": {
-		"lib": ["ESNext"],
+		"lib": ["ESNext", "DOM", "DOM.Iterable"],
 		"target": "ESNext",
 		"module": "NodeNext",
 		"moduleResolution": "NodeNext",
 		"moduleDetection": "force",
+		"jsx": "react-jsx",
 		"types": ["bun"],
+		"noEmit": true,
+		"allowImportingTsExtensions": true,
+		"erasableSyntaxOnly": true,
 		"verbatimModuleSyntax": true,
-		"outDir": "dist",
-		"rootDir": ".",
 		"strict": true,
 		"skipLibCheck": true,
 		"noFallthroughCasesInSwitch": true,
 		"noUncheckedIndexedAccess": true,
 		"noImplicitOverride": true
 	},
-	"include": ["**/*.ts"],
-	"exclude": ["dist", "node_modules"]
+	"include": ["src", "harness", "vite.config.ts"]
 }

@@ -1,0 +1,8 @@
+ac = "fifteen"
+abilities = { strength = 18 }
+
+[[sections]]
+name = "Actions"
+
+[[sections.entries]]
+name = "Bite"
