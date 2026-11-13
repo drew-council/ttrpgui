@@ -249,11 +249,17 @@ Operations apply to the selection, or to the cursor row when nothing is selected
 | `Alt+A`       | switch atmosphere                        | `Alt+M`     | pause or resume music   |
 | `Alt+N`       | skip to another track                    | `Alt+=` `Alt+-` | volume up, down     |
 
+On the display itself, F or a double-click toggles fullscreen, and `Ctrl+=` `Ctrl+-` `Ctrl+0` zoom it in, out, and back to 100% without touching the control window.
+
 "New atmosphere", "Set the default atmosphere", "Sync atmosphere media", and "Set the combat's atmosphere" are in the palette. The sidebar lists atmospheres; each opens a view of its links and media.
 
 ## Tabs
 
 Tabs work as in a browser or Obsidian. A click or Enter on a note, combat, or atmosphere shows it in the current tab, or switches to its tab if it is already open. Ctrl+click, middle-click, or Ctrl+Enter opens it in a new tab next to the current one. That works in the sidebar, the pickers (Ctrl+K, search, and the rest), wiki links in note text, the lists in a note, the problems list, the status line, and the combat tracker, where a plain click only moves the cursor and Ctrl+click or middle-click opens the creature. The + at the end of the tab bar, or Ctrl+T, opens an empty tab; the next thing you open fills it. Close a tab with its ×, a middle-click, or Ctrl+W. Tabs survive a restart.
+
+## Zoom
+
+Ctrl+= (or Ctrl++), Ctrl+-, and Ctrl+0 zoom the window you press them in, from 50% to 300%. Each window remembers its own zoom; the control window and the player display never zoom together.
 
 ## Keys
 
@@ -267,6 +273,7 @@ Ctrl+P lists every command with its key; the palette shows only the commands tha
 |                     | `Ctrl+B` / `Ctrl+E`       | toggle / focus the sidebar (`/` filters it)      |
 |                     | `Ctrl+T` / `Ctrl+W`       | new tab / close tab                              |
 |                     | `Ctrl+Tab` / `Ctrl+Shift+Tab` | next / previous tab                          |
+|                     | `Ctrl+=` `Ctrl+-` / `Ctrl+0` | zoom in, out / reset                          |
 |                     | `Ctrl+L`                  | open the live session                            |
 |                     | `F2`                      | rename the note, combat, or atmosphere in the tab |
 | Lists               | `j` `k` `g` `G`, arrows   | move                                             |

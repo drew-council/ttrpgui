@@ -52,7 +52,9 @@ import {
 	openTab,
 	pick,
 	replaceTab,
+	toast,
 	ui,
+	zoom,
 } from "./ui.ts";
 import {
 	chooseImageRole,
@@ -350,6 +352,9 @@ const volume = (step: number) => () =>
 
 const electron = () => window.ttrpgui !== undefined;
 
+const zoomBy = (step: -1 | 0 | 1) => () =>
+	toast(`Zoom ${Math.round(zoom(step) * 100)}%`, "zoom");
+
 export const actions: Record<ActionId, Action> = {
 	"command-palette": {
 		title: "Show all commands",
@@ -419,6 +424,9 @@ export const actions: Record<ActionId, Action> = {
 		run: () => cycleTab(-1),
 	},
 	"new-tab": { title: "New tab", run: newTab },
+	"zoom-in": { title: "Zoom in", run: zoomBy(1) },
+	"zoom-out": { title: "Zoom out", run: zoomBy(-1) },
+	"reset-zoom": { title: "Reset zoom", run: zoomBy(0) },
 	"new-note": newNote(undefined, "note"),
 	"new-session": newNote("session", "session"),
 	"new-creature": newNote("creature", "creature"),

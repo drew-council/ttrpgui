@@ -22,12 +22,12 @@ A headless Node server owns the Game directory and the one shared state tree. Cl
 - `src/cli.ts`: `serve` and `validate`. `src/electron.ts` and `src/preload.cjs`: start the server in-process, open the control window, open and close the display window, and switch Games.
 - `src/client/`: one React app (Vite). `/control` → `Control.tsx`, `/display` → `Display.tsx`.
   - `sync.ts`: the state mirror. `useGame(selector)`, `getGame()`, `useStatus()`, and `send(mutation)`, which resolves `true` once applied or toasts the error and resolves `false`.
-  - `ui.ts`: per-client state (tabs, sidebar, picker) in a tiny store from `store.ts`. Tabs and the sidebar persist in localStorage. `toast()` shows a Sonner toast. See "Tabs".
+  - `ui.ts`: per-client state (tabs, sidebar, picker) in a tiny store from `store.ts`. Tabs and the sidebar persist in localStorage. `toast()` shows a Sonner toast. See "Tabs" and "Zoom".
   - `actions.ts`: the `Action` registry and keybind dispatch. `Picker.tsx`: the one fuzzy picker (shadcn Command in a Dialog; fuzzysort ranks and highlights, cmdk's filter is off), also used for prompts and confirmations. `list.ts`: the one list behavior (`j`/`k`, arrows, `g`/`G`, Enter, Ctrl+Enter for a new tab) and its classes (`listClass`, `rowClass`).
   - `MarkdownBox.tsx`: the one markdown text box (CodeMirror 6). See "Text editing".
   - `views.tsx`: tab views (note, combat, atmosphere, problems). The note view holds the body's `MarkdownBox`, then its images and backlinks as lists. A Creature adds an aside with its portrait and `StatBlock`; a Location shows its main picture; a Session lists its combats. `Sidebar.tsx`: notes grouped by kind, and combats; `focusSidebar()`.
   - `Tracker.tsx`: the combat view (tracker left; the cursor's note and `StatBlock` right) and the helpers tracker Actions use: `target()` (the selection, else the cursor row), `askNumber`, and the add-combatant and condition pickers.
-  - `Display.tsx`: the player display. `main.tsx` sets one rem to 1/54 of the screen's short side on `/display`, so every size scales to any screen. `Fade` crossfades the wallpaper and the shown image (`data-layer`).
+  - `Display.tsx`: the player display. On `/display`, one rem is 1/54 of the screen's short side times the page zoom (`applyZoom` in `ui.ts`), so every size scales to any screen. It handles F and the zoom binds itself. `Fade` crossfades the wallpaper and the shown image (`data-layer`).
   - `Atmospheres.tsx`: the atmosphere tab view.
   - `StatBlock.tsx`: `<StatBlock title={t} editing? />`, the one stat block, read-only or as a form with the same rows. Fields save on blur; edits run one at a time so each builds on the last. The section and entry Actions act at `formCursor()`, read from where focus is. Also `SaveInput`, the one-line field that saves on blur, and `fieldBox`, the classes that make a box around a `MarkdownBox` look like an input.
   - `components/ui/`: vendored shadcn/ui components. See "Styling".
@@ -74,6 +74,10 @@ A tab id is `view:arg` (see `views.tsx`); an empty tab is `new:<random>`, whose 
 
 - `openTab(tab, newTab)` is the one way to open anything: a tab not yet open replaces the active one, or opens beside it when `newTab`. `newTab()` opens an empty tab beside the active one.
 - Every mouse open goes through `clickOpens(open)` (spread on the row): a click opens, Ctrl/Cmd+click or a middle-click opens in a new tab, and a middle press does not paste the primary selection. Code that sees the raw event (the picker, wiki links in `MarkdownBox`) uses `wantsNewTab(e)`. Keyboard: Enter, and Ctrl+Enter for a new tab, in `useListNav` and the picker.
+
+## Zoom
+
+Each page zooms alone through its root font size (`zoom`, `applyZoom` in `ui.ts`), stored per page in localStorage. Native zoom would not do: Chromium shares it per origin, so both windows would zoom together. Sizes MUST be in rem (Tailwind spacing and text sizes) so they scale; px is only for hairlines, radii, and shadows.
 
 ## Focus
 

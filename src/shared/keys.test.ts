@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { binds, eventKey, formatKey, normalizeKey } from "./keys.ts";
+import { bindHas, binds, eventKey, formatKey, normalizeKey } from "./keys.ts";
 
 test("normalizeKey canonicalizes binds and rejects nonsense", () => {
 	expect(normalizeKey("Ctrl+Shift+P")).toBe("ctrl+shift+p");
@@ -40,4 +40,6 @@ test("binds puts the user config over the defaults", () => {
 	const keys = binds({ "quick-open": "Ctrl+o", "close-tab": "" });
 	expect(keys["quick-open"]).toBe("ctrl+o");
 	expect(keys["close-tab"]).toBe("");
+	expect(keys["zoom-in"]).toBe("ctrl+= ctrl++");
+	expect(bindHas(keys["zoom-in"], "ctrl++")).toBe(true);
 });

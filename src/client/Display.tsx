@@ -12,7 +12,9 @@ import {
 	playerTracker,
 	videoFile,
 } from "../shared/display.ts";
-import { send, useGame } from "./sync.ts";
+import { bindHas, binds, eventKey } from "../shared/keys.ts";
+import { getGame, send, useGame } from "./sync.ts";
+import { zoom } from "./ui.ts";
 import { KindMark } from "./views.tsx";
 
 /** URL of a file in the Game. */
@@ -330,7 +332,14 @@ function toggleFullscreen() {
 	else void document.documentElement.requestFullscreen();
 }
 
-/** True once the pointer has rested a few seconds, which hides it and the fullscreen hint. F toggles fullscreen. */
+const zooms = [
+	["zoom-in", 1],
+	["zoom-out", -1],
+	["reset-zoom", 0],
+] as const;
+
+/** True once the pointer has rested a few seconds, which hides it and the fullscreen hint. F toggles fullscreen;
+ * the zoom binds zoom this page only. */
 function useIdle() {
 	const [idle, setIdle] = useState(false);
 	useEffect(() => {
@@ -341,10 +350,12 @@ function useIdle() {
 			timer = setTimeout(() => setIdle(true), 4000);
 		};
 		const onKey = (e: KeyboardEvent) => {
-			if (e.key === "f" || e.key === "F11") {
-				e.preventDefault();
-				toggleFullscreen();
-			}
+			const keys = binds(getGame().config.keys);
+			const step = zooms.find(([id]) => bindHas(keys[id], eventKey(e)))?.[1];
+			if (step !== undefined) zoom(step);
+			else if (e.key === "f" || e.key === "F11") toggleFullscreen();
+			else return;
+			e.preventDefault();
 		};
 		wake();
 		window.addEventListener("mousemove", wake);

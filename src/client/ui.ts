@@ -1,5 +1,5 @@
-// Per-client UI state: tabs, sidebar, the open picker, stat block editing, and the tracker selection.
-// Tabs and the sidebar survive a reload.
+// Per-client UI state: tabs, sidebar, the open picker, stat block editing, the tracker selection, and zoom.
+// Tabs, the sidebar, and each page's zoom survive a reload.
 import type { MouseEvent } from "react";
 import { flushSync } from "react-dom";
 import { toast as sonner } from "sonner";
@@ -152,5 +152,32 @@ export function closePicker() {
 	if (returnFocus instanceof HTMLElement) returnFocus.focus();
 }
 
-/** Shows a message for a few seconds. The control window's `Toaster` renders it. */
-export const toast = (message: string) => sonner(message);
+/** Shows a message for a few seconds. The control window's `Toaster` renders it. A toast with the same `id` replaces it. */
+export const toast = (message: string, id?: string) => sonner(message, { id });
+
+const displayPage = location.pathname.startsWith("/display");
+const zoomKey = `ttrpgui.zoom.${displayPage ? "display" : "control"}`;
+const zoomLevels = [
+	0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3,
+];
+const savedZoom = () => Number(localStorage.getItem(zoomKey)) || 1;
+
+/** Sets this page's zoom through its root font size, since every size is in rem. On the display one rem is also
+ * 1/54 of the screen's short side, so it scales to any screen. Native zoom would not do: it is shared per origin. */
+export function applyZoom(level = savedZoom()) {
+	localStorage.setItem(zoomKey, String(level));
+	document.documentElement.style.fontSize = displayPage
+		? `calc(100vmin / 54 * ${level})`
+		: `${level * 100}%`;
+	return level;
+}
+
+/** Steps this page's zoom in (1) or out (-1), or resets it (0). Returns the new level. */
+export function zoom(step: -1 | 0 | 1) {
+	if (!step) return applyZoom(1);
+	const last = zoomLevels.length - 1;
+	const at = zoomLevels.findIndex((level) => level >= savedZoom());
+	return applyZoom(
+		zoomLevels[Math.max(0, Math.min((at < 0 ? last : at) + step, last))],
+	);
+}
