@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "start": "bun run build && electron .",
+    "start": "bun run build && CHROME_DEVEL_SANDBOX= electron .",
     "build": "tsc",
     "check": "tsc --noEmit"
   },
