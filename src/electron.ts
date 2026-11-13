@@ -43,6 +43,19 @@ ipcMain.handle("open-game", async () => {
 // The default menu's accelerators (Ctrl+W, Ctrl+R) would shadow keybinds.
 Menu.setApplicationMenu(null);
 
+// On Wayland, Chromium adopts the image description the compositor prefers. Hyprland offers HDR to a fullscreen
+// window on an HDR-capable monitor and then switches the monitor to HDR, which breaks one running 8-bit.
+// Without the color-management protocol every window stays plain sRGB.
+app.commandLine.appendSwitch(
+	"disable-features",
+	[
+		app.commandLine.getSwitchValue("disable-features"),
+		"WaylandWpColorManagerV1",
+	]
+		.filter(Boolean)
+		.join(","),
+);
+
 let serverUrl = "";
 let display: BrowserWindow | undefined;
 

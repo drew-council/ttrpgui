@@ -198,7 +198,7 @@ music = "https://music.youtube.com/playlist?list=..."
 
 A track's file name gives its artist and title: `Artist - Title.opus`, optionally with an id, `Artist - Title [id].opus`. Without ` - `, the whole name is the title. Cover art is an image beside it with the same name, such as `Artist - Title.jpg`. Audio may be opus, ogg, oga, mp3, m4a, aac, flac, or wav; opus, ogg, mp3, and flac play everywhere.
 
-Sync runs `yt-dlp` in the background and fetches only what is missing: the wallpaper if there is no `wallpaper.*` (delete it to fetch a new one), and tracks not yet in `music/`. The wallpaper is video only, at most 1080p, preferring VP9 WebM. Tracks are Opus audio with their thumbnail as cover art. A notice reports when it ends or why it failed; files appear as they finish. Private playlists need cookies: add `ytdlp_args = ["--cookies-from-browser", "firefox"]` to the user config (see Keys).
+Sync runs `yt-dlp` in the background and fetches only what is missing: the wallpaper if there is no `wallpaper.*` (delete it to fetch a new one), and tracks not yet in `music/`. The wallpaper is video only, SDR, at most 1080p, preferring VP9 WebM. Tracks are Opus audio with their thumbnail as cover art. A notice reports when it ends or why it failed; files appear as they finish. Private playlists need cookies: add `ytdlp_args = ["--cookies-from-browser", "firefox"]` to the user config (see Keys).
 
 ### `runtime.toml`
 
@@ -300,6 +300,10 @@ heal = "= + shift+h"  # alternatives, separated by spaces
 ```
 
 Nothing else is accepted. A mistake in the file is a problem in the problems list, and until it is fixed that bind is ignored, so its command falls back to its default key. Invalid TOML ignores the whole file.
+
+## Troubleshooting
+
+**Fullscreen display breaks on an HDR-capable monitor (Hyprland).** Hyprland offers HDR to a fullscreen window on a monitor that supports it and switches the monitor to HDR when the window takes it, which breaks a monitor running in 8-bit ("wide color gamut is enabled but the display is not in 10-bit mode"). The desktop app turns off Chromium's Wayland color management (`--disable-features=WaylandWpColorManagerV1`), so its windows stay plain sRGB and never ask for HDR. A browser showing `/display` does not get that switch; in Hyprland you can instead turn off auto HDR with `hl.config({ render = { cm_auto_hdr = 0 } })`.
 
 ## License
 

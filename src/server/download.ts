@@ -21,8 +21,12 @@ export async function download(
 		if (settings.wallpaper && !wallpaper)
 			await ytDlp(dir, [
 				"--no-playlist",
-				// Video only, since it plays muted. VP9 in WebM plays in any Chromium.
-				...["-f", "bv*[height<=1080][ext=webm]/bv*[height<=1080]"],
+				// Video only, since it plays muted. VP9 in WebM plays in any Chromium. SDR only: HDR video can push the
+				// compositor into HDR mode. `=?` keeps sites that do not report a dynamic range.
+				...[
+					"-f",
+					"bv*[height<=1080][ext=webm][dynamic_range=?SDR]/bv*[height<=1080][dynamic_range=?SDR]",
+				],
 				...["--download-sections", `*${settings.wallpaper_section ?? "0-120"}`],
 				...["-o", "wallpaper.%(ext)s"],
 				...extraArgs,
