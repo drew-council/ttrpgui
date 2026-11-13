@@ -1,6 +1,6 @@
 # ttrpgui
 
-A keyboard-driven app for planning and running tabletop RPGs. See `SPEC.md` for the design and `CLAUDE.md` for a map of the code.
+A keyboard-driven app for planning and running tabletop RPGs. Everything also has a button or menu item. See `SPEC.md` for the design and `CLAUDE.md` for a map of the code.
 
 It is a headless server that owns a Game directory, with web clients for the control and display views. The desktop app is Electron running the server and the control window together. The server can also run alone and serve the views to any browser on the LAN.
 
@@ -19,6 +19,7 @@ Every command is in the palette (Ctrl+P) with its key. The ones you would look f
 
 - **Table bar**, along the bottom: connection, the live session (Go live, its name, End session), the running combat and round, the player display (open, close; Electron only), the active atmosphere as a switcher, music (play or pause, skip, the track, a volume slider), the shown image (show, its name, hide), problems, and Commands.
 - **Tab bar**: the sidebar toggle, back, forward, and new tab.
+- **Sidebar**: a search button beside the filter, and a + on each group that creates one of its kind. A new creature is an NPC; "Mark as PC" in its header makes it a PC.
 - **Combat view**, a toolbar under the title: start or end, next turn, roll, add, undo, redo; then, for the selection or the cursor row, damage, heal, condition, temp HP, initiative, concentration, and select. The ⋯ menu holds the rest: max HP, death saves, legendary counters, rename, note, clear selection, remove, and the combat's atmosphere, session, party rest, rename, and delete. Shift+click selects rows.
 - **Note header**: by kind, "Edit stat block", "Mark as PC" or "Mark as NPC", and "Display name" for a creature; "Go live" or "End session" and "Set date" for a session. Its ⋯ menu renames, changes the kind, sets an image role, or deletes. Each image row can show the image on the display, hide it, or set its role.
 - **Stat block form**: Section, Entry, move up and down, remove, and Done, acting at the field with focus.
