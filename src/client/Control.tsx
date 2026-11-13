@@ -41,7 +41,7 @@ export function Control() {
 			{picker && <Picker key={picker.title} spec={picker} />}
 			<Toaster
 				position="bottom-right"
-				offset={{ right: "1rem", bottom: "2.75rem" }}
+				offset={{ right: "1rem", bottom: "3rem" }}
 				duration={6000}
 				expand
 				closeButton
