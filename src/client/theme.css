@@ -1,0 +1,125 @@
+/* The one theme: Tailwind, the CSS variables shadcn components read, and the app's own tokens. Dark only. */
+@import "tailwindcss" source(".");
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "@fontsource-variable/alegreya/wght.css";
+@import "@fontsource-variable/alegreya/wght-italic.css";
+@import "@fontsource/alegreya-sans/400.css";
+@import "@fontsource/alegreya-sans/500.css";
+@import "@fontsource/alegreya-sans/700.css";
+
+/* shadcn components style dark mode with `dark:`. The app is always dark: index.html sets the class. */
+@custom-variant dark (&:is(.dark *));
+
+/* A plum night lit by a candle. */
+:root {
+	color-scheme: dark;
+	--radius: 0.375rem;
+	--background: #1d1822;
+	--foreground: #ede4d3;
+	--card: #241e2a;
+	--card-foreground: var(--foreground);
+	--popover: #2f2836;
+	--popover-foreground: var(--foreground);
+	--primary: #f2b95b;
+	--primary-foreground: var(--background);
+	--secondary: var(--popover);
+	--secondary-foreground: var(--foreground);
+	--muted: #3d3546;
+	--muted-foreground: #aea4b4;
+	--accent: var(--popover);
+	--accent-foreground: var(--foreground);
+	--destructive: #f2806f;
+	--border: #3d3546;
+	--input: var(--border);
+	--ring: var(--primary);
+	/* Fainter than muted text: counts, details, placeholders. */
+	--faint: #7a7085;
+	--kind-session: #e6a1c2;
+	--kind-pc: #72c9a9;
+	--kind-npc: #b9a1f2;
+	--kind-location: #8eb2ee;
+	--kind-note: #aea4b4;
+	--kind-combat: #ef9a6a;
+	--kind-atmosphere: #7fcfd6;
+	/* The tracker's multi-selection. */
+	--select: #8eb2ee;
+}
+
+@theme {
+	--font-sans: "Alegreya Sans", system-ui, sans-serif;
+	--font-serif: "Alegreya Variable", Georgia, serif;
+	--font-mono: ui-monospace, "DejaVu Sans Mono", monospace;
+	/* The UI reads at line height 1.35, as the body does. */
+	--text-xs: 0.8125rem;
+	--text-xs--line-height: 1.4;
+	--text-sm--line-height: 1.35;
+	--text-base--line-height: 1.35;
+	--text-lg: 1.1875rem;
+	--text-lg--line-height: 1.35;
+	--shadow-overlay: 0 12px 40px rgb(8 5 12 / 0.55);
+	/* The display: panels over the wallpaper, and a glow that keeps text legible on it. */
+	--color-glass: rgb(24 19 29 / 0.86);
+	--text-shadow-glow: 0 0.1rem 0.6rem rgb(8 5 12 / 0.7);
+}
+
+@theme inline {
+	--color-background: var(--background);
+	--color-foreground: var(--foreground);
+	--color-card: var(--card);
+	--color-card-foreground: var(--card-foreground);
+	--color-popover: var(--popover);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-primary: var(--primary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-secondary: var(--secondary);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-muted: var(--muted);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-accent: var(--accent);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-destructive: var(--destructive);
+	--color-border: var(--border);
+	--color-input: var(--input);
+	--color-ring: var(--ring);
+	--color-faint: var(--faint);
+	--color-kind-session: var(--kind-session);
+	--color-kind-pc: var(--kind-pc);
+	--color-kind-npc: var(--kind-npc);
+	--color-kind-location: var(--kind-location);
+	--color-kind-note: var(--kind-note);
+	--color-kind-combat: var(--kind-combat);
+	--color-kind-atmosphere: var(--kind-atmosphere);
+	--color-select: var(--select);
+	--radius-sm: calc(var(--radius) * 0.6);
+	--radius-md: calc(var(--radius) * 0.8);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) * 1.4);
+	--radius-2xl: calc(var(--radius) * 1.8);
+}
+
+@layer base {
+	* {
+		@apply border-border;
+	}
+	html,
+	body,
+	#root,
+	#app {
+		@apply h-full;
+	}
+	body {
+		@apply bg-background font-sans text-base text-foreground antialiased;
+		scrollbar-color: var(--border) transparent;
+	}
+	button:not(:disabled) {
+		cursor: pointer;
+	}
+	:focus-visible {
+		outline: 2px solid var(--ring);
+		outline-offset: 2px;
+	}
+	::selection {
+		background: rgb(242 185 91 / 0.35);
+	}
+}

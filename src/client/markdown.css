@@ -1,0 +1,163 @@
+/* MarkdownBox: CodeMirror content and live preview decorations, which Tailwind classes cannot reach.
+   Unlayered on purpose: it overrides CodeMirror's own theme, which the extra `.md` class outranks. */
+
+.md:focus {
+	outline: 1px solid var(--border);
+	outline-offset: 0.5rem;
+	border-radius: 3px;
+}
+.md .cm-editor {
+	font: 1.1875rem / 1.6 var(--font-serif);
+}
+.md .cm-editor.cm-focused {
+	outline: none;
+}
+.md .cm-editor .cm-scroller {
+	font: inherit;
+	line-height: inherit;
+	overflow: visible;
+}
+.md .cm-editor .cm-content {
+	padding: 0;
+	caret-color: var(--primary);
+}
+/* A note's text box is a tall click target with room below the text. */
+.note-body .md .cm-editor .cm-content {
+	min-height: 8rem;
+	padding-bottom: 2rem;
+}
+.md .cm-editor .cm-line {
+	padding: 0;
+}
+.md .cm-editor .cm-placeholder {
+	color: var(--faint);
+	font-style: italic;
+}
+.md-h1,
+.md-h2,
+.md-h3,
+.md-h4 {
+	font-weight: 700;
+	line-height: 1.25;
+	padding-top: 1rem;
+}
+.md-h1 {
+	font-size: 1.5rem;
+	font-style: italic;
+	font-weight: 600;
+}
+.md-h2 {
+	font-size: 1.3125rem;
+}
+.md-h3 {
+	font-size: 1.1875rem;
+}
+.md-h4 {
+	font-size: 1rem;
+	color: var(--muted-foreground);
+}
+.md-em {
+	font-style: italic;
+}
+.md-strong {
+	font-weight: 700;
+}
+.md-strike {
+	text-decoration: line-through;
+	color: var(--muted-foreground);
+}
+.md-mark {
+	color: var(--faint);
+	font-style: normal;
+	font-weight: 400;
+}
+.md-link,
+.md-wikilink {
+	color: var(--primary);
+}
+.md-wikilink[data-link] {
+	cursor: pointer;
+	text-decoration: underline 1px rgb(242 185 91 / 0.4);
+	text-underline-offset: 0.2em;
+}
+.md-wikilink[data-link]:hover {
+	text-decoration-color: var(--primary);
+}
+.md-wikilink.md-dangling {
+	color: var(--muted-foreground);
+	text-decoration: underline dashed 1px var(--faint);
+	text-underline-offset: 0.2em;
+}
+.md-code {
+	font-family: var(--font-mono);
+}
+.md-code:not(.md-codeblock *) {
+	padding: 0.1em 0.25em;
+	border-radius: 3px;
+	background: var(--popover);
+	font-size: 0.85em;
+}
+.md .cm-editor :is(.md-codeblock, .md-table) {
+	font: 0.85em / 1.55 var(--font-mono);
+}
+.md .cm-editor .md-codeblock {
+	padding: 0 0.75rem;
+	background: var(--card);
+}
+.md .cm-editor .md-quote {
+	padding-left: 1rem;
+	border-left: 3px solid var(--border);
+	color: var(--muted-foreground);
+	font-style: italic;
+}
+.md-bullet {
+	color: var(--primary);
+	padding-right: 0.15em;
+}
+.md-hr {
+	background:
+		linear-gradient(var(--border), var(--border)) center / 100% 1px no-repeat;
+}
+.md-image {
+	display: block;
+	max-width: 100%;
+	max-height: 28rem;
+	margin: 0.5rem 0;
+	border-radius: 6px;
+}
+.md .cm-tooltip-autocomplete {
+	background: var(--popover);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	box-shadow: var(--shadow-overlay);
+	font: 1rem var(--font-sans);
+	overflow: hidden;
+}
+.md .cm-editor .cm-tooltip.cm-tooltip-autocomplete > ul {
+	font: inherit;
+}
+.md .cm-tooltip-autocomplete > ul > li {
+	padding: 0.25rem 0.75rem;
+}
+.md .cm-tooltip-autocomplete > ul > li[aria-selected] {
+	background: rgb(242 185 91 / 0.14);
+	color: var(--foreground);
+}
+.md .cm-completionMatchedText {
+	color: var(--primary);
+	font-weight: 700;
+	text-decoration: none;
+}
+/* Stat block entries and combatant notes: smaller text, and the field around the box shows focus. */
+.md-small .md .cm-editor {
+	font: 1rem / 1.45 var(--font-serif);
+}
+.md-small .md:focus {
+	outline: none;
+}
+/* A stat block entry's name runs in before its text, as in printed stat blocks. */
+.md-entry .cm-line:first-child::before {
+	content: var(--name);
+	font-weight: 700;
+	font-style: italic;
+}
