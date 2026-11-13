@@ -13,6 +13,12 @@ It is a headless server that owns a Game directory, with web clients for the con
 
 Table state lives in the Game (`runtime.toml`), so a restart picks up the running combat, the shown image, and the music. Undo history does not survive a restart.
 
+## Where the controls are
+
+Every command is in the palette (Ctrl+P) with its key. The ones you would look for on screen also have a control, with the command and its key in a tooltip:
+
+- **Tab bar**: the sidebar toggle, back, forward, and new tab.
+
 ## Server alone
 
 `bun run cli serve --game DIR` serves `/control` and `/display` on `localhost:7373` for any browser. `--lan` listens on every interface and prints the display URL for each LAN address; there is no auth. `--port N` picks another port. Starting a second copy on a port in use fails with an error.

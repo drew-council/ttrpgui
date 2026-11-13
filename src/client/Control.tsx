@@ -1,7 +1,7 @@
 // The control window: sidebar, tabs, status line, plus the picker and toasts on top.
 import { cn } from "cn";
-import { ArrowLeftIcon, ArrowRightIcon, PlusIcon, XIcon } from "lucide-react";
-import { type ReactNode, useEffect, useRef } from "react";
+import { XIcon } from "lucide-react";
+import { useEffect, useRef } from "react";
 import { Button } from "#components/ui/button.tsx";
 import { Kbd } from "#components/ui/kbd.tsx";
 import { Toaster } from "#components/ui/sonner.tsx";
@@ -12,9 +12,10 @@ import {
 	TooltipTrigger,
 } from "#components/ui/tooltip.tsx";
 import { activeAtmosphere, nowPlaying } from "../shared/display.ts";
-import { type ActionId, binds, formatKey } from "../shared/keys.ts";
+import { binds, formatKey } from "../shared/keys.ts";
 import { atmosphereTab } from "./Atmospheres.tsx";
-import { actions, useKeybinds } from "./actions.ts";
+import { useKeybinds } from "./actions.ts";
+import { ActionButton } from "./controls.tsx";
 import { Picker } from "./Picker.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 import { getGame, send, useGame, useStatus } from "./sync.ts";
@@ -58,45 +59,16 @@ export function Control() {
 	);
 }
 
-/** A tab bar button that runs an Action, with its bind in a tooltip. Disabled while the Action is unavailable. */
-function ActionButton({ id, children }: { id: ActionId; children: ReactNode }) {
-	const action = actions[id];
-	const key = binds(getGame().config.keys)[id];
-	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<Button
-					variant="ghost"
-					size="icon-sm"
-					aria-label={action.title}
-					className="mx-1 flex-none self-center text-muted-foreground"
-					disabled={!(action.when?.() ?? true)}
-					onClick={action.run}
-				>
-					{children}
-				</Button>
-			</TooltipTrigger>
-			<TooltipContent>
-				{action.title} {key && <Kbd>{formatKey(key)}</Kbd>}
-			</TooltipContent>
-		</Tooltip>
-	);
-}
-
 function TabBar() {
 	const tabs = ui.use((s) => s.tabs);
 	const active = ui.use((s) => s.active);
-	// Back and forward depend on the history and on what exists.
-	ui.use((s) => s.history);
-	useGame((game) => game);
 	return (
 		<div className="flex h-9 flex-none border-b bg-card">
-			<ActionButton id="go-back">
-				<ArrowLeftIcon />
-			</ActionButton>
-			<ActionButton id="go-forward">
-				<ArrowRightIcon />
-			</ActionButton>
+			<span className="flex flex-none items-center gap-0.5 px-1">
+				<ActionButton id="toggle-sidebar" />
+				<ActionButton id="go-back" />
+				<ActionButton id="go-forward" />
+			</span>
 			<div
 				role="tablist"
 				className="flex min-w-0 flex-1 overflow-x-auto border-l [scrollbar-width:none]"
@@ -128,9 +100,9 @@ function TabBar() {
 						</Button>
 					</div>
 				))}
-				<ActionButton id="new-tab">
-					<PlusIcon />
-				</ActionButton>
+				<span className="flex flex-none items-center px-1">
+					<ActionButton id="new-tab" />
+				</span>
 			</div>
 		</div>
 	);

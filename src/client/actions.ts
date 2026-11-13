@@ -1,5 +1,62 @@
 // The Action registry: everything the user can do. Every available Action is in the command palette.
 // Ids and default binds live in `src/shared/keys.ts`; the user config overrides them.
+import {
+	ArrowDownIcon,
+	ArrowLeftIcon,
+	ArrowRightIcon,
+	ArrowUpIcon,
+	BedIcon,
+	BrainIcon,
+	CalendarDaysIcon,
+	CalendarPlusIcon,
+	CalendarXIcon,
+	CircleCheckIcon,
+	CircleStopIcon,
+	CloudFogIcon,
+	CloudOffIcon,
+	CrownIcon,
+	DicesIcon,
+	DownloadIcon,
+	FlagIcon,
+	FolderOpenIcon,
+	HashIcon,
+	HeartCrackIcon,
+	HeartPlusIcon,
+	HeartPulseIcon,
+	ImageIcon,
+	ImageOffIcon,
+	ListPlusIcon,
+	type LucideIcon,
+	MonitorOffIcon,
+	MonitorUpIcon,
+	NotebookPenIcon,
+	PanelLeftIcon,
+	PauseIcon,
+	PencilIcon,
+	PlusIcon,
+	RadioIcon,
+	Redo2Icon,
+	ShapesIcon,
+	ShieldCheckIcon,
+	ShieldPlusIcon,
+	SkipForwardIcon,
+	SkullIcon,
+	SquarePenIcon,
+	SquareXIcon,
+	StarIcon,
+	StepForwardIcon,
+	SwordsIcon,
+	TagIcon,
+	TerminalIcon,
+	TextSearchIcon,
+	TrashIcon,
+	Undo2Icon,
+	UserCheckIcon,
+	UserMinusIcon,
+	UserPlusIcon,
+	UserXIcon,
+	VenetianMaskIcon,
+} from "lucide-react";
 import { useEffect } from "react";
 import type { SearchHit } from "../server/game.ts";
 import type { Mutation } from "../server/mutations.ts";
@@ -74,7 +131,17 @@ declare global {
 	}
 }
 
-type Action = { title: string; when?: () => boolean; run: () => void };
+export type Action = {
+	title: string;
+	/** Whether it can run now. `control` is true for a GUI control shown where the Action applies, such as a button in
+	 * the combat view's toolbar: it skips the focus checks that only decide where keys go. */
+	when?: (control?: boolean) => boolean;
+	run: () => void;
+	/** Shown on its button. Without one, the button shows only the icon. */
+	icon?: LucideIcon;
+	/** Short text for its button, where the icon alone would be unclear. */
+	label?: string;
+};
 
 /** The argument of the active tab, if it is a `view` tab whose target is in `existing`. */
 function activeTab(view: string, existing: object) {
@@ -205,7 +272,7 @@ const onTracker = (
 	when = () => target().labels.length > 0,
 ): Action => ({
 	title,
-	when: () => trackerFocused() && when(),
+	when: (control) => (control || trackerFocused()) && when(),
 	run: () => run(target()),
 });
 
@@ -370,6 +437,8 @@ const zoomBy = (step: -1 | 0 | 1) => () =>
 export const actions: Record<ActionId, Action> = {
 	"command-palette": {
 		title: "Show all commands",
+		icon: TerminalIcon,
+		label: "Commands",
 		run() {
 			const keys = binds(getGame().config.keys);
 			pick({
@@ -417,6 +486,7 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"toggle-sidebar": {
 		title: "Toggle sidebar",
+		icon: PanelLeftIcon,
 		run: () => ui.set({ sidebar: !ui.get().sidebar }),
 	},
 	"focus-sidebar": { title: "Focus sidebar", run: focusSidebar },
@@ -435,18 +505,19 @@ export const actions: Record<ActionId, Action> = {
 		when: () => ui.get().tabs.length > 1,
 		run: () => cycleTab(-1),
 	},
-	"new-tab": { title: "New tab", run: newTab },
-	"go-back": { title: "Go back", ...go(-1) },
-	"go-forward": { title: "Go forward", ...go(1) },
+	"new-tab": { title: "New tab", run: newTab, icon: PlusIcon },
+	"go-back": { title: "Go back", ...go(-1), icon: ArrowLeftIcon },
+	"go-forward": { title: "Go forward", ...go(1), icon: ArrowRightIcon },
 	"zoom-in": { title: "Zoom in", run: zoomBy(1) },
 	"zoom-out": { title: "Zoom out", run: zoomBy(-1) },
 	"reset-zoom": { title: "Reset zoom", run: zoomBy(0) },
-	"new-note": newNote(undefined, "note"),
-	"new-session": newNote("session", "session"),
-	"new-creature": newNote("creature", "creature"),
-	"new-location": newNote("location", "location"),
+	"new-note": { ...newNote(undefined, "note"), icon: PlusIcon },
+	"new-session": { ...newNote("session", "session"), icon: PlusIcon },
+	"new-creature": { ...newNote("creature", "creature"), icon: PlusIcon },
+	"new-location": { ...newNote("location", "location"), icon: PlusIcon },
 	"rename-note": {
 		title: "Rename note",
+		icon: PencilIcon,
 		...onNote((from) =>
 			rename(
 				from,
@@ -458,6 +529,7 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"delete-note": {
 		title: "Delete note",
+		icon: TrashIcon,
 		...onNote((title) =>
 			confirmDelete(
 				`Delete “${title}”? Links to it will be left dangling.`,
@@ -469,6 +541,7 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"change-kind": {
 		title: "Change note kind",
+		icon: ShapesIcon,
 		...onNote((title) => {
 			const current = getGame().notes[title]?.metadata.kind;
 			pick({
@@ -488,6 +561,7 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"search-notes": {
 		title: "Search note text",
+		icon: TextSearchIcon,
 		run: () =>
 			pick({
 				title: "Search note text",
@@ -498,6 +572,7 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"set-image-role": {
 		title: "Set image role",
+		icon: TagIcon,
 		...onNote(
 			(title) => {
 				const note = getGame().notes[title] as Note;
@@ -515,6 +590,8 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"mark-pc": {
 		title: "Mark as PC",
+		icon: UserCheckIcon,
+		label: "Mark as PC",
 		...onNote(
 			(title) => setFields(title, { pc: true }),
 			({ metadata: m }) => m.kind === "creature" && !m.pc,
@@ -522,6 +599,8 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"mark-npc": {
 		title: "Mark as NPC",
+		icon: UserXIcon,
+		label: "Mark as NPC",
 		...onNote(
 			(title) => setFields(title, { pc: null }),
 			({ metadata: m }) => m.kind === "creature" && !!m.pc,
@@ -529,6 +608,8 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"set-display-name": {
 		title: "Set display name",
+		icon: VenetianMaskIcon,
+		label: "Display name",
 		...onNote((title) => {
 			const metadata = getGame().notes[title]?.metadata;
 			ask(
@@ -544,6 +625,8 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"set-session-date": {
 		title: "Set session date",
+		icon: CalendarDaysIcon,
+		label: "Set date",
 		...onNote(
 			(title) => {
 				const metadata = getGame().notes[title]?.metadata;
@@ -563,6 +646,8 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"edit-statblock": {
 		title: "Edit stat block",
+		icon: SquarePenIcon,
+		label: "Edit stat block",
 		...onNote(
 			(title) =>
 				ui.get().editing === title ? stopEditing() : ui.set({ editing: title }),
@@ -571,26 +656,33 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"add-statblock-section": {
 		title: "Add stat block section",
+		icon: ListPlusIcon,
+		label: "Section",
 		when: () => formCursor() !== undefined,
 		run: addSection,
 	},
 	"add-statblock-entry": {
 		title: "Add stat block entry",
+		icon: PlusIcon,
+		label: "Entry",
 		when: () => formCursor() !== undefined,
 		run: addEntry,
 	},
 	"remove-statblock-item": {
 		title: "Remove stat block entry or section",
+		icon: TrashIcon,
 		when: inSection,
 		run: removeItem,
 	},
 	"move-statblock-item-up": {
 		title: "Move stat block entry or section up",
+		icon: ArrowUpIcon,
 		when: inSection,
 		run: moveItem(-1),
 	},
 	"move-statblock-item-down": {
 		title: "Move stat block entry or section down",
+		icon: ArrowDownIcon,
 		when: inSection,
 		run: moveItem(1),
 	},
@@ -600,17 +692,22 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"open-game": {
 		title: "Open another Game",
+		icon: FolderOpenIcon,
 		when: electron,
 		run: () => window.ttrpgui?.openGame(),
 	},
-	"new-combat": create(
-		"combat",
-		{ title: "New combat. Every PC joins it.", placeholder: "Name" },
-		(name) => ({ type: "createCombat", name }),
-		combatTab,
-	),
+	"new-combat": {
+		...create(
+			"combat",
+			{ title: "New combat. Every PC joins it.", placeholder: "Name" },
+			(name) => ({ type: "createCombat", name }),
+			combatTab,
+		),
+		icon: PlusIcon,
+	},
 	"rename-combat": {
 		title: "Rename combat",
+		icon: PencilIcon,
 		...inCombatTab((from) =>
 			rename(
 				from,
@@ -621,6 +718,7 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"delete-combat": {
 		title: "Delete combat",
+		icon: TrashIcon,
 		...inCombatTab((name) =>
 			confirmDelete(
 				`Delete the combat “${name}”?`,
@@ -632,6 +730,7 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"attach-session": {
 		title: "Attach combat to a session",
+		icon: CalendarPlusIcon,
 		...inCombatTab((combat) =>
 			pick({
 				title: `Attach “${combat}” to a session`,
@@ -643,98 +742,164 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"detach-session": {
 		title: "Detach combat from its session",
+		icon: CalendarXIcon,
 		...inCombatTab(
 			(combat) => send({ type: "setCombatSession", combat }),
 			(c) => c.session !== undefined,
 		),
 	},
-	"start-combat": sendForCombat(
-		"Start combat",
-		"startCombat",
-		() => !running(),
-	),
-	"end-combat": sendForCombat("End combat", "endCombat", running),
-	"next-turn": sendForCombat("Next turn", "nextTurn", running),
-	"roll-initiative": sendForCombat(
-		"Roll initiative for NPCs without it",
-		"rollInitiative",
-	),
-	"set-initiative": amount(
-		"Set initiative",
-		"setInitiative",
-		(n) => `Set initiative to ${n}`,
-		-Infinity,
-	),
-	"add-combatant": onTracker(
-		"Add combatant",
-		({ combat }) => addCombatant(combat),
-		anyTime,
-	),
-	"remove-combatant": onTracker("Remove combatant", async (t) => {
-		if (await send({ type: "removeCombatants", ...t }))
-			ui.set({ selected: [] });
-	}),
-	"rename-combatant": onTracker("Rename combatant", ({ combat }) => {
-		const label = cursorLabel() as string;
-		rename(
-			label,
-			(to) => ({ type: "renameCombatant", combat, label, to }),
-			(to) =>
-				ui.set({
-					selected: ui.get().selected.map((l) => (l === label ? to : l)),
-				}),
-		);
-	}),
-	"edit-combatant-note": onTracker("Edit combatant note", focusNote),
+	"start-combat": {
+		...sendForCombat("Start combat", "startCombat", () => !running()),
+		icon: SwordsIcon,
+		label: "Start combat",
+	},
+	"end-combat": {
+		...sendForCombat("End combat", "endCombat", running),
+		icon: FlagIcon,
+		label: "End combat",
+	},
+	"next-turn": {
+		...sendForCombat("Next turn", "nextTurn", running),
+		icon: StepForwardIcon,
+		label: "Next turn",
+	},
+	"roll-initiative": {
+		...sendForCombat("Roll initiative for NPCs without it", "rollInitiative"),
+		icon: DicesIcon,
+		label: "Roll",
+	},
+	"set-initiative": {
+		...amount(
+			"Set initiative",
+			"setInitiative",
+			(n) => `Set initiative to ${n}`,
+			-Infinity,
+		),
+		icon: HashIcon,
+	},
+	"add-combatant": {
+		...onTracker(
+			"Add combatant",
+			({ combat }) => addCombatant(combat),
+			anyTime,
+		),
+		icon: UserPlusIcon,
+		label: "Add",
+	},
+	"remove-combatant": {
+		...onTracker("Remove combatant", async (t) => {
+			if (await send({ type: "removeCombatants", ...t }))
+				ui.set({ selected: [] });
+		}),
+		icon: UserMinusIcon,
+	},
+	"rename-combatant": {
+		...onTracker("Rename combatant", ({ combat }) => {
+			const label = cursorLabel() as string;
+			rename(
+				label,
+				(to) => ({ type: "renameCombatant", combat, label, to }),
+				(to) =>
+					ui.set({
+						selected: ui.get().selected.map((l) => (l === label ? to : l)),
+					}),
+			);
+		}),
+		icon: PencilIcon,
+	},
+	"edit-combatant-note": {
+		...onTracker("Edit combatant note", focusNote),
+		icon: NotebookPenIcon,
+	},
 	"toggle-select": onTracker("Select or deselect combatant", toggleSelect),
-	"clear-selection": onTracker(
-		"Clear selection",
-		() => ui.set({ selected: [] }),
-		() => ui.get().selected.length > 0,
-	),
-	damage: amount(
-		"Damage",
-		"damage",
-		(n) => `Deal ${n} damage`,
-		0,
-		checkConcentration,
-	),
-	heal: amount("Heal", "heal", (n) => `Heal ${n} HP`),
-	"set-temp-hp": amount(
-		"Set temp HP",
-		"setTempHp",
-		(n) => `Set temp HP to ${n}`,
-	),
-	"set-max-hp-adjustment": amount(
-		"Adjust max HP",
-		"setMaxAdjust",
-		(n) => `Set the max HP adjustment to ${signed(n)}`,
-		-Infinity,
-	),
-	"toggle-condition": onTracker("Toggle condition", toggleCondition),
-	"toggle-concentration": sendFor("Toggle concentration", {
-		type: "toggleConcentration",
-	}),
-	"death-save-success": sendFor("Record a death save success", {
-		type: "deathSave",
-		failure: false,
-	}),
-	"death-save-failure": sendFor("Record a death save failure", {
-		type: "deathSave",
-		failure: true,
-	}),
-	"spend-legendary-action": sendFor("Spend a legendary action", {
-		type: "spendLegendary",
-		kind: "actions",
-	}),
-	"spend-legendary-resistance": sendFor("Spend a legendary resistance", {
-		type: "spendLegendary",
-		kind: "resistances",
-	}),
-	"undo-combat": sendForCombat("Undo combat edit", "undo"),
-	"redo-combat": sendForCombat("Redo combat edit", "redo"),
+	"clear-selection": {
+		...onTracker(
+			"Clear selection",
+			() => ui.set({ selected: [] }),
+			() => ui.get().selected.length > 0,
+		),
+		icon: SquareXIcon,
+	},
+	damage: {
+		...amount(
+			"Damage",
+			"damage",
+			(n) => `Deal ${n} damage`,
+			0,
+			checkConcentration,
+		),
+		icon: HeartCrackIcon,
+		label: "Damage",
+	},
+	heal: {
+		...amount("Heal", "heal", (n) => `Heal ${n} HP`),
+		icon: HeartPlusIcon,
+		label: "Heal",
+	},
+	"set-temp-hp": {
+		...amount("Set temp HP", "setTempHp", (n) => `Set temp HP to ${n}`),
+		icon: ShieldPlusIcon,
+	},
+	"set-max-hp-adjustment": {
+		...amount(
+			"Adjust max HP",
+			"setMaxAdjust",
+			(n) => `Set the max HP adjustment to ${signed(n)}`,
+			-Infinity,
+		),
+		icon: HeartPulseIcon,
+	},
+	"toggle-condition": {
+		...onTracker("Toggle condition", toggleCondition),
+		icon: TagIcon,
+		label: "Condition",
+	},
+	"toggle-concentration": {
+		...sendFor("Toggle concentration", {
+			type: "toggleConcentration",
+		}),
+		icon: BrainIcon,
+	},
+	"death-save-success": {
+		...sendFor("Record a death save success", {
+			type: "deathSave",
+			failure: false,
+		}),
+		icon: CircleCheckIcon,
+	},
+	"death-save-failure": {
+		...sendFor("Record a death save failure", {
+			type: "deathSave",
+			failure: true,
+		}),
+		icon: SkullIcon,
+	},
+	"spend-legendary-action": {
+		...sendFor("Spend a legendary action", {
+			type: "spendLegendary",
+			kind: "actions",
+		}),
+		icon: CrownIcon,
+	},
+	"spend-legendary-resistance": {
+		...sendFor("Spend a legendary resistance", {
+			type: "spendLegendary",
+			kind: "resistances",
+		}),
+		icon: ShieldCheckIcon,
+	},
+	"undo-combat": {
+		...sendForCombat("Undo combat edit", "undo"),
+		icon: Undo2Icon,
+	},
+	"redo-combat": {
+		...sendForCombat("Redo combat edit", "redo"),
+		icon: Redo2Icon,
+	},
 	"go-live": {
 		title: "Go live with a session",
+		icon: RadioIcon,
+		label: "Go live",
 		run: () =>
 			ask(
 				{
@@ -751,6 +916,8 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"end-session": {
 		title: "End the live session",
+		icon: CircleStopIcon,
+		label: "End session",
 		when: () => liveSession() !== undefined,
 		run: () => send({ type: "endSession" }),
 	},
@@ -761,6 +928,7 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"party-rest": {
 		title: "Party rest: restore every PC to full HP",
+		icon: BedIcon,
 		run: () =>
 			pick({
 				title: "Restore every PC to full HP?",
@@ -772,34 +940,49 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"open-display": {
 		title: "Open the player display",
+		icon: MonitorUpIcon,
 		when: electron,
 		run: () => window.ttrpgui?.display(true),
 	},
 	"close-display": {
 		title: "Close the player display",
+		icon: MonitorOffIcon,
 		when: electron,
 		run: () => window.ttrpgui?.display(false),
 	},
-	"show-image": { title: "Show an image on the display", run: showImage },
+	"show-image": {
+		title: "Show an image on the display",
+		run: showImage,
+		icon: ImageIcon,
+	},
 	"hide-image": {
 		title: "Hide the image on the display",
+		icon: ImageOffIcon,
 		when: () => getGame().runtime.image !== undefined,
 		run: () => send({ type: "showImage" }),
 	},
-	"new-atmosphere": create(
-		"atmosphere",
-		{ title: "New atmosphere", placeholder: "Name" },
-		(name) => ({ type: "createAtmosphere", name }),
-		atmosphereTab,
-	),
+	"new-atmosphere": {
+		...create(
+			"atmosphere",
+			{ title: "New atmosphere", placeholder: "Name" },
+			(name) => ({ type: "createAtmosphere", name }),
+			atmosphereTab,
+		),
+		icon: PlusIcon,
+	},
 	"switch-atmosphere": onAtmosphere("Switch atmosphere", (name) =>
 		send({ type: "switchAtmosphere", name }),
 	),
-	"set-default-atmosphere": onAtmosphere("Set the default atmosphere", (name) =>
-		send({ type: "setDefaultAtmosphere", name }),
-	),
+	"set-default-atmosphere": {
+		...onAtmosphere("Set the default atmosphere", (name) =>
+			send({ type: "setDefaultAtmosphere", name }),
+		),
+		icon: StarIcon,
+		label: "Make default",
+	},
 	"rename-atmosphere": {
 		title: "Rename atmosphere",
+		icon: PencilIcon,
 		...inAtmosphereTab((from) =>
 			rename(
 				from,
@@ -810,6 +993,7 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"delete-atmosphere": {
 		title: "Delete atmosphere",
+		icon: TrashIcon,
 		...inAtmosphereTab((name) =>
 			confirmDelete(
 				`Delete the atmosphere “${name}” and its media?`,
@@ -819,11 +1003,16 @@ export const actions: Record<ActionId, Action> = {
 			),
 		),
 	},
-	"sync-atmosphere": onAtmosphere("Sync atmosphere media", (name) =>
-		send({ type: "syncAtmosphere", name }),
-	),
+	"sync-atmosphere": {
+		...onAtmosphere("Sync atmosphere media", (name) =>
+			send({ type: "syncAtmosphere", name }),
+		),
+		icon: DownloadIcon,
+		label: "Sync media",
+	},
 	"set-combat-atmosphere": {
 		title: "Set the combat's atmosphere",
+		icon: CloudFogIcon,
 		...inCombatTab((combat) =>
 			pick({
 				title: `Atmosphere for “${combat}”`,
@@ -835,6 +1024,7 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"clear-combat-atmosphere": {
 		title: "Clear the combat's atmosphere",
+		icon: CloudOffIcon,
 		...inCombatTab(
 			(combat) => send({ type: "setCombatAtmosphere", combat }),
 			(c) => c.atmosphere !== undefined,
@@ -842,10 +1032,12 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"toggle-music": {
 		title: "Pause or resume music",
+		icon: PauseIcon,
 		run: () => send({ type: "setMusic", paused: !music().paused }),
 	},
 	"next-track": {
 		title: "Skip to another track",
+		icon: SkipForwardIcon,
 		run: () => send({ type: "nextTrack", after: music().track }),
 	},
 	"volume-up": { title: "Music volume up", run: volume(10) },
@@ -853,7 +1045,12 @@ export const actions: Record<ActionId, Action> = {
 };
 
 const ids = Object.keys(actions) as ActionId[];
-const available = () => ids.filter((id) => actions[id].when?.() ?? true);
+
+/** Whether `id` can run now, from the keyboard or, with `control`, from a GUI control. See `Action.when`. */
+export const canRun = (id: ActionId, control = false) =>
+	actions[id].when?.(control) ?? true;
+
+const available = () => ids.filter((id) => canRun(id));
 
 /** The mouse's back and forward buttons. */
 const mouseActions: Record<number, ActionId> = {

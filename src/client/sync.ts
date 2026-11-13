@@ -56,6 +56,9 @@ export function send(mutation: Mutation): Promise<boolean> {
 
 export const useStatus = () => store.use((s) => s.status);
 
+/** Calls `listener` on every change to synced state or the connection. */
+export const subscribeGame = store.subscribe;
+
 /** Synced state, for use outside React. Only valid after the first snapshot. */
 export const getGame = () => store.get().game as GameState;
 
