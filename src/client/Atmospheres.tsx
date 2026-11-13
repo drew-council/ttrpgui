@@ -1,7 +1,7 @@
 // The atmosphere view: its links, whether it is the default, and the media it has. Actions edit the rest.
-import { Button } from "#components/ui/button.tsx";
 import { activeAtmosphere, videoFile } from "../shared/display.ts";
 import type { Atmosphere } from "../shared/state.ts";
+import { ActionButton, ActionItem, ActionMenu } from "./controls.tsx";
 import { gameUrl } from "./Display.tsx";
 import { SaveInput } from "./StatBlock.tsx";
 import { send, useGame } from "./sync.ts";
@@ -26,11 +26,19 @@ export function AtmosphereView({ arg: name }: { arg: string }) {
 		<section className={page}>
 			<header>
 				<h1 className={pageTitle}>{name}</h1>
-				<p className={pageMeta}>
+				<div className={pageMeta}>
 					<KindMark kind="atmosphere" className="-mr-2" />
-					{settings.default ? "Default atmosphere" : "Atmosphere"}
+					<span>{settings.default ? "Default atmosphere" : "Atmosphere"}</span>
 					{active && <span className="font-bold text-primary">Active</span>}
-				</p>
+					<span className="ml-auto flex items-center gap-0.5">
+						{!active && <ActionButton id="switch-atmosphere" />}
+						{!settings.default && <ActionButton id="set-default-atmosphere" />}
+						<ActionMenu>
+							<ActionItem id="rename-atmosphere" />
+							<ActionItem id="delete-atmosphere" destructive />
+						</ActionMenu>
+					</span>
+				</div>
 			</header>
 			<dl className="mt-6 grid gap-2">
 				{links.map(([key, label, placeholder]) => (
@@ -55,13 +63,11 @@ export function AtmosphereView({ arg: name }: { arg: string }) {
 				))}
 			</dl>
 			<p className="mt-4 flex items-center gap-3 text-sm text-faint">
-				<Button
+				<ActionButton
+					id="sync-atmosphere"
 					variant="outline"
 					className="border-primary font-bold text-primary dark:border-primary"
-					onClick={() => send({ type: "syncAtmosphere", name })}
-				>
-					Sync media
-				</Button>
+				/>
 				Downloads what is missing from the links with yt-dlp.
 			</p>
 			<Section label="Wallpaper">

@@ -1,14 +1,22 @@
 // Tab views. A tab id is `view:arg` (or just `view`); adding a view is one entry in `views`.
 import { EditorView } from "@codemirror/view";
 import { cn } from "cn";
+import { MonitorUpIcon, TagIcon } from "lucide-react";
 import { type FC, type ReactNode, useEffect, useRef, useState } from "react";
 import { Badge } from "#components/ui/badge.tsx";
+import { DropdownMenuSeparator } from "#components/ui/dropdown-menu.tsx";
 import { Kbd } from "#components/ui/kbd.tsx";
 import { binds, formatKey } from "../shared/keys.ts";
 import { backlinks, imageFile, mainImage } from "../shared/notes.ts";
 import { type ImageRole, imageRoles } from "../shared/schema.ts";
 import type { GameState, Note } from "../shared/state.ts";
 import { AtmosphereView } from "./Atmospheres.tsx";
+import {
+	ActionButton,
+	ActionItem,
+	ActionMenu,
+	ToolButton,
+} from "./controls.tsx";
 import { listClass, rowClass, useListNav } from "./list.ts";
 import { MarkdownBox } from "./MarkdownBox.tsx";
 import { StatBlock } from "./StatBlock.tsx";
@@ -226,16 +234,17 @@ function NoteView({ arg: title }: { arg: string }) {
 		>
 			<header>
 				<h1 className={pageTitle}>{title}</h1>
-				<p className={pageMeta}>
+				<div className={pageMeta}>
 					<KindMark kind={kind} className="-mr-2" />
-					{kindLabels[kind]}
+					<span>{kindLabels[kind]}</span>
 					{metadata.kind === "session" && metadata.date && (
 						<span>{formatDate(metadata.date)}</span>
 					)}
 					{metadata.kind === "creature" && metadata.display_name && (
 						<span>Players see “{metadata.display_name}”</span>
 					)}
-				</p>
+					<NoteActions title={title} note={note} />
+				</div>
 			</header>
 			{metadata.kind === "location" && picture}
 			{creature && (
@@ -281,6 +290,7 @@ function NoteView({ arg: title }: { arg: string }) {
 							<span className="text-sm text-faint">
 								{roleLabel(note, image)}
 							</span>
+							<ImageControls title={title} image={image} />
 						</>
 					)}
 				</ListBox>
@@ -302,6 +312,72 @@ function NoteView({ arg: title }: { arg: string }) {
 				</ListBox>
 			</div>
 		</article>
+	);
+}
+
+/** Header Actions by kind, then the rest in a menu. */
+function NoteActions({ title, note }: { title: string; note: Note }) {
+	const { metadata } = note;
+	const live = useGame((game) => game.runtime.session === title);
+	return (
+		<span className="ml-auto flex flex-wrap items-center gap-0.5">
+			{metadata.kind === "creature" && (
+				<>
+					<ActionButton id="edit-statblock" />
+					<ActionButton id={metadata.pc ? "mark-npc" : "mark-pc"} />
+					<ActionButton id="set-display-name" />
+				</>
+			)}
+			{metadata.kind === "session" && (
+				<>
+					{live ? (
+						<ActionButton id="end-session" />
+					) : (
+						<ActionButton id="go-live-with-this-session" />
+					)}
+					<ActionButton id="set-session-date" />
+				</>
+			)}
+			<ActionMenu>
+				<ActionItem id="rename-note" />
+				<ActionItem id="change-kind" />
+				<ActionItem id="set-image-role" />
+				<DropdownMenuSeparator />
+				<ActionItem id="delete-note" destructive />
+			</ActionMenu>
+		</span>
+	);
+}
+
+/** Show or hide one image on the display, and set its role. Clicks stay off the row. */
+function ImageControls({ title, image }: { title: string; image: string }) {
+	const path = `${title}/${image}`;
+	const shown = useGame((game) => game.runtime.image === path);
+	return (
+		// biome-ignore lint/a11y/noStaticElementInteractions: only keeps the buttons' clicks from the row.
+		// biome-ignore lint/a11y/useKeyWithClickEvents: the row's keys are the list's.
+		<span
+			className="flex items-center"
+			onClick={(e) => e.stopPropagation()}
+			onAuxClick={(e) => e.stopPropagation()}
+		>
+			{shown ? (
+				<ActionButton id="hide-image" tabIndex={-1} className="text-primary" />
+			) : (
+				<ToolButton
+					icon={MonitorUpIcon}
+					title="Show on the display"
+					tabIndex={-1}
+					onClick={() => send({ type: "showImage", image: path })}
+				/>
+			)}
+			<ToolButton
+				icon={TagIcon}
+				title="Set its role"
+				tabIndex={-1}
+				onClick={() => chooseImageRole(title, image)}
+			/>
+		</span>
 	);
 }
 

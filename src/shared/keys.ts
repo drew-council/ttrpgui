@@ -68,6 +68,7 @@ export const defaultKeys = {
 	"undo-combat": "u",
 	"redo-combat": "ctrl+r",
 	"go-live": "",
+	"go-live-with-this-session": "",
 	"end-session": "",
 	"open-live-session": "ctrl+l",
 	"party-rest": "",

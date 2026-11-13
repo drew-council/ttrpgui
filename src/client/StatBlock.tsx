@@ -2,6 +2,7 @@
 // Each field saves on blur through `saveStatblock`; the server validates it against the schema.
 import { cn } from "cn";
 import { produce } from "immer";
+import { CheckIcon } from "lucide-react";
 import { type CSSProperties, createRef, useEffect, useState } from "react";
 import { Input } from "#components/ui/input.tsx";
 import type { Statblock } from "../shared/schema.ts";
@@ -14,6 +15,7 @@ import {
 	signed,
 	toInt,
 } from "../shared/statblock.ts";
+import { ActionButton } from "./controls.tsx";
 import { MarkdownBox } from "./MarkdownBox.tsx";
 import { getGame, send, useGame } from "./sync.ts";
 import { pick, toast, ui } from "./ui.ts";
@@ -129,6 +131,26 @@ export function StatBlock({
 				stopEditing();
 			}}
 		>
+			{editing && (
+				<div
+					role="toolbar"
+					aria-label="Stat block"
+					className="sticky top-2 z-10 mb-3 flex items-center gap-0.5 rounded-lg border bg-card p-1 shadow-overlay"
+				>
+					<ActionButton id="add-statblock-section" />
+					<ActionButton id="add-statblock-entry" />
+					<ActionButton id="move-statblock-item-up" />
+					<ActionButton id="move-statblock-item-down" />
+					<ActionButton id="remove-statblock-item" />
+					<ActionButton
+						id="edit-statblock"
+						label="Done"
+						icon={CheckIcon}
+						variant="outline"
+						className="ml-auto border-primary/50 text-primary dark:border-primary/50"
+					/>
+				</div>
+			)}
 			<dl className="flex gap-2">
 				{stats.filter(shown).map((field) => (
 					<div
@@ -271,8 +293,8 @@ export function StatBlock({
 			))}
 			{editing && !sb.sections?.length && (
 				<p className={cn(empty, "mt-4")}>
-					Actions, traits, and the like go in sections. Run “Add stat block
-					section” to start one.
+					Actions, traits, and the like go in sections. Add one with “Section”
+					above.
 				</p>
 			)}
 		</div>

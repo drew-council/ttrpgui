@@ -20,6 +20,9 @@ Every command is in the palette (Ctrl+P) with its key. The ones you would look f
 - **Table bar**, along the bottom: connection, the live session (Go live, its name, End session), the running combat and round, the player display (open, close; Electron only), the active atmosphere as a switcher, music (play or pause, skip, the track, a volume slider), the shown image (show, its name, hide), problems, and Commands.
 - **Tab bar**: the sidebar toggle, back, forward, and new tab.
 - **Combat view**, a toolbar under the title: start or end, next turn, roll, add, undo, redo; then, for the selection or the cursor row, damage, heal, condition, temp HP, initiative, concentration, and select. The ⋯ menu holds the rest: max HP, death saves, legendary counters, rename, note, clear selection, remove, and the combat's atmosphere, session, party rest, rename, and delete. Shift+click selects rows.
+- **Note header**: by kind, "Edit stat block", "Mark as PC" or "Mark as NPC", and "Display name" for a creature; "Go live" or "End session" and "Set date" for a session. Its ⋯ menu renames, changes the kind, sets an image role, or deletes. Each image row can show the image on the display, hide it, or set its role.
+- **Stat block form**: Section, Entry, move up and down, remove, and Done, acting at the field with focus.
+- **Atmosphere view**: "Make active" and "Make default" in the header, rename and delete in its ⋯ menu, and "Sync media" under the links.
 
 ## Server alone
 
@@ -268,7 +271,7 @@ Operations apply to the selection, or to the cursor row when nothing is selected
 
 On the display itself, F or a double-click toggles fullscreen, and `Ctrl+=` `Ctrl+-` `Ctrl+0` zoom it in, out, and back to 100% without touching the control window.
 
-"New atmosphere", "Set the default atmosphere", "Sync atmosphere media", and "Set the combat's atmosphere" are in the palette. The sidebar lists atmospheres; each opens a view of its links and media.
+The sidebar lists atmospheres; each opens a view of its links and media, with "Make active", "Make default", and "Sync media". The combat's ⋯ menu sets the atmosphere its start switches to.
 
 ## Tabs
 

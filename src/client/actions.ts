@@ -921,6 +921,16 @@ export const actions: Record<ActionId, Action> = {
 				goLive,
 			),
 	},
+	"go-live-with-this-session": {
+		title: "Go live with this session",
+		icon: RadioIcon,
+		label: "Go live",
+		...onNote(
+			goLive,
+			(note) =>
+				note.metadata.kind === "session" && activeNote() !== liveSession(),
+		),
+	},
 	"end-session": {
 		title: "End the live session",
 		icon: CircleStopIcon,
