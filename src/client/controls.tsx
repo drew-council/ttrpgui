@@ -54,12 +54,19 @@ export const bindOf = (id: ActionId) => {
 
 const keepFocus = (e: MouseEvent) => e.preventDefault();
 
-/** A small button with a tooltip naming what it does and its bind. Text when `label` is set, else only the icon. */
+/** Centers a line of text's capitals on the icons beside it. The UI font sits high in its line box, so the box is
+ * trimmed to the capitals and padded evenly, which keeps descenders inside a truncating box. */
+export const capText = "[text-box:trim-both_cap_alphabetic] py-[0.3em]";
+
+/** A small button with a tooltip naming what it does and its bind, and under them `detail`. Text when `label` is set,
+ * else only the icon. A disabled button sits in a span, since a disabled button gets no pointer events, so its tooltip
+ * still shows. */
 export function ToolButton({
 	icon: Icon,
 	label,
 	title,
 	bind,
+	detail,
 	variant = "ghost",
 	className,
 	...props
@@ -68,52 +75,111 @@ export function ToolButton({
 	label?: ReactNode;
 	title: string;
 	bind?: string;
+	detail?: string;
 } & Omit<ComponentProps<typeof Button>, "title" | "size">) {
+	const button = (
+		<Button
+			variant={variant}
+			size={label ? "sm" : "icon-sm"}
+			aria-label={label ? undefined : title}
+			className={cn(
+				"text-muted-foreground",
+				label && "has-[svg]:pl-1.5",
+				className,
+			)}
+			onMouseDown={keepFocus}
+			{...props}
+		>
+			{Icon && <Icon />}
+			{label && (
+				<span className="flex min-w-0 items-center gap-1">
+					{typeof label === "string" ? (
+						<span className={capText}>{label}</span>
+					) : (
+						label
+					)}
+				</span>
+			)}
+		</Button>
+	);
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>
-				<Button
-					variant={variant}
-					size={label ? "sm" : "icon-sm"}
-					aria-label={label ? undefined : title}
-					className={cn(
-						"text-muted-foreground",
-						label && "has-[svg]:pl-1.5",
-						className,
-					)}
-					onMouseDown={keepFocus}
-					{...props}
-				>
-					{Icon && <Icon />}
-					{label && <span className="flex min-w-0 gap-1">{label}</span>}
-				</Button>
+				{props.disabled ? (
+					<span className="inline-flex flex-none">{button}</span>
+				) : (
+					button
+				)}
 			</TooltipTrigger>
-			<TooltipContent>
-				{title} {bind && <Kbd>{bind}</Kbd>}
-			</TooltipContent>
+			<Tip title={title} bind={bind} detail={detail} />
 		</Tooltip>
 	);
 }
 
-/** A button that runs an Action. Disabled while it is unavailable. `label` and `icon` replace the registry's. */
+/** Binds as key caps. */
+const Keys = ({ binds }: { binds: (string | undefined)[] }) =>
+	binds.map(
+		(bind) =>
+			bind && (
+				<Kbd key={bind}>
+					<span className={capText}>{bind}</span>
+				</Kbd>
+			),
+	);
+
+/** A tooltip: what a control does and its binds, and under them `detail` with its own `detailBind`. */
+export function Tip({
+	title,
+	bind,
+	detail,
+	detailBind,
+}: {
+	title: string;
+	bind?: string | (string | undefined)[];
+	detail?: string;
+	detailBind?: string;
+}) {
+	return (
+		<TooltipContent className="flex-col items-start">
+			<span className="flex items-center gap-1.5">
+				<span className={capText}>{title}</span>
+				<Keys binds={[bind].flat()} />
+			</span>
+			{detail && (
+				<span className="flex items-center gap-1.5 opacity-70">
+					<span className={capText}>{detail}</span>
+					<Keys binds={[detailBind]} />
+				</span>
+			)}
+		</TooltipContent>
+	);
+}
+
+/** A button that runs an Action. Disabled while it is unavailable, with the reason in its tooltip. `label`, `icon`
+ * (`null` for none), and `title` replace the registry's; `detail` adds a line to the tooltip while it is available. */
 export function ActionButton({
 	id,
 	label,
 	icon,
+	title,
+	detail,
 	...props
 }: {
 	id: ActionId;
-	label?: string;
-	icon?: LucideIcon;
+	label?: ReactNode;
+	icon?: LucideIcon | null;
+	title?: string;
+	detail?: string;
 } & Omit<ComponentProps<typeof Button>, "title" | "size" | "onClick">) {
 	const action = actions[id];
 	const available = useAvailable(id);
 	return (
 		<ToolButton
-			icon={icon ?? action.icon}
+			icon={icon === null ? undefined : (icon ?? action.icon)}
 			label={label ?? action.label}
-			title={action.title}
+			title={title ?? action.title}
 			bind={bindOf(id)}
+			detail={available ? detail : action.unavailable?.()}
 			disabled={!available}
 			{...props}
 			onClick={() => canRun(id, true) && action.run()}
@@ -133,10 +199,13 @@ export const afterMenu = (run: () => void) => {
 /** A menu, by default "More" behind an ellipsis. When it closes, focus goes back where it was before it opened. */
 export function ActionMenu({
 	label = "More",
+	tooltip,
 	trigger,
 	children,
 }: {
 	label?: string;
+	/** Replaces the tooltip naming `label`, as a `Tip`. */
+	tooltip?: ReactNode;
 	/** Replaces the ellipsis button. MUST forward its props and ref, as a shadcn `Button` does. */
 	trigger?: ReactNode;
 	children: ReactNode;
@@ -162,7 +231,7 @@ export function ActionMenu({
 						)}
 					</DropdownMenuTrigger>
 				</TooltipTrigger>
-				<TooltipContent>{label}</TooltipContent>
+				{tooltip ?? <TooltipContent>{label}</TooltipContent>}
 			</Tooltip>
 			<DropdownMenuContent
 				align={trigger ? "start" : "end"}

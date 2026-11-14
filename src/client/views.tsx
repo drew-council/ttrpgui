@@ -15,6 +15,7 @@ import {
 	ActionButton,
 	ActionItem,
 	ActionMenu,
+	capText,
 	ToolButton,
 } from "./controls.tsx";
 import { listClass, rowClass, useListNav } from "./list.ts";
@@ -236,12 +237,14 @@ function NoteView({ arg: title }: { arg: string }) {
 				<h1 className={pageTitle}>{title}</h1>
 				<div className={pageMeta}>
 					<KindMark kind={kind} className="-mr-2" />
-					<span>{kindLabels[kind]}</span>
+					<span className={capText}>{kindLabels[kind]}</span>
 					{metadata.kind === "session" && metadata.date && (
-						<span>{formatDate(metadata.date)}</span>
+						<span className={capText}>{formatDate(metadata.date)}</span>
 					)}
 					{metadata.kind === "creature" && metadata.display_name && (
-						<span>Players see “{metadata.display_name}”</span>
+						<span className={capText}>
+							Players see “{metadata.display_name}”
+						</span>
 					)}
 					<NoteActions title={title} note={note} />
 				</div>
@@ -581,6 +584,13 @@ export function Welcome() {
 						</div>
 					))}
 			</dl>
+			{window.ttrpgui && (
+				<ActionButton
+					id="open-game"
+					label="Open another Game"
+					className="justify-self-start -ml-2"
+				/>
+			)}
 		</div>
 	);
 }

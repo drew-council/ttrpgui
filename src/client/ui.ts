@@ -48,6 +48,8 @@ type Ui = {
 	selected: string[];
 	/** Bumped by `openTab`: the shown view focuses its main element again. See `useTabFocus`. */
 	refocus: number;
+	/** Whether the player display window is open. Electron only. */
+	display: boolean;
 };
 
 const storageKey = "ttrpgui.ui";
@@ -65,6 +67,7 @@ export const ui = createStore<Ui>({
 	sidebar: true,
 	selected: [],
 	refocus: 0,
+	display: false,
 	...restore(),
 });
 ui.subscribe(() => {

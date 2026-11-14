@@ -30,6 +30,7 @@ import {
 	MonitorOffIcon,
 	MonitorUpIcon,
 	NotebookPenIcon,
+	NotebookTextIcon,
 	PanelLeftIcon,
 	PauseIcon,
 	PencilIcon,
@@ -57,11 +58,12 @@ import {
 	UserPlusIcon,
 	UserXIcon,
 	VenetianMaskIcon,
+	VolumeXIcon,
 } from "lucide-react";
 import { useEffect } from "react";
 import type { SearchHit } from "../server/game.ts";
 import type { Mutation } from "../server/mutations.ts";
-import { activeAtmosphere } from "../shared/display.ts";
+import { activeAtmosphere, nowPlaying } from "../shared/display.ts";
 import {
 	type ActionId,
 	bindHas,
@@ -85,7 +87,7 @@ import {
 	removeItem,
 	stopEditing,
 } from "./StatBlock.tsx";
-import { getGame, send } from "./sync.ts";
+import { getGame, send, subscribeGame } from "./sync.ts";
 import {
 	addCombatant,
 	askNumber,
@@ -128,7 +130,11 @@ import {
 declare global {
 	interface Window {
 		/** Set by the Electron preload. */
-		ttrpgui?: { openGame(): void; display(open: boolean): void };
+		ttrpgui?: {
+			openGame(): void;
+			display(open: boolean): void;
+			onDisplay(show: (open: boolean) => void): void;
+		};
 	}
 }
 
@@ -142,6 +148,8 @@ export type Action = {
 	icon?: LucideIcon;
 	/** Short text for its button, where the icon alone would be unclear. */
 	label?: string;
+	/** Why it cannot run now, for a disabled control's tooltip. */
+	unavailable?: () => string | undefined;
 };
 
 /** The argument of the active tab, if it is a `view` tab whose target is in `existing`. */
@@ -418,13 +426,32 @@ function showImage() {
 
 const music = () => getGame().runtime.music ?? {};
 
+/** Why there is no music to play, if there is none. */
+const noTracks = () => {
+	const { atmospheres, runtime } = getGame();
+	const active = activeAtmosphere(atmospheres, runtime);
+	if (!active) return "No atmosphere";
+	if (!atmospheres[active]?.tracks.length) return `No tracks in ${active}`;
+};
+
+const setVolume = (volume: number) =>
+	send({ type: "setMusic", volume: Math.max(0, Math.min(100, volume)) });
+
 const volume = (step: number) => () =>
-	send({
-		type: "setMusic",
-		volume: Math.max(0, Math.min(100, (music().volume ?? 100) + step)),
-	});
+	setVolume((music().volume ?? 100) + step);
+
+/** The last volume above zero this client saw, which unmuting restores; with none, a moderate one. */
+let unmuted = 50;
+subscribeGame(() => {
+	const v = getGame()?.runtime.music?.volume ?? 100;
+	if (v > 0) unmuted = v;
+});
+
+/** Music Actions that need tracks in the active Atmosphere. */
+const onTracks = { when: () => !noTracks(), unavailable: noTracks };
 
 const electron = () => window.ttrpgui !== undefined;
+window.ttrpgui?.onDisplay((display) => ui.set({ display }));
 
 /** Goes back (-1) or forward (1) in the active tab, past what no longer exists or is open in another tab. */
 const go = (direction: -1 | 1) => {
@@ -940,6 +967,7 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"open-live-session": {
 		title: "Open the live session",
+		icon: NotebookTextIcon,
 		when: () => liveSession() !== undefined,
 		run: () => openTab(noteTab(liveSession() as string)),
 	},
@@ -958,13 +986,13 @@ export const actions: Record<ActionId, Action> = {
 	"open-display": {
 		title: "Open the player display",
 		icon: MonitorUpIcon,
-		when: electron,
+		when: () => electron() && !ui.get().display,
 		run: () => window.ttrpgui?.display(true),
 	},
 	"close-display": {
 		title: "Close the player display",
 		icon: MonitorOffIcon,
-		when: electron,
+		when: () => ui.get().display,
 		run: () => window.ttrpgui?.display(false),
 	},
 	"show-image": {
@@ -1050,17 +1078,35 @@ export const actions: Record<ActionId, Action> = {
 		),
 	},
 	"toggle-music": {
-		title: "Pause or resume music",
+		title: "Play or pause music",
 		icon: PauseIcon,
-		run: () => send({ type: "setMusic", paused: !music().paused }),
+		...onTracks,
+		// With no current track, it starts one, unpaused.
+		run: async () => {
+			const { atmospheres, runtime } = getGame();
+			if (nowPlaying(atmospheres, runtime))
+				send({ type: "setMusic", paused: !music().paused });
+			else if (
+				!music().paused ||
+				(await send({ type: "setMusic", paused: false }))
+			)
+				send({ type: "nextTrack", after: music().track });
+		},
 	},
 	"next-track": {
 		title: "Skip to another track",
 		icon: SkipForwardIcon,
+		...onTracks,
 		run: () => send({ type: "nextTrack", after: music().track }),
 	},
-	"volume-up": { title: "Music volume up", run: volume(10) },
-	"volume-down": { title: "Music volume down", run: volume(-10) },
+	"toggle-mute": {
+		title: "Mute or unmute music",
+		icon: VolumeXIcon,
+		...onTracks,
+		run: () => setVolume(music().volume === 0 ? unmuted : 0),
+	},
+	"volume-up": { title: "Music volume up", ...onTracks, run: volume(10) },
+	"volume-down": { title: "Music volume down", ...onTracks, run: volume(-10) },
 };
 
 const ids = Object.keys(actions) as ActionId[];

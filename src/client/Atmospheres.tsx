@@ -1,7 +1,8 @@
 // The atmosphere view: its links, whether it is the default, and the media it has. Actions edit the rest.
+import { cn } from "cn";
 import { activeAtmosphere, videoFile } from "../shared/display.ts";
 import type { Atmosphere } from "../shared/state.ts";
-import { ActionButton, ActionItem, ActionMenu } from "./controls.tsx";
+import { ActionButton, ActionItem, ActionMenu, capText } from "./controls.tsx";
 import { gameUrl } from "./Display.tsx";
 import { SaveInput } from "./StatBlock.tsx";
 import { send, useGame } from "./sync.ts";
@@ -28,8 +29,14 @@ export function AtmosphereView({ arg: name }: { arg: string }) {
 				<h1 className={pageTitle}>{name}</h1>
 				<div className={pageMeta}>
 					<KindMark kind="atmosphere" className="-mr-2" />
-					<span>{settings.default ? "Default atmosphere" : "Atmosphere"}</span>
-					{active && <span className="font-bold text-primary">Active</span>}
+					<span className={capText}>
+						{settings.default ? "Default atmosphere" : "Atmosphere"}
+					</span>
+					{active && (
+						<span className={cn(capText, "font-bold text-primary")}>
+							Active
+						</span>
+					)}
 					<span className="ml-auto flex items-center gap-0.5">
 						{!active && <ActionButton id="switch-atmosphere" />}
 						{!settings.default && <ActionButton id="set-default-atmosphere" />}

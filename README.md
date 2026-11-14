@@ -7,8 +7,8 @@ It is a headless server that owns a Game directory, with web clients for the con
 ## Game night
 
 1. `bun start` (inside the dev shell). It reopens the last Game; `bun start -- --game DIR` opens another, and an empty directory becomes a new Game.
-2. "Go live" in the table bar (or "Go live with a session" in Ctrl+P) picks or creates the Session. Its name in the bar, or Ctrl+L, opens it.
-3. The monitor button in the bar ("Open the player display") opens the second window. Drag it to the TV and press F for fullscreen. Music and wallpaper start there.
+2. "Go live" in the table bar (or "Go live with a session" in Ctrl+P) picks or creates the Session. Its name in the bar opens a menu to open or end it; Ctrl+L opens it.
+3. The monitor button in the bar ("Open the player display") opens the second window; it lights up while the window is open, and a second press closes it. Drag it to the TV and press F for fullscreen. Music and wallpaper start there.
 4. Open a prepared combat from the sidebar or with Ctrl+K, and press "Start combat" (Shift+S). Closing the control window quits everything.
 
 Table state lives in the Game (`runtime.toml`), so a restart picks up the running combat, the shown image, and the music. Undo history does not survive a restart.
@@ -17,7 +17,7 @@ Table state lives in the Game (`runtime.toml`), so a restart picks up the runnin
 
 Every command is in the palette (Ctrl+P) with its key. The ones you would look for on screen also have a control, with the command and its key in a tooltip:
 
-- **Table bar**, along the bottom: connection, the live session (Go live, its name, End session), the running combat and round, the player display (open, close; Electron only), the active atmosphere as a switcher, music (play or pause, skip, the track, a volume slider), the shown image (show, its name, hide), problems, and Commands.
+- **Table bar**, along the bottom. On the left: the player display toggle (Electron only), the active atmosphere as a switcher, the live session (Go live, or its name with a menu that opens or ends it), the running combat and round, the shown image (show, a thumbnail with its note's name, hide), then problems. On the right, where they never move: the track, play or pause, skip, mute, a volume slider, and the command palette. Play starts a track when none is current. Before the track it says "Paused" or "Muted", and in Electron "Display closed" while the display window is closed, since only the display makes sound; click it to open the display. A dimmed control's tooltip says why it is dimmed, such as "No tracks in Market Day". "Open another Game" is on an empty tab and in Ctrl+P.
 - **Tab bar**: the sidebar toggle, back, forward, and new tab.
 - **Sidebar**: a search button beside the filter, and a + on each group that creates one of its kind. A new creature is an NPC; "Mark as PC" in its header makes it a PC.
 - **Combat view**, a toolbar under the title: start or end, next turn, roll, add, undo, redo; then, for the selection or the cursor row, damage, heal, condition, temp HP, initiative, concentration, and select. The ⋯ menu holds the rest: max HP, death saves, legendary counters, rename, note, clear selection, remove, and the combat's atmosphere, session, party rest, rename, and delete. Shift+click selects rows.
@@ -267,8 +267,9 @@ Operations apply to the selection, or to the cursor row when nothing is selected
 | Key           | Command                                  | Key         | Command                 |
 | ------------- | ---------------------------------------- | ----------- | ----------------------- |
 | `Alt+I`       | show an image; the open note's come first | `Alt+Shift+I` | hide the image        |
-| `Alt+A`       | switch atmosphere                        | `Alt+M`     | pause or resume music   |
+| `Alt+A`       | switch atmosphere                        | `Alt+M`     | play, pause, or resume music |
 | `Alt+N`       | skip to another track                    | `Alt+=` `Alt+-` | volume up, down     |
+| `Alt+0`       | mute, or unmute to the volume before     |             |                         |
 
 On the display itself, F or a double-click toggles fullscreen, and `Ctrl+=` `Ctrl+-` `Ctrl+0` zoom it in, out, and back to 100% without touching the control window.
 

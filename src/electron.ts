@@ -57,7 +57,13 @@ app.commandLine.appendSwitch(
 );
 
 let serverUrl = "";
+let control: BrowserWindow | undefined;
 let display: BrowserWindow | undefined;
+
+/** Tells the control page whether the display window is open. */
+const displayChanged = () =>
+	control?.webContents.send("display", display !== undefined);
+ipcMain.handle("display-open", () => display !== undefined);
 
 // The display is a plain page that may play audio without a click. The page itself toggles fullscreen.
 ipcMain.handle("display", (_, open: boolean) => {
@@ -71,7 +77,9 @@ ipcMain.handle("display", (_, open: boolean) => {
 	});
 	display.on("closed", () => {
 		display = undefined;
+		displayChanged();
 	});
+	displayChanged();
 	void display.loadURL(`${serverUrl}/display`);
 });
 
@@ -86,7 +94,7 @@ void app
 		await writeFile(lastGameFile, gameDir);
 		const { url } = await startServer({ gameDir, host, port });
 		serverUrl = url;
-		const control = new BrowserWindow({
+		control = new BrowserWindow({
 			width: 1280,
 			height: 800,
 			webPreferences: {

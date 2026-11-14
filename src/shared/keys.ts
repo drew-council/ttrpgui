@@ -86,6 +86,7 @@ export const defaultKeys = {
 	"clear-combat-atmosphere": "",
 	"toggle-music": "alt+m",
 	"next-track": "alt+n",
+	"toggle-mute": "alt+0",
 	"volume-up": "alt+=",
 	"volume-down": "alt+-",
 };
