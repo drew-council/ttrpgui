@@ -42,6 +42,7 @@
 	--kind-note: #aea4b4;
 	--kind-combat: #ef9a6a;
 	--kind-atmosphere: #7fcfd6;
+	--kind-vehicle: #c3c97e;
 	/* The tracker's multi-selection. */
 	--select: #8eb2ee;
 }
@@ -90,6 +91,7 @@
 	--color-kind-note: var(--kind-note);
 	--color-kind-combat: var(--kind-combat);
 	--color-kind-atmosphere: var(--kind-atmosphere);
+	--color-kind-vehicle: var(--kind-vehicle);
 	--color-select: var(--select);
 	--radius-sm: calc(var(--radius) * 0.6);
 	--radius-md: calc(var(--radius) * 0.8);

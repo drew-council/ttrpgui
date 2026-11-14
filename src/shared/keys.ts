@@ -20,6 +20,7 @@ export const defaultKeys = {
 	"new-session": "",
 	"new-creature": "",
 	"new-location": "",
+	"new-vehicle": "",
 	"rename-note": "f2",
 	"delete-note": "",
 	"change-kind": "",

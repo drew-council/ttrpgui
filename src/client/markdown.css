@@ -71,6 +71,9 @@
 	font-style: normal;
 	font-weight: 400;
 }
+.md-bare .md-mark {
+	color: inherit;
+}
 .md-link,
 .md-wikilink {
 	color: var(--primary);

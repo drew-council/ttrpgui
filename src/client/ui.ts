@@ -1,5 +1,5 @@
 // Per-client UI state: tabs and their history, sidebar, the open picker, stat block editing, the tracker selection, and
-// zoom. Tabs, their history, the sidebar, and each page's zoom survive a reload.
+// zoom. Tabs, their history, the sidebar and its collapsed groups, and each page's zoom survive a reload.
 import type { MouseEvent } from "react";
 import { flushSync } from "react-dom";
 import { toast as sonner } from "sonner";
@@ -15,6 +15,8 @@ import { createStore } from "./store.ts";
 /** A picker row. `run` gets whether the user asked for a new tab. */
 export type Item = {
 	label: string;
+	/** Also matched, such as the title behind a note's label. */
+	title?: string;
 	detail?: string;
 	hint?: string;
 	run: (newTab: boolean) => void;
@@ -39,6 +41,8 @@ type Ui = {
 	/** Each tab's back and forward history, by tab id. A tab without one has none. */
 	history: Record<string, History>;
 	sidebar: boolean;
+	/** Labels of the collapsed sidebar groups. */
+	collapsed: string[];
 	picker?: PickerSpec;
 	/** The creature whose stat block is open as a form. */
 	editing?: string;
@@ -65,16 +69,17 @@ export const ui = createStore<Ui>({
 	tabs: [],
 	history: {},
 	sidebar: true,
+	collapsed: [],
 	selected: [],
 	refocus: 0,
 	display: false,
 	...restore(),
 });
 ui.subscribe(() => {
-	const { tabs, active, history, sidebar } = ui.get();
+	const { tabs, active, history, sidebar, collapsed } = ui.get();
 	localStorage.setItem(
 		storageKey,
-		JSON.stringify({ tabs, active, history, sidebar }),
+		JSON.stringify({ tabs, active, history, sidebar, collapsed }),
 	);
 });
 

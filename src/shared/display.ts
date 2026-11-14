@@ -103,7 +103,7 @@ export type PlayerRow = {
  */
 function playerLabel(label: string, creature: string, notes: Notes) {
 	const metadata = notes[creature]?.metadata;
-	const name = metadata?.kind === "creature" && metadata.display_name;
+	const name = metadata && "display_name" in metadata && metadata.display_name;
 	if (!name) return label;
 	return label.includes(creature) ? label.replace(creature, name) : name;
 }

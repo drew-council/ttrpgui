@@ -1,13 +1,22 @@
 // Tab views. A tab id is `view:arg` (or just `view`); adding a view is one entry in `views`.
 import { EditorView } from "@codemirror/view";
 import { cn } from "cn";
-import { MonitorUpIcon, TagIcon } from "lucide-react";
+import { CalendarDaysIcon, MonitorUpIcon, TagIcon } from "lucide-react";
 import { type FC, type ReactNode, useEffect, useRef, useState } from "react";
 import { Badge } from "#components/ui/badge.tsx";
 import { DropdownMenuSeparator } from "#components/ui/dropdown-menu.tsx";
 import { Kbd } from "#components/ui/kbd.tsx";
+import { canFight } from "../shared/combat.ts";
 import { binds, formatKey } from "../shared/keys.ts";
-import { backlinks, imageFile, mainImage } from "../shared/notes.ts";
+import {
+	backlinks,
+	formatDate,
+	imageFile,
+	isDateTitle,
+	labelParts,
+	mainImage,
+	noteLabel,
+} from "../shared/notes.ts";
 import { type ImageRole, imageRoles } from "../shared/schema.ts";
 import type { GameState, Note } from "../shared/state.ts";
 import { AtmosphereView } from "./Atmospheres.tsx";
@@ -20,7 +29,7 @@ import {
 } from "./controls.tsx";
 import { listClass, rowClass, useListNav } from "./list.ts";
 import { MarkdownBox } from "./MarkdownBox.tsx";
-import { StatBlock } from "./StatBlock.tsx";
+import { SaveInput, StatBlock } from "./StatBlock.tsx";
 import { getGame, send, useGame } from "./sync.ts";
 import { CombatView, combatTab } from "./Tracker.tsx";
 import { clickOpens, noteTab, openTab, pick, ui } from "./ui.ts";
@@ -99,6 +108,7 @@ export const kindLabels = {
 	pc: "PC",
 	npc: "NPC",
 	location: "Location",
+	vehicle: "Vehicle",
 	note: "Note",
 	combat: "Combat",
 	atmosphere: "Atmosphere",
@@ -117,6 +127,7 @@ const kindColors: Record<DisplayKind, string> = {
 	pc: "bg-kind-pc",
 	npc: "bg-kind-npc",
 	location: "bg-kind-location",
+	vehicle: "bg-kind-vehicle",
 	note: "shadow-[inset_0_0_0_1.5px_var(--kind-note)]",
 	combat: "bg-kind-combat",
 	atmosphere: "bg-kind-atmosphere",
@@ -157,8 +168,49 @@ export const pageMeta =
 
 function NoteLabel({ arg: title }: { arg: string }) {
 	const kind = useGame((game) => kindOf(game.notes[title]));
-	return <KindLabel kind={kind} name={title} />;
+	return (
+		<>
+			<KindMark kind={kind} />
+			<NoteName title={title} />
+		</>
+	);
 }
+
+/** A note's label as a row shows it: a Session's short date, muted when a name follows, then its name in the row's
+ * color. `dateWidth` gives dates one width, so they read as a column. */
+export function NoteName({
+	title,
+	dateWidth,
+}: {
+	title: string;
+	dateWidth?: string;
+}) {
+	const date = useGame((game) => labelParts(title, game.notes[title]).date);
+	const name = useGame((game) => labelParts(title, game.notes[title]).name);
+	return (
+		<span className="min-w-0 flex-1 truncate">
+			{date && (
+				<span
+					className={cn(
+						"tabular-nums",
+						name && "text-faint",
+						dateWidth && ["inline-block", dateWidth],
+					)}
+				>
+					{formatDate(date, true)}
+				</span>
+			)}
+			{date && name && " "}
+			{name}
+		</span>
+	);
+}
+
+/** The Session whose page should focus its name field when it opens, such as one just created. */
+let naming: string | undefined;
+export const nameSession = (title: string) => {
+	naming = title;
+};
 
 function NoteView({ arg: title }: { arg: string }) {
 	const notes = useGame((game) => game.notes);
@@ -168,6 +220,7 @@ function NoteView({ arg: title }: { arg: string }) {
 	const loaded = body !== undefined;
 	const editor = useRef<EditorView>(null);
 	const wrapper = useRef<HTMLDivElement>(null);
+	const nameField = useRef<HTMLInputElement>(null);
 	const tab = noteTab(title);
 	const reveal = ui.use((s) => (s.reveal?.tab === tab ? s.reveal : undefined));
 	const editing = ui.use((s) => s.editing === title);
@@ -184,7 +237,16 @@ function NoteView({ arg: title }: { arg: string }) {
 	}, [title, version]);
 
 	// The wrapper passes focus to the editor. Until the text loads it holds focus, and hands it over on load if it still has it.
-	useTabFocus(() => (editor.current ?? wrapper.current)?.focus());
+	// Without scrolling, as the editor focuses: in the narrow layout the text sits below the stat block.
+	const focusText = () =>
+		editor.current
+			? editor.current.focus()
+			: wrapper.current?.focus({ preventScroll: true });
+	useTabFocus(() => {
+		if (naming !== title) return focusText();
+		naming = undefined;
+		nameField.current?.focus();
+	});
 	useEffect(() => {
 		if (loaded && document.activeElement === wrapper.current)
 			editor.current?.focus();
@@ -212,47 +274,81 @@ function NoteView({ arg: title }: { arg: string }) {
 	const { metadata, images } = note;
 	const kind = kindOf(note);
 	const main = mainImage(note);
-	const creature = metadata.kind === "creature";
+	const maps = images.filter((image) => metadata.images?.[image] === "map");
+	// A creature's or vehicle's portrait and stat block sit beside its title and text, or below the title when narrow.
+	const aside = canFight(note);
 	// Natural size up to a cap, so small images are not blown up and none are cropped.
-	const picture = main && (
-		<img
-			className={cn(
-				"block max-w-full rounded-xl",
-				creature ? "max-h-56" : "mt-6 max-h-80",
-			)}
-			src={noteDir(title) + encodeURIComponent(main)}
-			alt=""
-		/>
-	);
+	const picture = (image: string | undefined, small = false) =>
+		image && (
+			<img
+				className={cn(
+					"block max-w-full rounded-xl",
+					small ? "max-h-56" : "mt-6 max-h-80",
+				)}
+				src={noteDir(title) + encodeURIComponent(image)}
+				alt=""
+			/>
+		);
 	return (
-		// A creature's portrait and stat block sit beside its title and text, or below the title when narrow.
 		<article
 			className={cn(
 				page,
-				creature &&
+				aside &&
 					"grid max-w-[80rem] grid-cols-[minmax(0,1fr)_minmax(20rem,28rem)] grid-rows-[auto_auto_1fr] gap-x-8 @max-[56rem]:grid-cols-[minmax(0,1fr)] @max-[56rem]:grid-rows-none",
 			)}
 		>
 			<header>
-				<h1 className={pageTitle}>{title}</h1>
+				{metadata.kind === "session" ? (
+					<h1>
+						<SaveInput
+							ref={nameField}
+							label="Session name"
+							saved={metadata.name ?? ""}
+							// An older Session's title stands in for its name; else its date in words.
+							placeholder={
+								!isDateTitle(title)
+									? title
+									: metadata.date
+										? longDate(metadata.date)
+										: "Add a name"
+							}
+							onSave={(name) =>
+								send({
+									type: "setMetadata",
+									title,
+									fields: { name: name.trim() || null },
+								})
+							}
+							onDone={focusText}
+							className={cn(
+								pageTitle,
+								"-mx-2 h-auto rounded-lg border-transparent px-2 py-0.5 hover:border-input focus-visible:border-input focus-visible:ring-0 md:text-4xl/[1.1] dark:bg-transparent dark:focus-visible:bg-input/30",
+								!isDateTitle(title) && "placeholder:text-foreground",
+								"focus:placeholder:text-faint",
+							)}
+						/>
+					</h1>
+				) : (
+					<h1 className={pageTitle}>{noteLabel(title, note)}</h1>
+				)}
 				<div className={pageMeta}>
 					<KindMark kind={kind} className="-mr-2" />
 					<span className={capText}>{kindLabels[kind]}</span>
-					{metadata.kind === "session" && metadata.date && (
-						<span className={capText}>{formatDate(metadata.date)}</span>
-					)}
-					{metadata.kind === "creature" && metadata.display_name && (
+					{"display_name" in metadata && metadata.display_name && (
 						<span className={capText}>
 							Players see “{metadata.display_name}”
 						</span>
 					)}
+					{metadata.kind === "session" && (
+						<SessionDate title={title} date={metadata.date} />
+					)}
 					<NoteActions title={title} note={note} />
 				</div>
 			</header>
-			{metadata.kind === "location" && picture}
-			{creature && (
+			{metadata.kind === "location" && picture(main)}
+			{aside && (
 				<aside className="col-start-2 row-span-full grid content-start gap-4 @max-[56rem]:col-auto @max-[56rem]:row-auto @max-[56rem]:mt-6">
-					{picture}
+					{picture(main, true)}
 					<StatBlock title={title} editing={editing} />
 				</aside>
 			)}
@@ -277,6 +373,24 @@ function NoteView({ arg: title }: { arg: string }) {
 						/>
 					)}
 				</div>
+				{metadata.kind === "vehicle" && (
+					<Section label={maps.length > 1 ? "Maps" : "Map"}>
+						{maps.map((image) => (
+							<img
+								key={image}
+								className="mb-4 block w-full rounded-xl"
+								src={noteDir(title) + encodeURIComponent(image)}
+								alt={image}
+							/>
+						))}
+						{!maps.length && (
+							<p className="text-muted-foreground italic">
+								Paste or drop the deck plan into the note, then set its role to
+								Map.
+							</p>
+						)}
+					</Section>
+				)}
 				<ListBox
 					label="Images"
 					items={images}
@@ -318,28 +432,58 @@ function NoteView({ arg: title }: { arg: string }) {
 	);
 }
 
+/** `2026-11-07` as `Saturday, November 7`. */
+const longDate = (iso: string) =>
+	new Date(`${iso}T12:00`).toLocaleDateString("en-US", {
+		weekday: "long",
+		month: "long",
+		day: "numeric",
+	});
+
+/** A Session's date as a quiet button that opens the native date picker, which yields only whole dates or a clear. */
+function SessionDate({ title, date }: { title: string; date?: string }) {
+	const input = useRef<HTMLInputElement>(null);
+	return (
+		<span className="relative -mx-1.5 flex">
+			<ToolButton
+				icon={CalendarDaysIcon}
+				label={date ? formatDate(date) : "Add a date"}
+				title="Set the date"
+				className="text-sm font-normal tabular-nums"
+				onClick={() => input.current?.showPicker()}
+			/>
+			<input
+				ref={input}
+				type="date"
+				tabIndex={-1}
+				aria-hidden
+				className="pointer-events-none absolute bottom-0 left-0 size-0 opacity-0"
+				value={date ?? ""}
+				onChange={(e) =>
+					send({
+						type: "setMetadata",
+						title,
+						fields: { date: e.target.value || null },
+					})
+				}
+			/>
+		</span>
+	);
+}
+
 /** Header Actions by kind, then the rest in a menu. */
 function NoteActions({ title, note }: { title: string; note: Note }) {
 	const { metadata } = note;
 	const live = useGame((game) => game.runtime.session === title);
 	return (
 		<span className="ml-auto flex flex-wrap items-center gap-0.5">
+			{canFight(note) && <ActionButton id="edit-statblock" />}
 			{metadata.kind === "creature" && (
-				<>
-					<ActionButton id="edit-statblock" />
-					<ActionButton id={metadata.pc ? "mark-npc" : "mark-pc"} />
-					<ActionButton id="set-display-name" />
-				</>
+				<ActionButton id={metadata.pc ? "mark-npc" : "mark-pc"} />
 			)}
+			{canFight(note) && <ActionButton id="set-display-name" />}
 			{metadata.kind === "session" && (
-				<>
-					{live ? (
-						<ActionButton id="end-session" />
-					) : (
-						<ActionButton id="go-live-with-this-session" />
-					)}
-					<ActionButton id="set-session-date" />
-				</>
+				<ActionButton id={live ? "end-session" : "go-live-with-this-session"} />
 			)}
 			<ActionMenu>
 				<ActionItem id="rename-note" />
@@ -485,13 +629,6 @@ export const Section = ({
 		{children}
 	</section>
 );
-
-const formatDate = (iso: string) =>
-	new Date(`${iso}T00:00`).toLocaleDateString(undefined, {
-		year: "numeric",
-		month: "long",
-		day: "numeric",
-	});
 
 function ProblemsView() {
 	const problems = useGame((game) => game.problems);

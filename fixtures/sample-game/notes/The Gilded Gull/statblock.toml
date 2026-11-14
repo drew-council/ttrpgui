@@ -1,0 +1,22 @@
+ac = 15
+hp = 120
+speed = "sail 45 ft. (5 mph)"
+immunities = "poison, psychic"
+
+[[sections]]
+name = "Traits"
+
+[[sections.entries]]
+name = "Crew"
+text = "A crew of 12 sails her. Below 6 crew she cannot move."
+
+[[sections]]
+name = "Actions"
+
+[[sections.entries]]
+name = "Ballista"
+text = "*Ranged:* +6 to hit, range 120/480 ft., 3d10 piercing."
+
+[[sections.entries]]
+name = "Ram"
+text = "*Melee:* +8 to hit, 4d10 bludgeoning to a ship or structure."

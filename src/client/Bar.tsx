@@ -27,6 +27,7 @@ import {
 import { Slider } from "#components/ui/slider.tsx";
 import { Tooltip, TooltipTrigger } from "#components/ui/tooltip.tsx";
 import { activeAtmosphere, nowPlaying } from "../shared/display.ts";
+import { noteLabel } from "../shared/notes.ts";
 import { atmosphereTab } from "./Atmospheres.tsx";
 import { actions, switchAtmosphere } from "./actions.ts";
 import {
@@ -292,7 +293,10 @@ function AtmosphereSwitcher({ active }: { active: string }) {
 
 /** Go live, or the live session with a menu to open or end it; then the running combat. */
 function Table() {
-	const live = useGame((game) => game.runtime.session);
+	const live = useGame(
+		({ runtime: { session }, notes }) =>
+			session && noteLabel(session, notes[session]),
+	);
 	const combat = useGame((game) => game.runtime.combat);
 	const round = useGame((game) => game.combats[combat ?? ""]?.round);
 	return (

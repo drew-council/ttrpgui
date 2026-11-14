@@ -1,0 +1,6 @@
+kind = "vehicle"
+display_name = "The Black-Sailed Sloop"
+
+[images]
+"deck-plan.png" = "map"
+"gull.png" = "main"

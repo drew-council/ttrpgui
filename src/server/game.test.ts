@@ -27,8 +27,9 @@ test("sample game loads without problems", async () => {
 		"The Lantern Guild - A Long Watch Upon the Eastern Wall.webp",
 	]);
 	expect(atmospheres["Market Day"]?.wallpaper).toBe("wallpaper.png");
-	expect(Object.keys(notes)).toHaveLength(9);
+	expect(Object.keys(notes)).toHaveLength(14);
 	expect(Object.keys(combats)).toEqual([
+		"Battle at the Docks",
 		"Gatehouse Skirmish",
 		"The Drake Awakens",
 	]);

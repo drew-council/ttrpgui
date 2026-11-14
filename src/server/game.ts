@@ -5,6 +5,7 @@ import { basename, dirname, join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { parse, type TomlError } from "smol-toml";
 import type { z } from "zod";
+import { fighterKinds } from "../shared/combat.ts";
 import { audioFile, parseTracks, videoFile } from "../shared/display.ts";
 import { imageFile, linkTargets } from "../shared/notes.ts";
 import {
@@ -172,17 +173,22 @@ function checkReferences(
 				message: `no atmosphere named “${name}”`,
 			});
 	};
-	const expect = (file: string, path: string[], title: string, kind: Kind) => {
-		if (notes[title]?.metadata.kind !== kind)
+	const expect = (
+		file: string,
+		path: string[],
+		title: string,
+		kinds: Kind[],
+	) => {
+		if (!kinds.includes(notes[title]?.metadata.kind as Kind))
 			problems.push({
 				file,
 				field: field(path),
-				message: `no ${kind} note titled “${title}”`,
+				message: `no ${kinds.join(" or ")} note titled “${title}”`,
 			});
 	};
 	for (const [name, combat] of Object.entries(combats)) {
 		const file = `combats/${name}.toml`;
-		if (combat.session) expect(file, ["session"], combat.session, "session");
+		if (combat.session) expect(file, ["session"], combat.session, ["session"]);
 		expectAtmosphere(file, "atmosphere", combat.atmosphere);
 		const combatants = combat.combatants ?? {};
 		if (combat.turn !== undefined && !combatants[combat.turn])
@@ -193,7 +199,7 @@ function checkReferences(
 			});
 		for (const [label, c] of Object.entries(combatants)) {
 			const at = ["combatants", label];
-			expect(file, [...at, "creature"], c.creature, "creature");
+			expect(file, [...at, "creature"], c.creature, fighterKinds);
 			const metadata = notes[c.creature]?.metadata;
 			if (c.hp && metadata?.kind === "creature" && metadata.pc)
 				problems.push({
@@ -204,7 +210,7 @@ function checkReferences(
 		}
 	}
 	if (runtime.session)
-		expect("runtime.toml", ["session"], runtime.session, "session");
+		expect("runtime.toml", ["session"], runtime.session, ["session"]);
 	if (runtime.combat && !combats[runtime.combat])
 		problems.push({
 			file: "runtime.toml",

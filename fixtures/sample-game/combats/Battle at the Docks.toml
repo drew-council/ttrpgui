@@ -1,0 +1,17 @@
+session = "2026-11-21"
+
+[combatants."Thorin Ashvale"]
+creature = "Thorin Ashvale"
+initiative = 11
+
+[combatants."Mira Quickfoot"]
+creature = "Mira Quickfoot"
+initiative = 17
+
+[combatants."The Gilded Gull"]
+creature = "The Gilded Gull"
+initiative = 14
+
+[combatants."Goblin Skulker A"]
+creature = "Goblin Skulker"
+initiative = 9

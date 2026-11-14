@@ -35,6 +35,8 @@ export const Metadata = z.discriminatedUnion(
 					z.iso.date({ error: "expected a date like 2026-11-07" }),
 				)
 				.optional(),
+			/** Shown beside the date, such as the place the party visits. */
+			name: text.optional(),
 			...shared,
 		}),
 		z.strictObject({
@@ -48,8 +50,14 @@ export const Metadata = z.discriminatedUnion(
 			...shared,
 		}),
 		z.strictObject({ kind: z.literal("location"), ...shared }),
+		/** A ship or the like: a stat block like a creature's, a floor plan as its map image. Fights as an NPC. */
+		z.strictObject({
+			kind: z.literal("vehicle"),
+			display_name: text.optional(),
+			...shared,
+		}),
 	],
-	{ error: 'must be "session", "creature", or "location"' },
+	{ error: 'must be "session", "creature", "location", or "vehicle"' },
 );
 export type Metadata = z.infer<typeof Metadata>;
 export type Kind = NonNullable<Metadata["kind"]>;

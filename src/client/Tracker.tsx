@@ -13,6 +13,7 @@ import {
 import { Progress } from "#components/ui/progress.tsx";
 import { Separator } from "#components/ui/separator.tsx";
 import {
+	canFight,
 	concentrationDC,
 	conditionNames,
 	currentHp,
@@ -22,6 +23,7 @@ import {
 	order,
 	statblockOf,
 } from "../shared/combat.ts";
+import { noteLabel } from "../shared/notes.ts";
 import type { Combat, Combatant } from "../shared/schema.ts";
 import { toInt } from "../shared/statblock.ts";
 import type { Note } from "../shared/state.ts";
@@ -142,7 +144,7 @@ export function addCombatant(combat: string) {
 			title: "Add a combatant",
 			placeholder: "Creature",
 			items: Object.keys(notes)
-				.filter((title) => notes[title]?.metadata.kind === "creature")
+				.filter((title) => canFight(notes[title]))
 				.sort()
 				.map((title) => ({
 					label: title,
@@ -273,7 +275,7 @@ export function CombatView({ arg: name }: { arg: string }) {
 								openTab(noteTab(combat.session as string), newTab),
 							)}
 						>
-							{combat.session}
+							{noteLabel(combat.session, notes[combat.session])}
 						</Button>
 					)}
 				</p>
@@ -496,7 +498,7 @@ function Row({
 	const current = currentHp(sb, hp);
 	const note = notes[c.creature];
 	const pc = isPc(notes, c);
-	const missing = note?.metadata.kind !== "creature";
+	const missing = !canFight(note);
 	const down = max > 0 && current <= 0;
 	const hurt = !down && current * 2 <= max;
 	const saves = c.death_saves ?? {};

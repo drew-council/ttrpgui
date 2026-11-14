@@ -3,7 +3,14 @@
 import { cn } from "cn";
 import { produce } from "immer";
 import { CheckIcon } from "lucide-react";
-import { type CSSProperties, createRef, useEffect, useState } from "react";
+import {
+	type CSSProperties,
+	createRef,
+	type Ref,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { Input } from "#components/ui/input.tsx";
 import type { Statblock } from "../shared/schema.ts";
 import {
@@ -317,31 +324,51 @@ const format = (field: Field, value: unknown) =>
 const parse = (field: Field, text: string) =>
 	text.trim() ? (field.parse ?? ((t) => t))(text.trim()) : undefined;
 
-/** A one-line field that saves on blur. A new saved value replaces the draft; a rejected save reverts it. */
+/** A one-line field that saves on blur. A new saved value replaces the draft; a rejected save reverts it. With `onDone`,
+ * Enter and Tab save and call it, and Escape reverts and calls it. */
 export function SaveInput({
 	label,
 	saved,
 	onSave,
+	onDone,
 	placeholder,
 	className,
+	ref,
 }: {
 	label: string;
 	saved: string;
 	onSave: (text: string) => Promise<boolean>;
+	onDone?: () => void;
 	placeholder?: string;
 	className?: string;
+	ref?: Ref<HTMLInputElement>;
 }) {
 	const [draft, setDraft] = useState(saved);
 	useEffect(() => setDraft(saved), [saved]);
+	const reverting = useRef(false);
 	return (
 		<Input
+			ref={ref}
 			aria-label={label}
 			placeholder={placeholder}
 			value={draft}
 			className={className}
-			onChange={(e) => setDraft(e.target.value)}
+			onChange={(e) => {
+				reverting.current = false;
+				setDraft(e.target.value);
+			}}
+			onKeyDown={(e) => {
+				if (!onDone || e.ctrlKey || e.altKey || e.metaKey || e.shiftKey) return;
+				if (e.key === "Escape") {
+					reverting.current = true;
+					setDraft(saved);
+				} else if (e.key !== "Enter" && e.key !== "Tab") return;
+				e.preventDefault();
+				onDone();
+			}}
 			onBlur={async () => {
-				if (draft !== saved && !(await onSave(draft))) setDraft(saved);
+				if (reverting.current) reverting.current = false;
+				else if (draft !== saved && !(await onSave(draft))) setDraft(saved);
 			}}
 		/>
 	);

@@ -63,6 +63,7 @@ import {
 import { useEffect } from "react";
 import type { SearchHit } from "../server/game.ts";
 import type { Mutation } from "../server/mutations.ts";
+import { canFight } from "../shared/combat.ts";
 import { activeAtmosphere, nowPlaying } from "../shared/display.ts";
 import {
 	type ActionId,
@@ -71,7 +72,7 @@ import {
 	eventKey,
 	formatKey,
 } from "../shared/keys.ts";
-import { localDate } from "../shared/notes.ts";
+import { localDate, noteLabel, sessionOrder } from "../shared/notes.ts";
 import type { Kind } from "../shared/schema.ts";
 import { signed } from "../shared/statblock.ts";
 import type { GameState, Note } from "../shared/state.ts";
@@ -122,6 +123,7 @@ import {
 	chooseImageRole,
 	kindLabels,
 	kindOf,
+	nameSession,
 	parseTab,
 	roleLabel,
 	tabExists,
@@ -166,6 +168,7 @@ const kinds: [Kind | undefined, string][] = [
 	["session", "Session"],
 	["creature", "Creature"],
 	["location", "Location"],
+	["vehicle", "Vehicle"],
 ];
 
 /** An Action that asks for a name, creates the `noun` with it, and opens its tab. */
@@ -189,15 +192,21 @@ const create = (
 const newNote = (kind: Kind | undefined, noun: string) =>
 	create(
 		noun,
-		// A Session's title defaults to its date, which defaults to today.
-		{
-			title: `New ${noun}`,
-			placeholder: "Title",
-			value: kind === "session" ? localDate() : undefined,
-		},
+		{ title: `New ${noun}`, placeholder: "Title" },
 		(title) => ({ type: "createNote", title, kind }),
 		noteTab,
 	);
+
+/** Creates a Session titled and dated today, or `2026-11-14 (2)` when taken, and opens it with focus in its name. */
+async function newSession() {
+	const today = localDate();
+	let title = today;
+	for (let n = 2; Object.hasOwn(getGame().notes, title); n++)
+		title = `${today} (${n})`;
+	if (!(await send({ type: "createNote", title, kind: "session" }))) return;
+	nameSession(title);
+	openTab(noteTab(title));
+}
 
 /** Makes Actions on what the active `view` tab shows, available when it exists and passes `test`. */
 const onTab =
@@ -213,8 +222,6 @@ const onTab =
 const onNote = onTab("note", (game) => game.notes);
 const inCombatTab = onTab("combat", (game) => game.combats);
 const inAtmosphereTab = onTab("atmosphere", (game) => game.atmospheres);
-
-const isCreature = (note: Note) => note.metadata.kind === "creature";
 
 /** Asks for a new name for `from`. `after` runs once the rename applies. */
 function rename(
@@ -330,7 +337,7 @@ const amount = (
 
 const liveSession = () => getGame().runtime.session;
 
-/** Session titles with the one today, else the next upcoming, first; then the rest, newest first. */
+/** Sessions with the one today, else the next upcoming, first; then the rest, newest first. */
 function sessionItems(run: (title: string) => void) {
 	const { notes } = getGame();
 	const date = (title: string) => {
@@ -339,13 +346,19 @@ function sessionItems(run: (title: string) => void) {
 	};
 	const titles = Object.keys(notes)
 		.filter((title) => notes[title]?.metadata.kind === "session")
-		.sort((a, b) => date(b).localeCompare(date(a)) || a.localeCompare(b));
+		.sort(sessionOrder(notes));
 	const next = titles.filter((title) => date(title) >= localDate()).at(-1);
 	return [next, ...titles.filter((title) => title !== next)]
 		.filter((title) => title !== undefined)
 		.map((title) => ({
-			label: title,
-			detail: date(title),
+			label: noteLabel(title, notes[title]),
+			title,
+			detail:
+				title === next
+					? date(title) === localDate()
+						? "Today"
+						: "Next"
+					: undefined,
 			run: () => run(title),
 		}));
 }
@@ -486,6 +499,7 @@ export const actions: Record<ActionId, Action> = {
 		title: "Open or create a note, or open a combat or atmosphere",
 		run() {
 			const { notes, combats, atmospheres } = getGame();
+			const isSession = (t: string) => notes[t]?.metadata.kind === "session";
 			const item = (label: string, detail: string, tab: string): Item => ({
 				label,
 				detail,
@@ -496,9 +510,21 @@ export const actions: Record<ActionId, Action> = {
 					title: "Open a note",
 					placeholder: "Title",
 					items: [
+						// Sessions first, newest first.
 						...Object.keys(notes)
-							.sort()
-							.map((t) => item(t, kindLabels[kindOf(notes[t])], noteTab(t))),
+							.sort(
+								(a, b) =>
+									Number(isSession(b)) - Number(isSession(a)) ||
+									sessionOrder(notes)(a, b),
+							)
+							.map((t) => ({
+								...item(
+									noteLabel(t, notes[t]),
+									kindLabels[kindOf(notes[t])],
+									noteTab(t),
+								),
+								title: t,
+							})),
 						...Object.keys(combats).map((name) =>
 							item(name, kindLabels.combat, combatTab(name)),
 						),
@@ -543,9 +569,10 @@ export const actions: Record<ActionId, Action> = {
 	"zoom-out": { title: "Zoom out", run: zoomBy(-1) },
 	"reset-zoom": { title: "Reset zoom", run: zoomBy(0) },
 	"new-note": { ...newNote(undefined, "note"), icon: PlusIcon },
-	"new-session": { ...newNote("session", "session"), icon: PlusIcon },
+	"new-session": { title: "New session", run: newSession, icon: PlusIcon },
 	"new-creature": { ...newNote("creature", "creature"), icon: PlusIcon },
 	"new-location": { ...newNote("location", "location"), icon: PlusIcon },
+	"new-vehicle": { ...newNote("vehicle", "vehicle"), icon: PlusIcon },
 	"rename-note": {
 		title: "Rename note",
 		icon: PencilIcon,
@@ -563,8 +590,8 @@ export const actions: Record<ActionId, Action> = {
 		icon: TrashIcon,
 		...onNote((title) =>
 			confirmDelete(
-				`Delete “${title}”? Links to it will be left dangling.`,
-				title,
+				`Delete “${noteLabel(title, getGame().notes[title])}”? Links to it will be left dangling.`,
+				noteLabel(title, getGame().notes[title]),
 				{ type: "deleteNote", title },
 				noteTab(title),
 			),
@@ -647,12 +674,14 @@ export const actions: Record<ActionId, Action> = {
 				{
 					title: `What players see for “${title}”`,
 					placeholder: title,
-					value: metadata?.kind === "creature" ? metadata.display_name : "",
+					value:
+						(metadata && "display_name" in metadata && metadata.display_name) ||
+						"",
 				},
 				(name) => (name ? `Show players “${name}”` : "Show players the title"),
 				(name) => setFields(title, { display_name: name || null }),
 			);
-		}, isCreature),
+		}, canFight),
 	},
 	"set-session-date": {
 		title: "Set session date",
@@ -663,7 +692,7 @@ export const actions: Record<ActionId, Action> = {
 				const metadata = getGame().notes[title]?.metadata;
 				ask(
 					{
-						title: `Date of “${title}”`,
+						title: `Date of “${noteLabel(title, getGame().notes[title])}”`,
 						placeholder: "YYYY-MM-DD",
 						value:
 							(metadata?.kind === "session" && metadata.date) || localDate(),
@@ -682,7 +711,7 @@ export const actions: Record<ActionId, Action> = {
 		...onNote(
 			(title) =>
 				ui.get().editing === title ? stopEditing() : ui.set({ editing: title }),
-			isCreature,
+			canFight,
 		),
 	},
 	"add-statblock-section": {

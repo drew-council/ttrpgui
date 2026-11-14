@@ -1,6 +1,6 @@
 // Combat rules as plain edits of Combat data: turn order, turns, HP, conditions, and initiative.
 // Each edits its argument in place, so callers pass a copy. Mutations are thin wrappers around them.
-import type { Combat, Combatant, Hp, Statblock } from "./schema.ts";
+import type { Combat, Combatant, Hp, Kind, Statblock } from "./schema.ts";
 import type { Note } from "./state.ts";
 
 type Notes = Record<string, Note>;
@@ -22,6 +22,12 @@ export const conditionNames = [
 	"Stunned",
 	"Unconscious",
 ];
+
+/** The kinds of note a Combatant may reference. A vehicle fights as an NPC. */
+export const fighterKinds: Kind[] = ["creature", "vehicle"];
+
+export const canFight = (note?: Note) =>
+	fighterKinds.includes(note?.metadata.kind as Kind);
 
 export const statblockOf = (notes: Notes, c: Combatant): Statblock =>
 	notes[c.creature]?.statblock ?? {};

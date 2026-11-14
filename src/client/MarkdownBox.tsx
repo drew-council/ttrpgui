@@ -31,7 +31,7 @@ import {
 import { tags } from "@lezer/highlight";
 import type { MarkdownConfig } from "@lezer/markdown";
 import { type RefObject, useEffect, useRef } from "react";
-import { parseLinks } from "../shared/notes.ts";
+import { noteLabel, parseLinks } from "../shared/notes.ts";
 import { getGame, send, useGame } from "./sync.ts";
 import { noteTab, openTab, wantsNewTab } from "./ui.ts";
 
@@ -304,10 +304,17 @@ function completeTitles(context: CompletionContext) {
 		context.state.sliceDoc(context.pos, context.pos + 2) === "]]" ? "" : "]]";
 	return {
 		from: match.from + 2,
-		options: Object.keys(getGame().notes).map((title) => ({
-			label: title,
-			apply: title + close,
-		})),
+		options: Object.entries(getGame().notes).map(([title, note]) => {
+			const shown = noteLabel(title, note);
+			// The label also holds the title, so typing either matches.
+			return shown === title
+				? { label: title, apply: title + close }
+				: {
+						label: `${shown} ${title}`,
+						displayLabel: shown,
+						apply: title + close,
+					};
+		}),
 		validFor: /^[^[\]|#\n]*$/,
 	};
 }
@@ -328,6 +335,37 @@ const highlight = HighlightStyle.define([
 		class: "md-mark",
 	},
 ]);
+
+/** A wiki link without a label of its own, showing its target's label, such as a Session's date and name. */
+class LinkWidget extends WidgetType {
+	title: string;
+	label: string;
+	className: string;
+	constructor(title: string, label: string, className: string) {
+		super();
+		this.title = title;
+		this.label = label;
+		this.className = className;
+	}
+	override eq(other: LinkWidget) {
+		return (
+			other.title === this.title &&
+			other.label === this.label &&
+			other.className === this.className
+		);
+	}
+	// The editor's own handlers follow it on click.
+	override ignoreEvent() {
+		return false;
+	}
+	toDOM() {
+		const span = document.createElement("span");
+		span.className = this.className;
+		span.dataset.link = this.title;
+		span.textContent = this.label;
+		return span;
+	}
+}
 
 class ImageWidget extends WidgetType {
 	src: string;
@@ -350,6 +388,10 @@ class BulletWidget extends WidgetType {
 	override eq() {
 		return true;
 	}
+	// The editor handles mouse events on it, so Shift+click on a bullet extends the selection.
+	override ignoreEvent() {
+		return false;
+	}
 	toDOM() {
 		const span = document.createElement("span");
 		span.className = "md-bullet";
@@ -359,6 +401,7 @@ class BulletWidget extends WidgetType {
 }
 
 const hide = Decoration.replace({});
+const bareNumber = Decoration.line({ class: "md-bare" });
 const bullet = Decoration.replace({ widget: new BulletWidget() });
 const lineClasses: Record<string, string> = {
 	ATXHeading1: "md-h1",
@@ -415,6 +458,12 @@ function livePreview(imageBase: string) {
 					case "ListMark":
 						if (parent?.parent?.name === "BulletList" && !lineTouched(from))
 							decorations.push(bullet.range(from, to));
+						// A bare number such as a stat block's `15.` parses as an empty list item; it reads as text.
+						else if (
+							parent?.parent?.name === "OrderedList" &&
+							!state.sliceDoc(to, parent.to).trim()
+						)
+							decorations.push(bareNumber.range(state.doc.lineAt(from).from));
 						break;
 					case "EmphasisMark":
 					case "StrikethroughMark":
@@ -467,6 +516,12 @@ function livePreview(imageBase: string) {
 							decorations.push(
 								Decoration.mark({ class: className }).range(from, to),
 							);
+							break;
+						}
+						const shown = noteLabel(link.title, notes[link.title]);
+						if (!link.label && shown !== link.title) {
+							const widget = new LinkWidget(link.title, shown, className);
+							decorations.push(Decoration.replace({ widget }).range(from, to));
 							break;
 						}
 						const label = link.label ? to - 2 - link.label.length : from + 2;

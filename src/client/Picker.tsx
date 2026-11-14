@@ -27,11 +27,12 @@ export function Picker({ spec }: { spec: PickerSpec }) {
 	}, [query, spec]);
 	const rows = useMemo(() => {
 		const found: { item: Item; label: ReactNode }[] = fuzzysort
-			.go(query, items, { key: "label", limit: 100 })
+			.go(query, items, { keys: ["label", "title"], limit: 100 })
 			.map((result) => ({
 				item: result.obj,
-				label: query
-					? result.highlight((match, i) => (
+				// Highlights only a match in the label, not one in the title behind it.
+				label: result[0]?.score
+					? result[0].highlight((match, i) => (
 							<mark key={i} className="bg-transparent font-bold text-primary">
 								{match}
 							</mark>

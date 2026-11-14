@@ -32,8 +32,12 @@ export function Control() {
 				{sidebar && <Sidebar />}
 				<main className="flex min-h-0 flex-col">
 					<TabBar />
-					<div className="@container min-h-0 flex-1 overflow-y-auto">
-						{active ? <TabBody key={active} tab={active} /> : <Welcome />}
+					{/* Keyed so each tab starts at the top. */}
+					<div
+						key={active}
+						className="@container min-h-0 flex-1 overflow-y-auto"
+					>
+						{active ? <TabBody tab={active} /> : <Welcome />}
 					</div>
 				</main>
 				<Bar />
@@ -53,6 +57,13 @@ export function Control() {
 function TabBar() {
 	const tabs = ui.use((s) => s.tabs);
 	const active = ui.use((s) => s.active);
+	const tablist = useRef<HTMLDivElement>(null);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: scrolls when the active tab or the tabs change.
+	useEffect(() => {
+		tablist.current
+			?.querySelector('[aria-selected="true"]')
+			?.scrollIntoView({ block: "nearest", inline: "nearest" });
+	}, [active, tabs]);
 	return (
 		<div className="flex h-9 flex-none border-b bg-card">
 			<span className="flex flex-none items-center gap-0.5 px-1">
@@ -62,6 +73,7 @@ function TabBar() {
 			</span>
 			<div
 				role="tablist"
+				ref={tablist}
 				className="flex min-w-0 flex-1 overflow-x-auto border-l [scrollbar-width:none]"
 			>
 				{tabs.map((tab) => (

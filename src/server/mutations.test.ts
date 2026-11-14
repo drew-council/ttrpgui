@@ -74,7 +74,7 @@ test("mutations change files, and the reloaded Game reflects them", async () => 
 	expect(game.state.notes.Ogre).toBeUndefined();
 	// The rename followed into the combat, which now points at a Location.
 	expect(game.state.problems.map((p) => p.message)).toEqual([
-		"no creature note titled “Ash Wyrm”",
+		"no creature or vehicle note titled “Ash Wyrm”",
 	]);
 
 	await expect(run({ type: "createNote", title: "Ash Wyrm" })).rejects.toThrow(
@@ -260,6 +260,7 @@ test("renaming a combat clears its undo history, so undo cannot bring back the o
 		game.run({ type: "undo", combat: "Gate Fight" }),
 	).rejects.toThrow("Nothing to undo");
 	expect(Object.keys(game.state.combats).sort()).toEqual([
+		"Battle at the Docks",
 		"Gate Fight",
 		"The Drake Awakens",
 	]);

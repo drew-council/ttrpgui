@@ -6,7 +6,13 @@ import { isDeepStrictEqual } from "node:util";
 import { stringify } from "smol-toml";
 import type { z } from "zod";
 import * as combats from "../shared/combat.ts";
-import { hpOf, isPc, type Rule, rules } from "../shared/combat.ts";
+import {
+	fighterKinds,
+	hpOf,
+	isPc,
+	type Rule,
+	rules,
+} from "../shared/combat.ts";
 import * as display from "../shared/display.ts";
 import { imageFile, localDate, renameLinks } from "../shared/notes.ts";
 import {
@@ -200,7 +206,7 @@ const mutations = {
 
 	addCombatants: onCombat<{ creature: string; count: number }>(
 		(combat, payload, { notes }) => {
-			expectKind(notes, payload.creature, "creature");
+			expectKind(notes, payload.creature, fighterKinds);
 			combats.addCombatants(combat, payload);
 		},
 	),
@@ -216,7 +222,7 @@ const mutations = {
 	nextTurn: onCombat((combat, _, { notes }) => combats.nextTurn(combat, notes)),
 	setCombatSession: onCombat<{ session?: string }>(
 		(combat, { session }, { notes }) => {
-			if (session) expectKind(notes, session, "session");
+			if (session) expectKind(notes, session, ["session"]);
 			combat.session = session;
 		},
 	),
@@ -263,7 +269,7 @@ const mutations = {
 		step(game, combat, "redo", "undo"),
 
 	goLive(game: Game, { session }: { session: string }) {
-		expectKind(game.state.notes, session, "session");
+		expectKind(game.state.notes, session, ["session"]);
 		return setRuntime(game, { session });
 	},
 	endSession: (game: Game, _: unknown) =>
@@ -441,9 +447,12 @@ async function moveAtmosphereReferences(
 	});
 }
 
-function expectKind(notes: GameState["notes"], title: string, kind: Kind) {
-	if (!Object.hasOwn(notes, title) || notes[title]?.metadata.kind !== kind)
-		throw new Error(`No ${kind} note titled “${title}”`);
+function expectKind(notes: GameState["notes"], title: string, kinds: Kind[]) {
+	if (
+		!Object.hasOwn(notes, title) ||
+		!kinds.includes(notes[title]?.metadata.kind as Kind)
+	)
+		throw new Error(`No ${kinds.join(" or ")} note titled “${title}”`);
 }
 
 const combatFile = (name: string) => `combats/${name}.toml`;

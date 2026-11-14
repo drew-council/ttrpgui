@@ -95,13 +95,13 @@ Settled in the design interview. Where this section and the text above differ, t
 - Obsidian-style: free-form markdown, live preview, `[[wiki links]]`. Use an existing library.
 - All notes sit in one flat directory. Each note is a directory holding `note.md`, `metadata.toml`, an optional `statblock.toml`, and its images.
 - Titles are unique. Links resolve by title.
-- A `Note` has zero or one kind: `Session`, `Creature`, `Location`.
+- A `Note` has zero or one kind: `Session`, `Creature`, `Location`, `Vehicle`.
 - The control window has tabs and a collapsible sidebar. The sidebar lists notes grouped by kind, and combats, with a filter box.
 - Ctrl+K fuzzy-matches titles of notes and combats. A missing title can be created as a plain note.
 - Full-text search is a separate `Action`.
 - `Action`s create a note of a given kind and change a note's kind.
 - Renaming rewrites every link to the note. Deleting asks for confirmation and leaves broken links. Each note lists its backlinks. No graph view.
-- A `Creature` note shows its portrait and stat block beside the text. A `Location` note shows its main picture. A `Session` note shows its date and its combats.
+- A `Creature` note shows its portrait and stat block beside the text. A `Location` note shows its main picture. A `Session` note shows its date, optional name, and its combats; it reads as its date and name everywhere. A `Vehicle` note shows its stat block and its map.
 - Images are pasted or dropped into a note, or placed in its directory. An image role is main, map, landscape, or none. A note's only image is its main picture.
 - Outside changes to any file MUST show in the app immediately. Files on disk are the truth.
 
@@ -123,7 +123,7 @@ Settled in the design interview. Where this section and the text above differ, t
 
 ## Combat
 
-- A `Combatant` references a `Creature`. Many `Combatant`s MAY share one `Creature`.
+- A `Combatant` references a `Creature` or a `Vehicle`, which fights as an NPC. Many `Combatant`s MAY share one `Creature`.
 - Adding an unknown name creates a stub NPC `Creature`. Adding with a count creates "Goblin A", "Goblin B".
 - A `Combatant` owns its label, current HP, temp HP, max HP adjustment, initiative, conditions, counters, and note. Base max HP and AC come from the `Creature`.
 - Every new `Combat` starts with all PCs in it.

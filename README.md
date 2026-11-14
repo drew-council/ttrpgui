@@ -19,9 +19,9 @@ Every command is in the palette (Ctrl+P) with its key. The ones you would look f
 
 - **Table bar**, along the bottom. On the left: the player display toggle (Electron only), the active atmosphere as a switcher, the live session (Go live, or its name with a menu that opens or ends it), the running combat and round, the shown image (show, a thumbnail with its note's name, hide), then problems. On the right, where they never move: the track, play or pause, skip, mute, a volume slider, and the command palette. Play starts a track when none is current. Before the track it says "Paused" or "Muted", and in Electron "Display closed" while the display window is closed, since only the display makes sound; click it to open the display. A dimmed control's tooltip says why it is dimmed, such as "No tracks in Market Day". "Open another Game" is on an empty tab and in Ctrl+P.
 - **Tab bar**: the sidebar toggle, back, forward, and new tab.
-- **Sidebar**: a search button beside the filter, and a + on each group that creates one of its kind. A new creature is an NPC; "Mark as PC" in its header makes it a PC.
+- **Sidebar**: a search button beside the filter, and groups by kind: Sessions (newest first), PCs, NPCs, Vehicles, Locations, Notes, Combats, Atmospheres. Each group header collapses it with a click, and has a count and a + that creates one of its kind (expanding the group). A new creature is an NPC; "Mark as PC" in its header makes it a PC. "New session" creates a session titled and dated today without asking and puts the cursor in its name. The active note is marked and scrolled into view, also on the header of a collapsed group that holds it; Ctrl+E starts the cursor there. The filter matches what rows show and note titles, and shows matches in collapsed groups too. Keys: `j` `k` `g` `G` move over headers and rows, `Enter` opens a row or toggles a header, `h` or Left collapses the cursor's group, `l` or Right expands it.
 - **Combat view**, a toolbar under the title: start or end, next turn, roll, add, undo, redo; then, for the selection or the cursor row, damage, heal, condition, temp HP, initiative, concentration, and select. The ⋯ menu holds the rest: max HP, death saves, legendary counters, rename, note, clear selection, remove, and the combat's atmosphere, session, party rest, rename, and delete. Shift+click selects rows.
-- **Note header**: by kind, "Edit stat block", "Mark as PC" or "Mark as NPC", and "Display name" for a creature; "Go live" or "End session" and "Set date" for a session. Its ⋯ menu renames, changes the kind, sets an image role, or deletes. Each image row can show the image on the display, hide it, or set its role.
+- **Note header**: by kind, "Edit stat block", "Mark as PC" or "Mark as NPC", and "Display name" for a creature or vehicle; "Go live" or "End session" for a session, whose title is its name (type to rename, Enter to save, Escape to undo; unnamed, it shows the date in words) and whose date opens a date picker. Its ⋯ menu renames, changes the kind, sets an image role, or deletes. Each image row can show the image on the display, hide it, or set its role.
 - **Stat block form**: Section, Entry, move up and down, remove, and Done, acting at the field with focus.
 - **Atmosphere view**: "Make active" and "Make default" in the header, rename and delete in its ⋯ menu, and "Sync media" under the links.
 
@@ -90,14 +90,19 @@ Every field is optional, and so is the file: without it a note is a plain note.
 
 | Field          | Kind     | Meaning                                                                  |
 | -------------- | -------- | ------------------------------------------------------------------------ |
-| `kind`         |          | `"session"`, `"creature"`, or `"location"`                               |
+| `kind`         |          | `"session"`, `"creature"`, `"location"`, or `"vehicle"`                  |
 | `date`         | session  | `2026-11-07`, as a TOML date or a string                                 |
+| `name`         | session  | shown after the date, such as `"Aruun"`                                  |
 | `pc`           | creature | `true` for a PC; absent means NPC                                        |
-| `display_name` | creature | what players see instead of the title                                    |
+| `display_name` | creature, vehicle | what players see instead of the title                           |
 | `hp`           | creature | PC state between combats: `current`, `temp`, `max_adjust`                |
 | `images`       | any      | image file to role: `"main"`, `"map"`, or `"landscape"`                  |
 
 The main picture (a creature's portrait, a location's display picture) is the image with role `main`, else the note's only image if it has no role.
+
+A session shows as its date and then its name, else its title unless the title is a date (`2026-10-11`, or `2026-10-11 (2)` for a second that day): `notes/2026-10-11/` with `name = "Aruun"` reads "Oct 11, 2026 · Aruun", and a link like `[[2026-10-11]]` shows the same. Without a date it shows its name or title; one with neither but a date title reads "Undated session".
+
+A vehicle, such as a ship, has a stat block like a creature's and its floor plans as images with role `map`, shown full width under its text. It can join combats and fights as an NPC.
 
 ```toml
 kind = "creature"
@@ -161,7 +166,7 @@ Each combatant references a Creature note and holds only its own state. Max HP a
 
 | Field                   | Meaning                                                        |
 | ----------------------- | -------------------------------------------------------------- |
-| `creature`              | title of a Creature note (required)                            |
+| `creature`              | title of a Creature or vehicle note (required)                 |
 | `initiative`            | the rolled or typed total                                      |
 | `hp`                    | NPCs only: `current` (absent means full), `temp`, `max_adjust` |
 | `conditions`            | condition to rounds left, or `true` until removed              |
