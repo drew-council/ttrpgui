@@ -20,6 +20,7 @@ A headless Node server owns the Game directory and the one shared state tree. Cl
 - `src/server/download.ts`: runs `yt-dlp` for an Atmosphere's links, outside the mutation queue. Wallpapers are SDR only. A failure that looks like YouTube wants sign-in says how to fix it.
 - `src/server/server.ts`: `startServer({ gameDir, configFile, host, port })`. HTTP (built client, Game files under `/game/`, and `/search?q=`), WebSocket sync on `/ws`, and the file watcher. MUST stay Node-compatible: no Bun or Electron APIs.
 - `src/cli.ts`: `serve` and `validate`. `src/electron.ts` and `src/preload.cjs`: start the server in-process, open the control window, open and close the display window (and tell the control page whether it is open: `onDisplay`, kept in `ui.display`), and switch Games. `electron.ts` also disables Chromium's Wayland color management (`WaylandWpColorManagerV1`): with it, Hyprland hands a fullscreen window HDR and switches the monitor into HDR.
+  - Two machines: `--lan --display` serves the LAN and opens only the display window, and closing it quits. `--connect URL` starts no server and opens the control window on URL without the preload, so the page acts as in a browser: no display toggle, no "Open another Game". `loadWhenUp` loads a window once its server answers and until then says why it waits. `--display` is also Chromium's X11 display switch, under which GTK dialogs crash, so `electron.ts` removes it from Chromium's command line.
 - `src/client/`: one React app (Vite). `/control` → `Control.tsx`, `/display` → `Display.tsx`.
   - `sync.ts`: the state mirror. `useGame(selector)`, `getGame()`, `useStatus()`, and `send(mutation)`, which resolves `true` once applied or toasts the error and resolves `false`.
   - `ui.ts`: per-client state (tabs and their history, sidebar, picker) in a tiny store from `store.ts`. Tabs, their history, and the sidebar persist in localStorage. `toast()` shows a Sonner toast. See "Tabs" and "Zoom".
@@ -134,6 +135,7 @@ Tailwind CSS 4 and shadcn/ui (Radix, cmdk, Sonner, lucide icons). `src/client/th
 Run inside the dev shell (`direnv allow`, or prefix with `nix develop -c`). Biome, Electron, Xvfb, and the Playwright browsers only exist there.
 
 - `bun start [-- --game DIR]`: build the client and launch Electron. Without `--game` it reopens the last Game (`$XDG_STATE_HOME/ttrpgui/last-game`), else shows a folder picker.
+- `bun start -- --lan --display [--port N]` and `bun start -- --connect http://HOST:7373`: the display host and the remote control (README "Two machines").
 - `bun run dev`: Vite with hot reload, plus the game server on port 7373. `GAME=DIR` picks the Game; the default is a temp copy of the sample.
 - `bun run cli serve --game DIR [--port N] [--lan]` and `bun run cli validate DIR`.
 - `nix build`: the package (`nix/package.nix`): `result/bin/ttrpgui` (Electron on `result/share/ttrpgui`) and `ttrpgui-cli`. After a dependency change it fails with a hash mismatch on `ttrpgui-node-modules`: put the `got:` hash in `nix/package.nix`. `TTRPGUI_BIN=result/bin/ttrpgui` points `bun run smoke`'s script at it.

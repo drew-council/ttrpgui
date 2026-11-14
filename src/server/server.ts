@@ -28,7 +28,8 @@ const defaultConfigFile = join(
 	"ttrpgui/config.toml",
 );
 
-/** Parses `[--game DIR] [--port N] [--lan]`. Shared by the CLI and Electron. */
+/** Parses `[--game DIR] [--port N] [--lan]`, plus Electron's `--display` and `--connect URL`. Shared by the CLI and
+ * Electron. The port defaults to 7373, so a client on the LAN can be set up once. */
 export function parseServeArgs(args: string[]) {
 	const { values, positionals } = parseArgs({
 		args,
@@ -38,6 +39,8 @@ export function parseServeArgs(args: string[]) {
 			game: { type: "string" },
 			port: { type: "string" },
 			lan: { type: "boolean" },
+			display: { type: "boolean" },
+			connect: { type: "string" },
 		},
 	});
 	return {
@@ -151,6 +154,10 @@ export async function startServer({
 		http.listen(port, host, listening);
 	}).catch(async (e) => {
 		await watcher.close();
+		if (e.code === "EADDRINUSE")
+			throw new Error(
+				`Port ${port} is in use, often by another ttrpgui. Close it or pass --port N.`,
+			);
 		throw e;
 	});
 

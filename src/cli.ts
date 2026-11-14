@@ -19,7 +19,10 @@ if (command === "validate" && dir) {
 	);
 	process.exitCode = problems.length ? 1 : 0;
 } else if (command === "serve" && gameDir) {
-	const { url } = await startServer({ gameDir, host, port });
+	const { url } = await startServer({ gameDir, host, port }).catch((e) => {
+		console.error(e.message);
+		process.exit(1);
+	});
 	console.log(
 		`Serving ${gameDir}\nControl: ${url}/control\nDisplay: ${url}/display`,
 	);

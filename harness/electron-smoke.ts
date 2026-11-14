@@ -13,25 +13,24 @@ const gameDir = await copyFixture();
 const home = await mkdtemp(join(tmpdir(), "ttrpgui-home-"));
 const { WAYLAND_DISPLAY, ...env } = process.env;
 const bin = process.env.TTRPGUI_BIN;
-const app = await _electron.launch({
-	executablePath: bin,
-	args: [
-		...(bin ? [] : ["."]),
-		"--game",
-		gameDir,
-		"--port",
-		"0",
-		"--ozone-platform=x11",
-		"--mute-audio",
-	],
-	// Temp XDG dirs keep the user's state untouched.
-	env: {
-		...env,
-		CHROME_DEVEL_SANDBOX: "",
-		XDG_STATE_HOME: home,
-		XDG_CONFIG_HOME: home,
-	},
-});
+const launch = (args: string[]) =>
+	_electron.launch({
+		executablePath: bin,
+		args: [
+			...(bin ? [] : ["."]),
+			...args,
+			"--ozone-platform=x11",
+			"--mute-audio",
+		],
+		// Temp XDG dirs keep the user's state untouched.
+		env: {
+			...env,
+			CHROME_DEVEL_SANDBOX: "",
+			XDG_STATE_HOME: home,
+			XDG_CONFIG_HOME: home,
+		},
+	});
+const app = await launch(["--game", gameDir, "--port", "0"]);
 // Atmosphere sync finds its downloaders.
 await app.evaluate(() => {
 	const { execFileSync } = process.getBuiltinModule("node:child_process");
@@ -66,6 +65,14 @@ await display.screenshot({ path: "shots/electron-display.png" });
 const closed = display.waitForEvent("close");
 await run("Close the player display");
 await closed;
+
+// A remote control window gets no preload, so the Electron-only controls are gone.
+const remote = await launch(["--connect", new URL(page.url()).origin]);
+const remotePage = await remote.firstWindow();
+await connected(remotePage);
+if (await remotePage.evaluate(() => "ttrpgui" in window))
+	throw new Error("The remote control page has the preload");
+await remote.close();
 await app.close();
 console.log(
 	"Electron smoke check passed: shots/electron-control.png, shots/electron-display.png",

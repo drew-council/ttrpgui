@@ -37,6 +37,15 @@ Every command is in the palette (Ctrl+P) with its key. The ones you would look f
 
 In a browser tab, the browser keeps Ctrl+W, Ctrl+N, Ctrl+T, Ctrl+Tab, and Ctrl+Shift+Tab for itself; rebind those Actions (see Keys), use the tab bar's + button, or use the desktop app. Opening and closing the display window are desktop-app Actions; in a browser, open `/display` yourself.
 
+## Two machines
+
+One machine runs the Game and shows the player display; a laptop drives it. Port 7373 unless both ends say `--port N`.
+
+- Display machine: `ttrpgui --lan --display`. It serves the Game (`--game DIR`, else the last one, else a folder picker) to the LAN and opens only the player display. Press F for fullscreen. Closing the window quits. Its firewall must allow TCP 7373; on NixOS, `networking.firewall.allowedTCPPorts = [ 7373 ];`.
+- Laptop: `ttrpgui --connect http://igneous:7373`, with the display machine's name or address. It starts no server and opens the control window on that Game. Until the server answers, the window says so and keeps trying; a dropped connection shows "Reconnecting…" and recovers by itself. The display toggle and "Open another Game" are not there: the display window and the Game belong to the display machine. Pasted images and everything else go over the connection.
+
+A browser at `http://igneous:7373/control` also works, with the browser keeping some keys (see "Server alone"). `ttrpgui-cli serve --lan --game DIR` is a host without a window.
+
 ## Development
 
 This project uses Nix and direnv. Run `direnv allow`, or prefix commands with `nix develop -c`. The shell provides Bun, Node.js, Biome, Electron, Xvfb, Playwright's browsers, and `yt-dlp` and `ffmpeg` for syncing atmospheres. Nixpkgs builds `yt-dlp` with Deno, which it needs to solve YouTube's JavaScript challenges.
