@@ -4,9 +4,15 @@ A keyboard-driven app for planning and running tabletop RPGs. Everything also ha
 
 It is a headless server that owns a Game directory, with web clients for the control and display views. The desktop app is Electron running the server and the control window together. The server can also run alone and serve the views to any browser on the LAN.
 
+## Install
+
+`nix run github:drew-council/ttrpgui` runs the desktop app; add `-- --game DIR` to open a specific Game. To install it, add the flake as an input and put `inputs.ttrpgui.packages.${system}.default` in `environment.systemPackages` or `home.packages`. That installs `ttrpgui`, with a launcher entry named "ttrpgui", and `ttrpgui-cli` for `serve` and `validate` (see "Server alone"). It brings its own `yt-dlp` and `ffmpeg`. With `NIXOS_OZONE_WL=1` it runs as a native Wayland window.
+
+The first launch asks for a folder: a Game, or an empty folder for a new one. The app remembers the last Game in `$XDG_STATE_HOME/ttrpgui/last-game` and reopens it; if that folder is gone, it asks again. "Open another Game" (on an empty tab and in Ctrl+P) switches to any folder, and `--game DIR` opens one; both are remembered.
+
 ## Game night
 
-1. `bun start` (inside the dev shell). It reopens the last Game; `bun start -- --game DIR` opens another, and an empty directory becomes a new Game.
+1. `ttrpgui`, or `bun start` inside the dev shell. It reopens the last Game; `--game DIR` opens another, and an empty directory becomes a new Game.
 2. "Go live" in the table bar (or "Go live with a session" in Ctrl+P) picks or creates the Session. Its name in the bar opens a menu to open or end it; Ctrl+L opens it.
 3. The monitor button in the bar ("Open the player display") opens the second window; it lights up while the window is open, and a second press closes it. Drag it to the TV and press F for fullscreen. Music and wallpaper start there.
 4. Open a prepared combat from the sidebar or with Ctrl+K, and press "Start combat" (Shift+S). Closing the control window quits everything.
@@ -52,7 +58,9 @@ nix fmt
 
 The client is React with Tailwind CSS and shadcn/ui; `CLAUDE.md` describes the styling conventions.
 
-Electron runs with the Nix runtime. Its npm package provides the types and launcher. The npm `playwright` version is pinned to nixpkgs' `playwright-driver`.
+Electron runs with the Nix runtime, in the dev shell and in the package. Its npm package provides only the types and launcher, so keep its version at nixpkgs' (45.2.3 now). That Electron MUST bundle a Node that strips types (22.18 or later; Electron 45 bundles Node 24). The npm `playwright` version is pinned to nixpkgs' `playwright-driver`.
+
+`nix build` builds the package (`nix/package.nix`); the Vite client build is its only real step, a few seconds. Dependencies are a fixed-output derivation keyed by `bun.lock` and the dependency fields of `package.json`, so source edits never refetch them. After changing dependencies, `nix build` fails with a hash mismatch on `ttrpgui-node-modules`: put the `got:` hash in `nix/package.nix`. `TTRPGUI_BIN=result/bin/ttrpgui bun run smoke` runs the Electron smoke check against the package.
 
 ## Game directory format
 

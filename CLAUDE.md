@@ -136,6 +136,7 @@ Run inside the dev shell (`direnv allow`, or prefix with `nix develop -c`). Biom
 - `bun start [-- --game DIR]`: build the client and launch Electron. Without `--game` it reopens the last Game (`$XDG_STATE_HOME/ttrpgui/last-game`), else shows a folder picker.
 - `bun run dev`: Vite with hot reload, plus the game server on port 7373. `GAME=DIR` picks the Game; the default is a temp copy of the sample.
 - `bun run cli serve --game DIR [--port N] [--lan]` and `bun run cli validate DIR`.
+- `nix build`: the package (`nix/package.nix`): `result/bin/ttrpgui` (Electron on `result/share/ttrpgui`) and `ttrpgui-cli`. After a dependency change it fails with a hash mismatch on `ttrpgui-node-modules`: put the `got:` hash in `nix/package.nix`. `TTRPGUI_BIN=result/bin/ttrpgui` points `bun run smoke`'s script at it.
 - `bun run check` (tsc and Biome), `bun test` (unit tests), `nix fmt`. Biome reads `biome.json` in both.
 - `bunx shadcn add <name>`: add a shadcn/ui component (`components.json` configures it).
 

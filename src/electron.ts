@@ -28,15 +28,16 @@ async function chooseGame(arg: string | undefined) {
 	return pickGame();
 }
 
-// Switching Games is rare, so it remembers the choice and relaunches without `--game`.
+// Switching Games is rare, so it relaunches on the new one. Chromium moves switches before other arguments on
+// relaunch, which would split `--port N`, so every option goes back inline.
 ipcMain.handle("open-game", async () => {
 	const gameDir = await pickGame();
 	if (!gameDir) return;
-	await writeFile(lastGameFile, gameDir);
-	const args = process.argv.slice(1);
-	const at = args.indexOf("--game");
-	if (at >= 0) args.splice(at, 2);
-	app.relaunch({ args });
+	const { values } = parseServeArgs(process.argv.slice(1));
+	const args = Object.entries({ ...values, game: gameDir }).map(
+		([key, value]) => (value === true ? `--${key}` : `--${key}=${value}`),
+	);
+	app.relaunch({ args: [app.getAppPath(), ...args] });
 	app.exit();
 });
 
@@ -87,7 +88,8 @@ ipcMain.handle("display", (_, open: boolean) => {
 void app
 	.whenReady()
 	.then(async () => {
-		const { gameDir: arg, host, port } = parseServeArgs(process.argv.slice(2));
+		// After a relaunch the app path is no longer first, so it is skipped as a positional instead.
+		const { gameDir: arg, host, port } = parseServeArgs(process.argv.slice(1));
 		const gameDir = await chooseGame(arg);
 		if (!gameDir) return app.quit();
 		await mkdir(dirname(lastGameFile), { recursive: true });

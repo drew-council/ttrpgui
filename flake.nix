@@ -29,8 +29,17 @@
             ./treefmt.nix
           ];
         };
+        ttrpgui = pkgs.callPackage ./nix/package.nix { };
       in
       {
+        packages = {
+          inherit ttrpgui;
+          default = ttrpgui;
+        };
+        apps.default = flake-utils.lib.mkApp { drv = ttrpgui; } // {
+          meta.description = ttrpgui.meta.description;
+        };
+
         devShells.default = pkgs.mkShell {
           packages = with pkgs; [
             (aspellWithDicts (ps: with ps; [ en ]))
@@ -52,7 +61,10 @@
         };
 
         formatter = treefmtEval.config.build.wrapper;
-        checks.formatting = treefmtEval.config.build.check self;
+        checks = {
+          formatting = treefmtEval.config.build.check self;
+          package = ttrpgui;
+        };
       }
     );
 }

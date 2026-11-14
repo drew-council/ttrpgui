@@ -1,5 +1,6 @@
 {
   "name": "ttrpgui",
+  "desktopName": "ttrpgui.desktop",
   "main": "src/electron.ts",
   "type": "module",
   "private": true,

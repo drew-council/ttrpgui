@@ -1,5 +1,5 @@
 // Boots the real Electron app on a temp Game under Xvfb and checks the control page and the display window render.
-// Run as `bun run smoke`, which wraps it in xvfb-run.
+// Run as `bun run smoke`, which wraps it in xvfb-run. `TTRPGUI_BIN=result/bin/ttrpgui` checks the Nix package instead.
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -12,9 +12,11 @@ if (!process.env.XAUTHORITY?.includes("xvfb-run"))
 const gameDir = await copyFixture();
 const home = await mkdtemp(join(tmpdir(), "ttrpgui-home-"));
 const { WAYLAND_DISPLAY, ...env } = process.env;
+const bin = process.env.TTRPGUI_BIN;
 const app = await _electron.launch({
+	executablePath: bin,
 	args: [
-		".",
+		...(bin ? [] : ["."]),
 		"--game",
 		gameDir,
 		"--port",
@@ -29,6 +31,12 @@ const app = await _electron.launch({
 		XDG_STATE_HOME: home,
 		XDG_CONFIG_HOME: home,
 	},
+});
+// Atmosphere sync finds its downloaders.
+await app.evaluate(() => {
+	const { execFileSync } = process.getBuiltinModule("node:child_process");
+	execFileSync("yt-dlp", ["--version"]);
+	execFileSync("ffmpeg", ["-version"]);
 });
 const page = await app.firstWindow();
 await connected(page);

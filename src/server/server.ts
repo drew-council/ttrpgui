@@ -41,6 +41,7 @@ export function parseServeArgs(args: string[]) {
 		},
 	});
 	return {
+		values,
 		positionals,
 		gameDir: typeof values.game === "string" ? values.game : undefined,
 		port: Number(values.port ?? 7373),

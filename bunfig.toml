@@ -1,0 +1,3 @@
+[test]
+# Keeps `bun test` out of `result`, the Nix build output.
+root = "src"
