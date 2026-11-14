@@ -9,6 +9,7 @@ import { useKeybinds } from "./actions.ts";
 import { Bar } from "./Bar.tsx";
 import { ActionButton } from "./controls.tsx";
 import { Picker } from "./Picker.tsx";
+import { PrivacyScreen } from "./PrivacyScreen.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 import { getGame, useGame } from "./sync.ts";
 import { closeTab, toast, ui } from "./ui.ts";
@@ -50,6 +51,7 @@ export function Control() {
 				expand
 				closeButton
 			/>
+			<PrivacyScreen />
 		</TooltipProvider>
 	);
 }

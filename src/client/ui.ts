@@ -1,5 +1,6 @@
-// Per-client UI state: tabs and their history, sidebar, the open picker, stat block editing, the tracker selection, and
-// zoom. Tabs, their history, the sidebar and its collapsed groups, and each page's zoom survive a reload.
+// Per-client UI state: tabs and their history, sidebar, the open picker, stat block editing, the tracker selection, the
+// privacy screen, and zoom. Tabs, their history, the sidebar and its collapsed groups, and each page's zoom survive a
+// reload.
 import type { MouseEvent } from "react";
 import { flushSync } from "react-dom";
 import { toast as sonner } from "sonner";
@@ -54,6 +55,8 @@ type Ui = {
 	refocus: number;
 	/** Whether the player display window is open. Electron only. */
 	display: boolean;
+	/** Whether the privacy screen covers this window. See `PrivacyScreen`. */
+	privacy: boolean;
 };
 
 const storageKey = "ttrpgui.ui";
@@ -73,6 +76,7 @@ export const ui = createStore<Ui>({
 	selected: [],
 	refocus: 0,
 	display: false,
+	privacy: false,
 	...restore(),
 });
 ui.subscribe(() => {

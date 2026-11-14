@@ -17,6 +17,7 @@ import {
 	CrownIcon,
 	DicesIcon,
 	DownloadIcon,
+	EyeOffIcon,
 	FlagIcon,
 	FolderOpenIcon,
 	HashIcon,
@@ -105,6 +106,7 @@ import {
 } from "./Tracker.tsx";
 import {
 	ask,
+	closePicker,
 	closeTab,
 	cycleTab,
 	type Item,
@@ -547,6 +549,14 @@ export const actions: Record<ActionId, Action> = {
 		run: () => ui.set({ sidebar: !ui.get().sidebar }),
 	},
 	"focus-sidebar": { title: "Focus sidebar", run: focusSidebar },
+	"privacy-screen": {
+		title: "Hide window (privacy screen)",
+		icon: EyeOffIcon,
+		run() {
+			if (ui.get().picker) closePicker();
+			ui.set({ privacy: true });
+		},
+	},
 	"close-tab": {
 		title: "Close tab",
 		when: () => ui.get().active !== undefined,
