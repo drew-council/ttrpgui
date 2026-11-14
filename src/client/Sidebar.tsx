@@ -148,7 +148,7 @@ export function Sidebar() {
 	const nav = useListNav(rows.length, (i, newTab) => {
 		const row = rows[i];
 		if (row?.tab) openTab(row.tab, newTab);
-		else if (row) setOpen(row.group, collapsed.includes(row.group));
+		else if (row) toggle(row.group, collapsed.includes(row.group));
 	});
 	// The active tab's row, else the header of the collapsed group holding it.
 	const holder = shown.find((group) => group.tabs.includes(active ?? ""));
@@ -157,6 +157,16 @@ export function Sidebar() {
 		: -1;
 	const option = (i: number) =>
 		nav.ref.current?.querySelectorAll('[role="option"]')[i];
+	/** Opens or collapses a group with the cursor on its header. A collapse from deep in the group would leave the
+	 * header out of view, so it scrolls back to it. */
+	const toggle = (group: string, open: boolean) => {
+		const header = at(group);
+		flushSync(() => {
+			setOpen(group, open);
+			nav.setIndex(header);
+		});
+		if (!open) option(header)?.scrollIntoView({ block: "nearest" });
+	};
 	focusList = () => {
 		const i = activeAt < 0 ? nav.index : activeAt;
 		nav.setIndex(i);
@@ -199,8 +209,8 @@ export function Sidebar() {
 						}}
 						onKeyDown={(e) => {
 							if (e.key !== "Escape") return;
-							setFilter("");
-							nav.ref.current?.focus();
+							flushSync(() => setFilter(""));
+							focusList?.();
 						}}
 					/>
 					<Kbd className="absolute top-1/2 right-2 -translate-y-1/2">/</Kbd>
@@ -233,8 +243,8 @@ export function Sidebar() {
 					}[e.key];
 					if (!row || !plain || needle || open === undefined) return;
 					e.preventDefault();
-					setOpen(row.group, open);
-					if (!open) nav.setIndex(at(row.group));
+					if (open) setOpen(row.group, true);
+					else toggle(row.group, false);
 				}}
 			>
 				{shown.map((group) => {
@@ -263,9 +273,7 @@ export function Sidebar() {
 										"[@container_scroll-state(stuck:top)]:after:absolute [@container_scroll-state(stuck:top)]:after:inset-x-0 [@container_scroll-state(stuck:top)]:after:bottom-0 [@container_scroll-state(stuck:top)]:after:h-px [@container_scroll-state(stuck:top)]:after:bg-border",
 									)}
 									onClick={() => {
-										if (needle) return;
-										nav.setIndex(header);
-										setOpen(group.label, !group.open);
+										if (!needle) toggle(group.label, !group.open);
 									}}
 								>
 									<ChevronRightIcon

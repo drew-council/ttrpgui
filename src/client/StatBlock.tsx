@@ -209,7 +209,7 @@ export function StatBlock({
 					})}
 				</dl>
 			)}
-			<dl className="text-sm">
+			<dl className="mt-2 text-sm">
 				{props.filter(shown).map((field) => (
 					<div
 						key={field.key}

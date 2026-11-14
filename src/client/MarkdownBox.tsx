@@ -31,7 +31,12 @@ import {
 import { tags } from "@lezer/highlight";
 import type { MarkdownConfig } from "@lezer/markdown";
 import { type RefObject, useEffect, useRef } from "react";
-import { noteLabel, parseLinks } from "../shared/notes.ts";
+import {
+	formatDate,
+	labelParts,
+	noteLabel,
+	parseLinks,
+} from "../shared/notes.ts";
 import { getGame, send, useGame } from "./sync.ts";
 import { noteTab, openTab, wantsNewTab } from "./ui.ts";
 
@@ -518,7 +523,9 @@ function livePreview(imageBase: string) {
 							);
 							break;
 						}
-						const shown = noteLabel(link.title, notes[link.title]);
+						// A Session's name, else its date: a full label would crowd the prose.
+						const { date, name } = labelParts(link.title, notes[link.title]);
+						const shown = name ?? formatDate(date ?? "");
 						if (!link.label && shown !== link.title) {
 							const widget = new LinkWidget(link.title, shown, className);
 							decorations.push(Decoration.replace({ widget }).range(from, to));

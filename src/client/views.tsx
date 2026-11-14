@@ -16,6 +16,7 @@ import {
 	labelParts,
 	mainImage,
 	noteLabel,
+	sessionOrder,
 } from "../shared/notes.ts";
 import { type ImageRole, imageRoles } from "../shared/schema.ts";
 import type { GameState, Note } from "../shared/state.ts";
@@ -323,7 +324,9 @@ function NoteView({ arg: title }: { arg: string }) {
 							className={cn(
 								pageTitle,
 								"-mx-2 h-auto rounded-lg border-transparent px-2 py-0.5 hover:border-input focus-visible:border-input focus-visible:ring-0 md:text-4xl/[1.1] dark:bg-transparent dark:focus-visible:bg-input/30",
-								!isDateTitle(title) && "placeholder:text-foreground",
+								// The stand-in reads as the title until the field has focus.
+								(!isDateTitle(title) || metadata.date) &&
+									"placeholder:text-foreground",
 								"focus:placeholder:text-faint",
 							)}
 						/>
@@ -422,7 +425,7 @@ function NoteView({ arg: title }: { arg: string }) {
 				</ListBox>
 				<ListBox
 					label="Linked from"
-					items={backlinks(notes, title)}
+					items={backlinks(notes, title).sort(sessionOrder(notes))}
 					open={(other, newTab) => openTab(noteTab(other), newTab)}
 				>
 					{(other) => <NoteLabel arg={other} />}
