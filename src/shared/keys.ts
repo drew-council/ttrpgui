@@ -11,6 +11,8 @@ export const defaultKeys = {
 	"next-tab": "ctrl+tab",
 	"previous-tab": "ctrl+shift+tab",
 	"new-tab": "ctrl+t",
+	"move-tab-left": "ctrl+shift+pageup",
+	"move-tab-right": "ctrl+shift+pagedown",
 	"go-back": "alt+arrowleft",
 	"go-forward": "alt+arrowright",
 	"zoom-in": "ctrl+= ctrl++",

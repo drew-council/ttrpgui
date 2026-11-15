@@ -9,6 +9,7 @@ import { bindHas, binds, eventKey } from "../shared/keys.ts";
 import {
 	emptyHistory,
 	type History,
+	moved,
 	pushed,
 	remembered,
 	renamed,
@@ -265,6 +266,17 @@ export function cycleTab(step: number) {
 	const { tabs, active } = ui.get();
 	const at = active ? tabs.indexOf(active) : 0;
 	ui.set({ active: tabs[(at + step + tabs.length) % tabs.length] });
+}
+
+/** Moves `tab` to the gap before `tabs[gap]`. Its history stays. */
+export function moveTab(tab: string, gap: number) {
+	ui.set({ tabs: moved(ui.get().tabs, tab, gap) });
+}
+
+/** Moves the active tab one place left (-1) or right (1), stopping at the ends. */
+export function shiftTab(step: -1 | 1) {
+	const { tabs, active } = ui.get();
+	if (active) moveTab(active, tabs.indexOf(active) + (step < 0 ? -1 : 2));
 }
 
 let returnFocus: Element | null = null;

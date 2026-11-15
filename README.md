@@ -318,7 +318,7 @@ The sidebar lists atmospheres; each opens a view of its links and media, with "M
 
 ## Tabs
 
-Tabs work as in a browser or Obsidian. A click or Enter on a note, combat, or atmosphere shows it in the current tab, or switches to its tab if it is already open. Ctrl+click, middle-click, or Ctrl+Enter opens it in a new tab next to the current one. That works in the sidebar, the pickers (Ctrl+K, search, and the rest), wiki links in note text, the lists in a note, the problems list, the table bar, and the combat tracker, where a plain click only moves the cursor and Ctrl+click or middle-click opens the creature. The + at the end of the tab bar, or Ctrl+T, opens an empty tab; the next thing you open fills it. Close a tab with its ×, a middle-click, or Ctrl+W.
+Tabs work as in a browser or Obsidian. A click or Enter on a note, combat, or atmosphere shows it in the current tab, or switches to its tab if it is already open. Ctrl+click, middle-click, or Ctrl+Enter opens it in a new tab next to the current one. That works in the sidebar, the pickers (Ctrl+K, search, and the rest), wiki links in note text, the lists in a note, the problems list, the table bar, and the combat tracker, where a plain click only moves the cursor and Ctrl+click or middle-click opens the creature. The + at the end of the tab bar, or Ctrl+T, opens an empty tab; the next thing you open fills it. Close a tab with its ×, a middle-click, or Ctrl+W. Drag a tab along the tab bar to move it; a line shows where it lands, and Escape cancels. Ctrl+Shift+PageUp and Ctrl+Shift+PageDown move the current tab left and right.
 
 Each tab has its own history. The arrows at the left of the tab bar, Alt+Left and Alt+Right (also in note text), or the mouse's back and forward buttons go back and forward in the current tab. Back skips what was deleted or renamed outside the app, and what is open in another tab; close that tab to go back to it there. A new tab starts with no history. Tabs and their history survive a restart.
 
@@ -339,6 +339,7 @@ Ctrl+P lists every command with its key; the palette shows only the commands tha
 |                     | `Ctrl+T` / `Ctrl+W`       | new tab / close tab                              |
 |                     | `Alt+Left` / `Alt+Right`, mouse back / forward | back / forward in the tab   |
 |                     | `Ctrl+Tab` / `Ctrl+Shift+Tab` | next / previous tab                          |
+|                     | `Ctrl+Shift+PageUp` / `Ctrl+Shift+PageDown` | move the tab left / right      |
 |                     | `Ctrl+=` `Ctrl+-` / `Ctrl+0` | zoom in, out / reset                          |
 |                     | `Ctrl+L`                  | open the live session                            |
 |                     | `Ctrl+Shift+L`            | privacy screen: hide this window until a key or click |

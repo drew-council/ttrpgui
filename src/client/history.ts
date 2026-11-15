@@ -49,6 +49,15 @@ export function renamed(history: History, from: string, to: string): History {
 	};
 }
 
+/** `tabs` with `tab` moved to the gap before `tabs[gap]`, where `tabs.length` is the end. An unknown `tab` changes
+ * nothing. */
+export function moved(tabs: string[], tab: string, gap: number): string[] {
+	const from = tabs.indexOf(tab);
+	if (from < 0) return tabs;
+	const to = Math.min(Math.max(gap > from ? gap - 1 : gap, 0), tabs.length - 1);
+	return tabs.toSpliced(from, 1).toSpliced(to, 0, tab);
+}
+
 /** A recent list with `key` first, capped: what a picker records when a row is chosen. */
 export const remembered = (recent: string[], key: string) =>
 	[key, ...recent.filter((k) => k !== key)].slice(0, historyCap);

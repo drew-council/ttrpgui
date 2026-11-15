@@ -1,7 +1,7 @@
 // The control window: sidebar, tabs, the table bar, plus the popups and toasts on top.
 import { cn } from "cn";
 import { XIcon } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { type DragEvent, useEffect, useRef, useState } from "react";
 import { Button } from "#components/ui/button.tsx";
 import { Toaster } from "#components/ui/sonner.tsx";
 import { TooltipProvider } from "#components/ui/tooltip.tsx";
@@ -14,7 +14,7 @@ import { PrivacyScreen } from "./PrivacyScreen.tsx";
 import { Roller } from "./Roller.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 import { getGame, useGame } from "./sync.ts";
-import { closeTab, toast, ui } from "./ui.ts";
+import { closeTab, moveTab, toast, ui } from "./ui.ts";
 import { TabBody, TabLabel, tabExists, Welcome } from "./views.tsx";
 
 export function Control() {
@@ -62,10 +62,32 @@ export function Control() {
 	);
 }
 
+/** The drag data type that carries a dragged tab's id. Any drop target MAY read it. */
+export const tabDrag = "application/x-ttrpgui-tab";
+
+const insertMark =
+	"before:absolute before:inset-y-0 before:z-10 before:w-0.5 before:bg-primary";
+
 function TabBar() {
 	const tabs = ui.use((s) => s.tabs);
 	const active = ui.use((s) => s.active);
 	const tablist = useRef<HTMLDivElement>(null);
+	/** Where a dragged tab would land: the gap before `tabs[gap]`. */
+	const [gap, setGap] = useState<number>();
+	const gapAt = (e: DragEvent) =>
+		[...(tablist.current?.querySelectorAll('[role="tab"]') ?? [])].filter(
+			(t) => {
+				const r = t.getBoundingClientRect();
+				return r.left + r.width / 2 < e.clientX;
+			},
+		).length;
+	// Chromium sends dragenter, not dragover, on a move into another element, and takes the drop effect from it.
+	const dragOver = (e: DragEvent) => {
+		if (!e.dataTransfer.types.includes(tabDrag)) return;
+		e.preventDefault();
+		e.dataTransfer.dropEffect = "move";
+		setGap(gapAt(e));
+	};
 	// biome-ignore lint/correctness/useExhaustiveDependencies: scrolls when the active tab or the tabs change.
 	useEffect(() => {
 		tablist.current
@@ -83,18 +105,44 @@ function TabBar() {
 				role="tablist"
 				ref={tablist}
 				className="flex min-w-0 flex-1 overflow-x-auto border-l [scrollbar-width:none]"
+				onDragEnter={dragOver}
+				onDragOver={dragOver}
+				onDragLeave={(e) => {
+					if (!e.currentTarget.contains(e.relatedTarget as Node))
+						setGap(undefined);
+				}}
+				onDrop={(e) => {
+					const tab = e.dataTransfer.getData(tabDrag);
+					if (!tab) return;
+					e.preventDefault();
+					moveTab(tab, gapAt(e));
+					setGap(undefined);
+				}}
 			>
-				{tabs.map((tab) => (
+				{tabs.map((tab, i) => (
 					// biome-ignore lint/a11y/useKeyWithClickEvents: keyboard users switch tabs with Actions.
 					<div
 						key={tab}
 						role="tab"
 						tabIndex={-1}
 						aria-selected={tab === active}
+						draggable
+						onDragStart={(e) => {
+							e.dataTransfer.setData(tabDrag, tab);
+							e.dataTransfer.effectAllowed = "move";
+						}}
+						onDragEnd={() => setGap(undefined)}
 						onClick={() => ui.set({ active: tab })}
 						onAuxClick={(e) => e.button === 1 && closeTab(tab)}
 						onMouseDown={(e) => e.button === 1 && e.preventDefault()}
-						className="group flex max-w-60 min-w-0 flex-none cursor-pointer items-center gap-2 border-r pr-1 pl-3 text-muted-foreground aria-selected:-mb-px aria-selected:bg-background aria-selected:text-foreground aria-selected:shadow-[inset_0_2px_var(--primary)]"
+						className={cn(
+							"group relative flex max-w-60 min-w-0 flex-none cursor-pointer items-center gap-2 border-r bg-card pr-1 pl-3 text-muted-foreground aria-selected:-mb-px aria-selected:bg-background aria-selected:text-foreground aria-selected:shadow-[inset_0_2px_var(--primary)]",
+							// A drag's insertion mark: at this tab's left, or at the last tab's right for the end.
+							gap === i && `${insertMark} before:left-0`,
+							gap === tabs.length &&
+								i === tabs.length - 1 &&
+								`${insertMark} before:-right-px`,
+						)}
 					>
 						<TabLabel tab={tab} />
 						<Button

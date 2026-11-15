@@ -90,6 +90,7 @@ A tab id is `view:arg` (see `views.tsx`); an empty tab is `new:<random>`, whose 
 
 - `openTab(tab, newTab)` is the one way to open anything: a tab not yet open replaces the active one, or opens beside it when `newTab`. `newTab()` opens an empty tab beside the active one.
 - Each tab has a history (`history.ts`), kept in `ui.ts` by tab id: when a plain open replaces a tab, the old id goes on its back list and forward clears. A new tab, or a filled empty tab, starts with none. `travel` (the `go-back` and `go-forward` Actions, the tab bar arrows, Alt+Left/Right, mouse buttons 3 and 4) shows the nearest entry that exists and is not open in any tab, and passes over the rest, which stay for later. `closeTab` drops a tab's history; `replaceTab` renames through every history. `MarkdownBox` leaves Alt+Left/Right to the app.
+- Dragging a tab reorders it: native drag and drop, the tab id under the `tabDrag` type (`Control.tsx`), so any drop target can read it. The tab bar shows an insertion mark and calls `moveTab`, over `moved` (`history.ts`, a gap index); histories stay. `move-tab-left` and `move-tab-right` move the active tab.
 - Every mouse open goes through `clickOpens(open)` (spread on the row): a click opens, Ctrl/Cmd+click or a middle-click opens in a new tab, and a middle press does not paste the primary selection. Code that sees the raw event (the picker, wiki links in `MarkdownBox`) uses `wantsNewTab(e)`. Keyboard: Enter, and Ctrl+Enter for a new tab, in `useListNav` and the picker.
 
 ## Zoom

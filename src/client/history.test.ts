@@ -3,6 +3,7 @@ import {
 	emptyHistory,
 	type History,
 	historyCap,
+	moved,
 	pushed,
 	recency,
 	remembered,
@@ -97,4 +98,20 @@ test("recent keys lead in order and the rest keep theirs", () => {
 		"d",
 	]);
 	expect(rank("b")).toBe(rank("d"));
+});
+
+test("moved puts a tab in a gap and keeps the rest in order", () => {
+	const tabs = ["a", "b", "c", "d"];
+	expect(moved(tabs, "a", 3)).toEqual(["b", "c", "a", "d"]);
+	expect(moved(tabs, "d", 1)).toEqual(["a", "d", "b", "c"]);
+	expect(moved(tabs, "a", 4)).toEqual(["b", "c", "d", "a"]);
+	expect(moved(tabs, "d", 0)).toEqual(["d", "a", "b", "c"]);
+	expect(moved(tabs, "b", 1)).toEqual(tabs);
+	expect(moved(tabs, "b", 2)).toEqual(tabs);
+	expect(moved(tabs, "x", 0)).toBe(tabs);
+});
+
+test("moved stops at the ends", () => {
+	expect(moved(["a", "b"], "a", -1)).toEqual(["a", "b"]);
+	expect(moved(["a", "b"], "b", 3)).toEqual(["a", "b"]);
 });

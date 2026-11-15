@@ -98,7 +98,7 @@ Settled in the design interview. Where this section and the text above differ, t
 - All notes sit in one flat directory. Each note is a directory holding `note.md`, `metadata.toml`, an optional `statblock.toml`, and its images.
 - Titles are unique. Links resolve by title.
 - A `Note` has zero or one kind: `Session`, `Creature`, `Location`, `Vehicle`.
-- The control window has tabs and a collapsible sidebar. The sidebar lists notes grouped by kind, and combats, with a filter box.
+- The control window has tabs and a collapsible sidebar. Tabs reorder by dragging or with Actions. The sidebar lists notes grouped by kind, and combats, with a filter box.
 - Ctrl+K fuzzy-matches titles of notes and combats. A missing title can be created as a plain note.
 - Full-text search is a separate `Action`.
 - `Action`s create a note of a given kind and change a note's kind.
