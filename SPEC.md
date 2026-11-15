@@ -170,7 +170,7 @@ Settled in the design interview. Where this section and the text above differ, t
 
 - Atmospheres are TOML files in the `Game`. Each has a name, a wallpaper, and music.
 - A wallpaper is a YouTube link, downloaded once and looped muted, or a local video or still image.
-- Music is a YouTube Music playlist downloaded with `yt-dlp`, or a folder of local files. It shuffles.
+- Music is a YouTube Music playlist downloaded with `yt-dlp`, or a folder of local files. It shuffles like a playlist: no track repeats until all have played. A track that cannot play is skipped.
 - Each `Game` has one default `Atmosphere`. An `Action` switches the active one.
 - `Action`s sync a playlist, pause, skip, and set volume.
 

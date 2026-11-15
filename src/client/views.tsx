@@ -28,6 +28,7 @@ import {
 	capText,
 	ToolButton,
 } from "./controls.tsx";
+import { gameUrl } from "./Display.tsx";
 import { listClass, rowClass, useListNav } from "./list.ts";
 import { MarkdownBox } from "./MarkdownBox.tsx";
 import { SaveInput, StatBlock } from "./StatBlock.tsx";
@@ -229,7 +230,7 @@ function NoteView({ arg: title }: { arg: string }) {
 	// biome-ignore lint/correctness/useExhaustiveDependencies: refetches when note.md changes.
 	useEffect(() => {
 		let live = true;
-		fetch(`${noteDir(title)}note.md`, { cache: "no-store" })
+		fetch(gameUrl("notes", title, "note.md"), { cache: "no-store" })
 			.then((res) => (res.ok ? res.text() : ""))
 			.then((text) => live && setBody(text));
 		return () => {
@@ -286,7 +287,7 @@ function NoteView({ arg: title }: { arg: string }) {
 					"block max-w-full rounded-xl",
 					small ? "max-h-56" : "mt-6 max-h-80",
 				)}
-				src={noteDir(title) + encodeURIComponent(image)}
+				src={gameUrl("notes", title, image)}
 				alt=""
 			/>
 		);
@@ -369,7 +370,7 @@ function NoteView({ arg: title }: { arg: string }) {
 						<MarkdownBox
 							value={body}
 							onSave={(text) => send({ type: "saveNote", title, body: text })}
-							imageBase={noteDir(title)}
+							imageBase={gameUrl("notes", title, "")}
 							onImage={(file) => addImage(title, file)}
 							placeholder="Empty note. Start writing…"
 							view={editor}
@@ -382,7 +383,7 @@ function NoteView({ arg: title }: { arg: string }) {
 							<img
 								key={image}
 								className="mb-4 block w-full rounded-xl"
-								src={noteDir(title) + encodeURIComponent(image)}
+								src={gameUrl("notes", title, image)}
 								alt={image}
 							/>
 						))}
@@ -403,7 +404,7 @@ function NoteView({ arg: title }: { arg: string }) {
 						<>
 							<img
 								className="h-9 w-12 rounded-sm object-cover"
-								src={noteDir(title) + encodeURIComponent(image)}
+								src={gameUrl("notes", title, image)}
 								alt=""
 							/>
 							<span className="min-w-0 flex-1 truncate">{image}</span>
@@ -530,8 +531,6 @@ function ImageControls({ title, image }: { title: string; image: string }) {
 		</span>
 	);
 }
-
-const noteDir = (title: string) => `/game/notes/${encodeURIComponent(title)}/`;
 
 /** Stores a pasted or dropped image under a free, safe file name and returns that name. */
 async function addImage(title: string, file: File) {

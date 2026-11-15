@@ -43,15 +43,25 @@ export function nowPlaying(atmospheres: Atmospheres, runtime: Runtime) {
 	return active?.tracks.find((t) => t.file === runtime.music?.track);
 }
 
-/** Shuffle: any track but the current one, unless it is the only one. `random` returns [0, 1). */
+/**
+ * Shuffle like a playlist: a track not yet `played` in this pass. When all have, a new pass starts with any but
+ * `current`, unless it is the only one. Updates `played`. `random` returns [0, 1).
+ */
 export function nextTrack(
 	tracks: string[],
+	played: Set<string>,
 	current: string | undefined,
 	random: () => number,
 ) {
-	const others = tracks.filter((t) => t !== current);
-	const from = others.length ? others : tracks;
-	return from[Math.floor(random() * from.length)];
+	if (current) played.add(current);
+	let left = tracks.filter((t) => !played.has(t));
+	if (!left.length) {
+		played.clear();
+		left = tracks.length > 1 ? tracks.filter((t) => t !== current) : tracks;
+	}
+	const track = left[Math.floor(random() * left.length)];
+	if (track) played.add(track);
+	return track;
 }
 
 /** Makes `name` active. A different Atmosphere drops the track, so the display starts one of its own. */

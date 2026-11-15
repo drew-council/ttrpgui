@@ -3,7 +3,7 @@ import { cn } from "cn";
 import { activeAtmosphere, videoFile } from "../shared/display.ts";
 import type { Atmosphere } from "../shared/state.ts";
 import { ActionButton, ActionItem, ActionMenu, capText } from "./controls.tsx";
-import { gameUrl } from "./Display.tsx";
+import { gameUrl, Img } from "./Display.tsx";
 import { SaveInput } from "./StatBlock.tsx";
 import { send, useGame } from "./sync.ts";
 import { KindMark, page, pageMeta, pageTitle, Section } from "./views.tsx";
@@ -111,15 +111,11 @@ export function AtmosphereView({ arg: name }: { arg: string }) {
 					<ul>
 						{tracks.map((t) => (
 							<li key={t.file} className="flex items-center gap-2 px-2 py-1">
-								{t.art ? (
-									<img
-										className={art}
-										src={gameUrl("atmospheres", name, "music", t.art)}
-										alt=""
-									/>
-								) : (
-									<span className={art} />
-								)}
+								<Img
+									className={art}
+									src={t.art && gameUrl("atmospheres", name, "music", t.art)}
+									fallback={<span className={art} />}
+								/>
 								<span className="min-w-0 flex-1 truncate">{t.title}</span>
 								<span className="text-sm text-faint">{t.artist}</span>
 							</li>

@@ -1,7 +1,7 @@
 // The headless server: owns the Game, serves the client and Game files over HTTP, syncs state over WebSocket.
 // MUST stay Node-compatible: it runs inside Electron's main process and standalone.
 import { mkdir } from "node:fs/promises";
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import { homedir, hostname } from "node:os";
 import { basename, join, relative, resolve, sep } from "node:path";
@@ -54,6 +54,21 @@ export function parseServeArgs(args: string[]) {
 	};
 }
 
+/**
+ * Strips `/game` and hands sirv the decoded path through @polka/url's memo (`_parsedUrl`). sirv's own `decodeURI`
+ * keeps `%2C` and the like encoded and cuts a name at `?` or `#`. `%` is escaped for that `decodeURI`. sirv refuses
+ * any path that resolves outside the Game directory.
+ */
+function gameRequest(req: IncomingMessage) {
+	const raw = (req.url ?? "").slice("/game".length).split("?")[0] ?? "";
+	let pathname = "/";
+	try {
+		pathname = raw.split("/").map(decodeURIComponent).join("/");
+	} catch {}
+	const parsed = { pathname: pathname.replaceAll("%", "%25"), search: "", raw };
+	return Object.assign(req, { url: raw, _parsedUrl: parsed });
+}
+
 export async function startServer({
 	gameDir,
 	configFile = defaultConfigFile,
@@ -76,6 +91,7 @@ export async function startServer({
 	}
 	let state = await load();
 	const history: History = new Map();
+	const played = new Map<string, Set<string>>();
 
 	const serveClient = sirv(clientDir, { dev: true, single: true });
 	const serveGame = sirv(gameDir, { dev: true });
@@ -97,8 +113,7 @@ export async function startServer({
 			return res.end(JSON.stringify(hits));
 		}
 		if (!req.url?.startsWith("/game/")) return serveClient(req, res);
-		req.url = req.url.slice("/game".length);
-		serveGame(req, res);
+		serveGame(gameRequest(req), res);
 	});
 	const wss = new WebSocketServer({ server: http, path: "/ws" });
 	const send = (socket: { send(data: string): void }, message: ServerMessage) =>
@@ -136,7 +151,10 @@ export async function startServer({
 				const { id, mutation } = JSON.parse(String(data)) as ClientMessage;
 				let error: string | undefined;
 				try {
-					await runMutation({ dir: gameDir, state, history, notify }, mutation);
+					await runMutation(
+						{ dir: gameDir, state, history, played, notify },
+						mutation,
+					);
 				} catch (e) {
 					error = (e as Error).message;
 				}

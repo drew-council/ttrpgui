@@ -1,7 +1,13 @@
 // The player display: the active Atmosphere's wallpaper and music, the shown image, and the player tracker.
 // Audio plays only here. What players may see of a Combat comes from `playerTracker`.
 import { cn } from "cn";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import {
+	type ComponentProps,
+	type ReactNode,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { Badge } from "#components/ui/badge.tsx";
 import { Button } from "#components/ui/button.tsx";
 import { Kbd } from "#components/ui/kbd.tsx";
@@ -20,6 +26,16 @@ import { KindMark } from "./views.tsx";
 /** URL of a file in the Game. */
 export const gameUrl = (...path: string[]) =>
 	`/game/${path.map(encodeURIComponent).join("/")}`;
+
+/** An image that shows `fallback` instead when it fails to load. */
+export function Img({
+	fallback,
+	...props
+}: ComponentProps<"img"> & { fallback: ReactNode }) {
+	const [failed, setFailed] = useState<string>();
+	if (failed === props.src) return fallback;
+	return <img alt="" {...props} onError={() => setFailed(props.src)} />;
+}
 
 export function Display() {
 	const name = useGame((g) => activeAtmosphere(g.atmospheres, g.runtime));
@@ -106,6 +122,8 @@ function Music({ atmosphere }: { atmosphere: string }) {
 	} = useGame((g) => g.runtime.music) ?? {};
 	const audio = useRef<HTMLAudioElement>(null);
 	const [blocked, setBlocked] = useState(false);
+	// Tracks that failed in a row. A bad one is skipped, but not forever when none can play.
+	const failures = useRef(0);
 	const file = track?.file;
 	// No track of this Atmosphere is current, such as after a switch: ask for one.
 	useEffect(() => {
@@ -135,6 +153,13 @@ function Music({ atmosphere }: { atmosphere: string }) {
 				src={gameUrl("atmospheres", atmosphere, "music", track.file)}
 				loop={count === 1}
 				onEnded={() => send({ type: "nextTrack", after: track.file })}
+				onPlaying={() => {
+					failures.current = 0;
+				}}
+				onError={() => {
+					if (++failures.current < 4)
+						send({ type: "nextTrack", after: track.file });
+				}}
 			/>
 			<div
 				key={track.file}
@@ -144,23 +169,23 @@ function Music({ atmosphere }: { atmosphere: string }) {
 					paused && "opacity-60",
 				)}
 			>
-				{track.art ? (
-					<img
-						className={art}
-						src={gameUrl("atmospheres", atmosphere, "music", track.art)}
-						alt=""
-					/>
-				) : (
-					<span
-						className={cn(
-							art,
-							"grid place-items-center bg-glass text-[2.5rem] text-primary",
-						)}
-						aria-hidden
-					>
-						♪
-					</span>
-				)}
+				<Img
+					className={art}
+					src={
+						track.art && gameUrl("atmospheres", atmosphere, "music", track.art)
+					}
+					fallback={
+						<span
+							className={cn(
+								art,
+								"grid place-items-center bg-glass text-[2.5rem] text-primary",
+							)}
+							aria-hidden
+						>
+							♪
+						</span>
+					}
+				/>
 				<p
 					className={cn(
 						"flex min-w-0 flex-col border-l-[0.2rem] border-primary pl-5",

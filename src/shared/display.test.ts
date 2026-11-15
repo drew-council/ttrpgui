@@ -32,13 +32,27 @@ test("track names give title, artist, and art; the id suffix is dropped", () => 
 	]);
 });
 
-test("shuffle picks another track, unless there is only one", () => {
-	const tracks = ["a", "b", "c"];
-	expect(nextTrack(tracks, "a", () => 0)).toBe("b");
-	expect(nextTrack(tracks, "a", () => 0.99)).toBe("c");
-	expect(nextTrack(tracks, undefined, () => 0)).toBe("a");
-	expect(nextTrack(["a"], "a", () => 0.5)).toBe("a");
-	expect(nextTrack([], undefined, () => 0)).toBeUndefined();
+test("shuffle plays every track once per pass, and a pass never starts with the last track", () => {
+	const tracks = ["a", "b", "c", "d"];
+	const played = new Set<string>();
+	let current: string | undefined;
+	const plays: (string | undefined)[] = [];
+	for (let i = 0; i < 12; i++) {
+		current = nextTrack(tracks, played, current, Math.random);
+		plays.push(current);
+	}
+	for (const pass of [0, 4, 8])
+		expect(new Set(plays.slice(pass, pass + 4)).size).toBe(4);
+	expect(plays[4]).not.toBe(plays[3]);
+	expect(plays[8]).not.toBe(plays[7]);
+
+	// A track played outside the shuffle counts, a removed one is passed over, an added one joins the pass.
+	const pass = new Set(["gone"]);
+	expect(nextTrack(["a", "b"], pass, "a", () => 0)).toBe("b");
+	expect(nextTrack(["a", "b", "new"], pass, "b", () => 0)).toBe("new");
+	expect(nextTrack(["a", "b", "new"], pass, "new", () => 0)).toBe("a");
+	expect(nextTrack(["a"], new Set(), "a", () => 0.5)).toBe("a");
+	expect(nextTrack([], new Set(), undefined, () => 0)).toBeUndefined();
 });
 
 const atmosphere = (settings = {}): Atmosphere => ({ settings, tracks: [] });

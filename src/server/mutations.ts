@@ -38,6 +38,8 @@ type Game = {
 	dir: string;
 	state: GameState;
 	history: History;
+	/** Tracks played in the current shuffle pass, per Atmosphere, in memory only. */
+	played: Map<string, Set<string>>;
 	/** Toasts `message` on every client. */
 	notify: (message: string) => void;
 };
@@ -338,13 +340,15 @@ const mutations = {
 		);
 	},
 
-	/** Shuffles to another track of the active Atmosphere, unless the track already changed from `after`. */
+	/** Shuffles to the next track of the active Atmosphere, unless the track already changed from `after`. */
 	nextTrack(game: Game, { after }: { after?: string }) {
 		const { atmospheres, runtime } = game.state;
 		if (runtime.music?.track !== after) return;
 		const active = display.activeAtmosphere(atmospheres, runtime);
 		const tracks = atmospheres[active ?? ""]?.tracks.map((t) => t.file) ?? [];
-		const track = display.nextTrack(tracks, after, Math.random);
+		const played = game.played.get(active ?? "") ?? new Set();
+		game.played.set(active ?? "", played);
+		const track = display.nextTrack(tracks, played, after, Math.random);
 		return editRuntime(game, (r) => {
 			r.music = { ...r.music, track };
 		});

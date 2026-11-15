@@ -12,12 +12,19 @@ async function tempGame() {
 	const dir = await mkdtemp(join(tmpdir(), "ttrpgui-test-"));
 	await cp("fixtures/sample-game", dir, { recursive: true });
 	const history: History = new Map();
+	const played = new Map<string, Set<string>>();
 	const game = {
 		dir,
 		state: await loadGame(dir),
 		async run(mutation: Mutation) {
 			await runMutation(
-				{ dir, state: { ...game.state, config: {} }, history, notify() {} },
+				{
+					dir,
+					state: { ...game.state, config: {} },
+					history,
+					played,
+					notify() {},
+				},
 				mutation,
 			);
 			game.state = await loadGame(dir);
