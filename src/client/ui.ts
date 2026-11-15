@@ -1,15 +1,23 @@
-// Per-client UI state: tabs, their history and mount keys, sidebar, the open picker, confirmation, or menu, the privacy
-// screen, the dice roller and its rolls, and zoom. Tabs, their history, the sidebar and its collapsed groups, the
-// pickers' recent lists, and each page's zoom survive a reload.
+// Per-client UI state: tab groups, their tabs' history and mount keys, sidebar, the open picker, confirmation, or menu,
+// the privacy screen, the dice roller and its rolls, and zoom. Tab groups, their history, the sidebar and its collapsed
+// groups, the pickers' recent lists, and each page's zoom survive a reload.
 import type { MouseEvent, ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { toast as sonner } from "sonner";
 import type { Rolled } from "../shared/dice.ts";
 import { bindHas, binds, eventKey } from "../shared/keys.ts";
 import {
+	allTabs,
+	type Groups,
+	groupOf,
+	placed,
+	restored,
+	sameGroups,
+	without,
+} from "./groups.ts";
+import {
 	emptyHistory,
 	type History,
-	moved,
 	pushed,
 	remembered,
 	renamed,
@@ -63,10 +71,9 @@ export type ConfirmSpec = {
 	cancel?: () => void;
 };
 
-type Ui = {
-	/** Tab ids like `note:Cinder Drake`, `problems`, or `new:k3j9x` for an empty tab. See `views.tsx`. */
-	tabs: string[];
-	active?: string;
+type Ui = Groups & {
+	/** The tab being dragged, while one is. See `Control.tsx`. */
+	drag?: string;
 	/** Each tab's back and forward history, by tab id. A tab without one has none. */
 	history: Record<string, History>;
 	sidebar: boolean;
@@ -97,14 +104,17 @@ export type RollEntry = Ui["rolls"][number];
 const storageKey = "ttrpgui.ui";
 function restore(): Partial<Ui> {
 	try {
-		return JSON.parse(localStorage.getItem(storageKey) ?? "{}");
+		const saved = JSON.parse(localStorage.getItem(storageKey) ?? "{}");
+		const { tabs: _, active: __, ...rest } = saved;
+		return { ...rest, ...restored(saved) };
 	} catch {
-		return {};
+		return restored({});
 	}
 }
 
 export const ui = createStore<Ui>({
-	tabs: [],
+	groups: [],
+	focus: 0,
 	history: {},
 	sidebar: true,
 	collapsed: [],
@@ -118,10 +128,10 @@ export const ui = createStore<Ui>({
 	...restore(),
 });
 ui.subscribe(() => {
-	const { tabs, active, history, sidebar, collapsed, recent } = ui.get();
+	const { groups, focus, history, sidebar, collapsed, recent } = ui.get();
 	localStorage.setItem(
 		storageKey,
-		JSON.stringify({ tabs, active, history, sidebar, collapsed, recent }),
+		JSON.stringify({ groups, focus, history, sidebar, collapsed, recent }),
 	);
 });
 
@@ -133,37 +143,61 @@ export function remember(name: string, key: string) {
 	});
 }
 
+/** The focused group's active tab: the one Actions act on. */
+export const activeTab = (s: Groups = ui.get()) => s.groups[s.focus]?.active;
+
+/** The focused group. */
+const focused = (s: Groups = ui.get()) => s.groups[s.focus] ?? { tabs: [] };
+
+/** `s` with its focused group's tabs and active tab changed. */
+const withFocused = (s: Groups, tabs: string[], active?: string) =>
+	s.groups.with(s.focus, { tabs, active });
+
 // Quick open lists the tabs shown most recently first, however they were opened.
 ui.subscribe(() => {
-	const { active, recent } = ui.get();
+	const { recent } = ui.get();
+	const active = activeTab();
 	if (active && !active.startsWith("new:") && recent.tabs?.[0] !== active)
 		remember("tabs", active);
 });
 
 export const noteTab = (title: string) => `note:${title}`;
 
-/** Shows `tab` and focuses its main element. A tab not yet open replaces the active one, which goes on that tab's back
- * history, or opens beside it with no history when `newTab`. Every way of opening something ends here. */
+/** Shows `tab` and focuses its main element. A tab open in a group shows there, and that group takes focus. A tab not
+ * yet open goes in the focused group: it replaces the active one, which goes on that tab's back history, or opens
+ * beside it with no history when `newTab`. Every way of opening something ends here. */
 export function openTab(tab: string, newTab = false) {
-	const { active, refocus } = ui.get();
-	const tabs = [...ui.get().tabs];
-	let { history } = ui.get();
-	if (!tabs.includes(tab)) {
-		const at = active ? tabs.indexOf(active) : -1;
-		const replaced = newTab || at < 0 ? undefined : active;
-		tabs.splice(
-			at < 0 ? tabs.length : at + Number(newTab),
-			replaced ? 1 : 0,
+	const s = ui.get();
+	const refocus = s.refocus + 1;
+	const open = groupOf(s, tab);
+	if (open >= 0)
+		return ui.set({
+			...placed(s, tab, open, s.groups[open]?.tabs.indexOf(tab)),
+			refocus,
+		});
+	const { tabs, active } = focused(s);
+	const at = active ? tabs.indexOf(active) : -1;
+	const replaced = newTab || at < 0 ? undefined : active;
+	let { history } = s;
+	// An empty tab is nothing to go back to.
+	if (replaced && !replaced.startsWith("new:"))
+		history = {
+			...withoutHistory(history, replaced),
+			[tab]: pushed(history[replaced] ?? emptyHistory, replaced),
+		};
+	ui.set({
+		groups: withFocused(
+			s,
+			tabs.toSpliced(
+				at < 0 ? tabs.length : at + Number(newTab),
+				replaced ? 1 : 0,
+				tab,
+			),
 			tab,
-		);
-		// An empty tab is nothing to go back to.
-		if (replaced && !replaced.startsWith("new:"))
-			history = {
-				...withoutHistory(history, replaced),
-				[tab]: pushed(history[replaced] ?? emptyHistory, replaced),
-			};
-	}
-	ui.set({ tabs, active: tab, history, refocus: refocus + 1 });
+		),
+		history,
+		refocus,
+	});
 }
 
 const withoutHistory = (history: Ui["history"], tab: string) => {
@@ -176,25 +210,29 @@ const withoutHistory = (history: Ui["history"], tab: string) => {
 export function travelTarget(
 	direction: -1 | 1,
 	exists: (tab: string) => boolean,
+	s: Groups & Pick<Ui, "history"> = ui.get(),
 ) {
-	const { tabs, active, history } = ui.get();
+	const active = activeTab(s);
 	if (!active) return;
+	const open = allTabs(s);
 	return step(
-		history[active] ?? emptyHistory,
+		s.history[active] ?? emptyHistory,
 		active,
 		direction,
-		(tab) => exists(tab) && !tabs.includes(tab),
+		(tab) => exists(tab) && !open.includes(tab),
 	);
 }
 
 /** Goes back (-1) or forward (1) in the active tab and focuses what it shows. */
 export function travel(direction: -1 | 1, exists: (tab: string) => boolean) {
 	const target = travelTarget(direction, exists);
-	const { tabs, active, history, refocus } = ui.get();
+	const s = ui.get();
+	const { history, refocus } = s;
+	const active = activeTab(s);
 	if (!target || !active) return;
+	const tabs = focused(s).tabs.map((t) => (t === active ? target.tab : t));
 	ui.set({
-		tabs: tabs.map((t) => (t === active ? target.tab : t)),
-		active: target.tab,
+		groups: withFocused(s, tabs, target.tab),
 		history: {
 			...withoutHistory(history, active),
 			[target.tab]: target.history,
@@ -222,15 +260,10 @@ export const clickOpens = (open: (newTab: boolean) => void) => ({
 	onMouseDown: (e: MouseEvent) => e.button === 1 && e.preventDefault(),
 });
 
+/** Closes `tab`. A group left empty goes, unless it is the only one. */
 export function closeTab(tab: string) {
-	const { tabs, active, history } = ui.get();
-	const rest = tabs.filter((t) => t !== tab);
-	const next = rest[Math.min(tabs.indexOf(tab), rest.length - 1)];
-	ui.set({
-		tabs: rest,
-		active: active === tab ? next : active,
-		history: withoutHistory(history, tab),
-	});
+	const s = ui.get();
+	ui.set({ ...without(s, tab), history: withoutHistory(s.history, tab) });
 }
 
 const mountKeys = new Map<string, string>();
@@ -244,19 +277,21 @@ export function mountKey(tab: string) {
 
 /** The open tab mounted under `key`. */
 export const tabOf = (key: string) =>
-	ui.get().tabs.find((tab) => mountKey(tab) === key);
+	allTabs(ui.get()).find((tab) => mountKey(tab) === key);
 
 /** Renames `from` to `to` in the tabs, every tab's history, and the recent tabs, as after renaming what they show. Its
  * view stays mounted. */
 export function replaceTab(from: string, to: string) {
-	const { tabs, active, history, recent } = ui.get();
+	const { groups, history, recent } = ui.get();
 	mountKeys.set(to, mountKey(from));
 	mountKeys.delete(from);
 	const rename = (t: string) => (t === from ? to : t);
 	ui.set({
 		recent: { ...recent, tabs: [...new Set(recent.tabs?.map(rename))] },
-		tabs: tabs.map(rename),
-		active: active && rename(active),
+		groups: groups.map((g) => ({
+			tabs: g.tabs.map(rename),
+			active: g.active && rename(g.active),
+		})),
 		history: Object.fromEntries(
 			Object.entries(history).map(([t, h]) => [
 				rename(t),
@@ -266,21 +301,54 @@ export function replaceTab(from: string, to: string) {
 	});
 }
 
+/** Shows the next (1) or previous (-1) tab in the focused group. */
 export function cycleTab(step: number) {
-	const { tabs, active } = ui.get();
+	const s = ui.get();
+	const { tabs, active } = focused(s);
 	const at = active ? tabs.indexOf(active) : 0;
-	ui.set({ active: tabs[(at + step + tabs.length) % tabs.length] });
+	ui.set({
+		groups: withFocused(s, tabs, tabs[(at + step + tabs.length) % tabs.length]),
+	});
 }
 
-/** Moves `tab` to the gap before `tabs[gap]`. Its history stays. */
-export function moveTab(tab: string, gap: number) {
-	ui.set({ tabs: moved(ui.get().tabs, tab, gap) });
-}
+/** Moves `tab` into group `to` at the gap before its tab `gap`, or with no `gap` into a new group made at index `to`.
+ * It shows there and its group takes focus. Its history stays. */
+export const moveTab = (tab: string, to: number, gap?: number) =>
+	ui.set(placed(ui.get(), tab, to, gap));
 
-/** Moves the active tab one place left (-1) or right (1), stopping at the ends. */
+/** Moves the active tab one place left (-1) or right (1) in its group, stopping at the ends. */
 export function shiftTab(step: -1 | 1) {
-	const { tabs, active } = ui.get();
-	if (active) moveTab(active, tabs.indexOf(active) + (step < 0 ? -1 : 2));
+	const s = ui.get();
+	const { tabs, active } = focused(s);
+	if (active)
+		moveTab(active, s.focus, tabs.indexOf(active) + (step < 0 ? -1 : 2));
+}
+
+/** Where moving the active tab to the next (1) or previous (-1) group puts it: the end of that group, else a new group
+ * at that edge. Undefined when that changes nothing, as for the only tab of an edge group. */
+export function groupMove(step: -1 | 1) {
+	const s = ui.get();
+	const active = activeTab(s);
+	if (!active) return;
+	const to = s.focus + step;
+	const next = s.groups[to]
+		? placed(s, active, to, s.groups[to].tabs.length)
+		: placed(s, active, Math.max(to, 0));
+	return sameGroups(s, next) ? undefined : next;
+}
+
+/** Where moving the active tab into a new group to the right of its own puts it, unless that changes nothing. */
+export function splitMove() {
+	const s = ui.get();
+	const active = activeTab(s);
+	const next = active && placed(s, active, s.focus + 1);
+	return next && !sameGroups(s, next) ? next : undefined;
+}
+
+/** Focuses the next (1) or previous (-1) group, which focuses its view. */
+export function focusGroup(step: -1 | 1) {
+	const { groups, focus } = ui.get();
+	if (groups[focus + step]) ui.set({ focus: focus + step });
 }
 
 let returnFocus: Element | null = null;

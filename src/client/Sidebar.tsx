@@ -15,7 +15,7 @@ import { ActionButton } from "./controls.tsx";
 import { listClass, rowClass, useListNav } from "./list.ts";
 import { useGame } from "./sync.ts";
 import { combatTab } from "./Tracker.tsx";
-import { clickOpens, noteTab, openTab, ui } from "./ui.ts";
+import { activeTab, clickOpens, noteTab, openTab, ui } from "./ui.ts";
 import {
 	type DisplayKind,
 	KindMark,
@@ -117,7 +117,7 @@ const setOpen = (label: string, open: boolean) =>
 
 export function Sidebar() {
 	const game = useGame((game) => game);
-	const active = ui.use((s) => s.active);
+	const active = ui.use(activeTab);
 	const collapsed = ui.use((s) => s.collapsed);
 	const [filter, setFilter] = useState("");
 	const input = useRef<HTMLInputElement>(null);

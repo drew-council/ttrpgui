@@ -104,11 +104,14 @@ import {
 	trackerFocused,
 } from "./Tracker.tsx";
 import {
+	activeTab,
 	ask,
 	closePopup,
 	closeTab,
 	confirm,
 	cycleTab,
+	focusGroup,
+	groupMove,
 	type Item,
 	newTab,
 	noteTab,
@@ -117,6 +120,7 @@ import {
 	pick,
 	replaceTab,
 	shiftTab,
+	splitMove,
 	tabOf,
 	toast,
 	travel,
@@ -151,14 +155,14 @@ export type Action = {
 };
 
 /** The argument of the active view's tab, if it is a `view` tab whose target is in `existing`. */
-function activeTab(view: string, existing: object) {
+function activeArg(view: string, existing: object) {
 	const pane = activePane();
 	const [v, arg] = parseTab((pane && tabOf(pane.key)) ?? "");
 	return v === view && Object.hasOwn(existing, arg) ? arg : undefined;
 }
 
 /** The title of the note in the active tab, if it exists. */
-const activeNote = () => activeTab("note", getGame().notes);
+const activeNote = () => activeArg("note", getGame().notes);
 
 const kinds: [Kind | undefined, string][] = [
 	[undefined, "Plain note"],
@@ -215,12 +219,12 @@ const onTab =
 	<T>(view: string, all: (game: GameState) => Record<string, T>) =>
 	(run: (arg: string) => void, test: (target: T) => boolean = () => true) => ({
 		when: () => {
-			const arg = activeTab(view, all(getGame()));
+			const arg = activeArg(view, all(getGame()));
 			return arg !== undefined && test(all(getGame())[arg] as T);
 		},
 		run: async () => {
 			await renamed();
-			const arg = activeTab(view, all(getGame()));
+			const arg = activeArg(view, all(getGame()));
 			if (arg !== undefined) run(arg);
 		},
 	});
@@ -301,7 +305,7 @@ const follow = (newTab: boolean) => ({
 });
 
 /** The name of the Combat in the active tab, if it exists. */
-const activeCombat = () => activeTab("combat", getGame().combats);
+const activeCombat = () => activeArg("combat", getGame().combats);
 
 /** An Action on the focused tracker. By default it needs a Combatant to act on. */
 const onTracker = (
@@ -443,7 +447,7 @@ const onAtmosphere = (
 	when: () => Object.keys(getGame().atmospheres).length > 0,
 	run() {
 		const { atmospheres, runtime } = getGame();
-		const name = activeTab("atmosphere", atmospheres);
+		const name = activeArg("atmosphere", atmospheres);
 		if (name) run(name);
 		else
 			pick({
@@ -517,6 +521,17 @@ const go = (direction: -1 | 1) => {
 	};
 };
 
+/** Tab Actions within the focused group, which need another tab there. */
+const inGroup = {
+	when: () => (ui.get().groups[ui.get().focus]?.tabs.length ?? 0) > 1,
+};
+
+/** Moves the active tab to the next (1) or previous (-1) group. See `groupMove`. */
+const toGroup = (step: -1 | 1) => ({
+	when: () => groupMove(step) !== undefined,
+	run: () => ui.set(groupMove(step) ?? {}),
+});
+
 const zoomBy = (step: -1 | 0 | 1) => () =>
 	toast(`Zoom ${Math.round(zoom(step) * 100)}%`, "zoom");
 
@@ -555,7 +570,7 @@ export const actions: Record<ActionId, Action> = {
 					placeholder: "Title",
 					// Every tab shown counts, not only those opened here. See `ui.ts`.
 					recent: "tabs",
-					current: ui.get().active,
+					current: activeTab(),
 					items: [
 						// Sessions first, newest first.
 						...Object.keys(notes)
@@ -609,29 +624,48 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"close-tab": {
 		title: "Close tab",
-		when: () => ui.get().active !== undefined,
-		run: () => closeTab(ui.get().active as string),
+		when: () => activeTab() !== undefined,
+		run: () => closeTab(activeTab() as string),
 	},
-	"next-tab": {
-		title: "Next tab",
-		when: () => ui.get().tabs.length > 1,
-		run: () => cycleTab(1),
-	},
+	"next-tab": { title: "Next tab", ...inGroup, run: () => cycleTab(1) },
 	"previous-tab": {
 		title: "Previous tab",
-		when: () => ui.get().tabs.length > 1,
+		...inGroup,
 		run: () => cycleTab(-1),
 	},
 	"new-tab": { title: "New tab", run: newTab, icon: PlusIcon },
 	"move-tab-left": {
 		title: "Move tab left",
-		when: () => ui.get().tabs.length > 1,
+		...inGroup,
 		run: () => shiftTab(-1),
 	},
 	"move-tab-right": {
 		title: "Move tab right",
-		when: () => ui.get().tabs.length > 1,
+		...inGroup,
 		run: () => shiftTab(1),
+	},
+	"split-right": {
+		title: "Move tab into a new group on the right",
+		when: () => splitMove() !== undefined,
+		run: () => ui.set(splitMove() ?? {}),
+	},
+	"move-tab-to-next-group": {
+		title: "Move tab to the next group",
+		...toGroup(1),
+	},
+	"move-tab-to-previous-group": {
+		title: "Move tab to the previous group",
+		...toGroup(-1),
+	},
+	"focus-next-group": {
+		title: "Focus the next group",
+		when: () => ui.get().focus < ui.get().groups.length - 1,
+		run: () => focusGroup(1),
+	},
+	"focus-previous-group": {
+		title: "Focus the previous group",
+		when: () => ui.get().focus > 0,
+		run: () => focusGroup(-1),
 	},
 	"go-back": { title: "Go back", ...go(-1), icon: ArrowLeftIcon },
 	"go-forward": { title: "Go forward", ...go(1), icon: ArrowRightIcon },

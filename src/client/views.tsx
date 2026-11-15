@@ -52,6 +52,7 @@ import { SaveInput, StatBlock } from "./StatBlock.tsx";
 import { getGame, send, useGame } from "./sync.ts";
 import { CombatView, combatTab, type Tracker } from "./Tracker.tsx";
 import {
+	activeTab,
 	clickOpens,
 	mountKey,
 	noteTab,
@@ -130,10 +131,10 @@ export function useNewPane(key: string) {
 }
 /** The pane of the open tab `tab`. */
 export const paneOf = (tab: string) => panes.get(mountKey(tab));
-/** The pane that Actions act on: the active tab's. Every lookup of "the" view, and of what it shows, goes through here,
- * so side-by-side panes need only redefine it. */
+/** The pane that Actions act on: the focused group's active tab's. Every lookup of "the" view, and of what it shows,
+ * goes through here. */
 export const activePane = () => {
-	const { active } = ui.get();
+	const active = activeTab();
 	return active === undefined ? undefined : paneOf(active);
 };
 /** The argument of a pane's tab now, such as a note's title. */

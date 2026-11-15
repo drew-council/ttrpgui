@@ -593,8 +593,9 @@ function Toolbar({
 }
 
 /** The tracker's columns: turn mark, initiative, combatant, AC, HP. Shared by the heading and the rows. */
+// Narrower in a narrow view, such as a tab group beside another, so names keep room.
 const columns =
-	"grid grid-cols-[1.25rem_2.5rem_minmax(0,1fr)_2.5rem_minmax(7rem,18%)] items-center gap-x-3 pr-3";
+	"grid grid-cols-[1.25rem_2.5rem_minmax(0,1fr)_2.5rem_minmax(7rem,18%)] items-center gap-x-3 pr-3 @max-[30rem]:grid-cols-[0.75rem_1.75rem_minmax(0,1fr)_1.75rem_5rem] @max-[30rem]:gap-x-2 @max-[30rem]:pr-1";
 const figure = "font-serif text-lg/none font-semibold tabular-nums lining-nums";
 const chip = "border-border";
 const danger = "border-destructive font-bold text-destructive";

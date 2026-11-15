@@ -73,7 +73,7 @@ The application is a headless server with clients.
 - The server listens on localhost by default. Hosting a display, or a launch option, opens it to the LAN. Auth is never a concern.
 - v1 assumes one control client and one display client. Later, control and display MAY be separate LAN devices, and player devices MAY become clients.
 - Shared state: `Game` data, live `Session`, active `Atmosphere`, running `Combat`, shown image, combat undo history.
-- Per-client state: cursor, selection, open tabs.
+- Per-client state: cursor, selection, open tabs and tab groups.
 - Audio plays from the display client only.
 
 # Decisions
@@ -98,7 +98,7 @@ Settled in the design interview. Where this section and the text above differ, t
 - All notes sit in one flat directory. Each note is a directory holding `note.md`, `metadata.toml`, an optional `statblock.toml`, and its images.
 - Titles are unique. Links resolve by title.
 - A `Note` has zero or one kind: `Session`, `Creature`, `Location`, `Vehicle`.
-- The control window has tabs and a collapsible sidebar. Tabs reorder by dragging or with Actions. A tab shown again is as it was left: scroll position, cursor, undo history, unsaved form fields. The sidebar lists notes grouped by kind, and combats, with a filter box.
+- The control window has tabs and a collapsible sidebar. Tabs reorder by dragging or with Actions. Tabs split into side-by-side tab groups, as in VS Code and Obsidian: drag a tab to a group's edge, or use an Action. One group is focused; Actions act on it. Groups share the width equally. A tab shown again is as it was left: scroll position, cursor, undo history, unsaved form fields. The sidebar lists notes grouped by kind, and combats, with a filter box.
 - Ctrl+K fuzzy-matches titles of notes and combats. A missing title can be created as a plain note.
 - Full-text search is a separate `Action`.
 - `Action`s create a note of a given kind and change a note's kind.
