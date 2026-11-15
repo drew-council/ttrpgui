@@ -2,11 +2,12 @@
 import { cn } from "cn";
 import { activeAtmosphere, videoFile } from "../shared/display.ts";
 import type { Atmosphere } from "../shared/state.ts";
+import { renameAtmosphere } from "./actions.ts";
 import { ActionButton, ActionItem, ActionMenu, capText } from "./controls.tsx";
 import { gameUrl, Img } from "./Display.tsx";
 import { SaveInput } from "./StatBlock.tsx";
 import { send, useGame } from "./sync.ts";
-import { KindMark, page, pageMeta, pageTitle, Section } from "./views.tsx";
+import { KindMark, page, pageMeta, Section, TitleField } from "./views.tsx";
 
 export const atmosphereTab = (name: string) => `atmosphere:${name}`;
 
@@ -26,7 +27,7 @@ export function AtmosphereView({ arg: name }: { arg: string }) {
 	return (
 		<section className={page}>
 			<header>
-				<h1 className={pageTitle}>{name}</h1>
+				<TitleField name={name} rename={renameAtmosphere} />
 				<div className={pageMeta}>
 					<KindMark kind="atmosphere" className="-mr-2" />
 					<span className={capText}>

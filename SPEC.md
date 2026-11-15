@@ -100,7 +100,7 @@ Settled in the design interview. Where this section and the text above differ, t
 - Ctrl+K fuzzy-matches titles of notes and combats. A missing title can be created as a plain note.
 - Full-text search is a separate `Action`.
 - `Action`s create a note of a given kind and change a note's kind.
-- Renaming rewrites every link to the note. Deleting asks for confirmation and leaves broken links. Each note lists its backlinks. No graph view.
+- Clicking a note's title renames it in place, as F2 does. Renaming rewrites every link to the note. Deleting asks for confirmation and leaves broken links. Each note lists its backlinks. No graph view.
 - A `Creature` note shows its portrait and stat block beside the text. A `Location` note shows its main picture. A `Session` note shows its date, optional name, and its combats; it reads as its date and name everywhere. A `Vehicle` note shows its stat block and its map.
 - Images are pasted or dropped into a note, or placed in its directory. An image role is main, map, landscape, or none. A note's only image is its main picture.
 - Outside changes to any file MUST show in the app immediately. Files on disk are the truth.

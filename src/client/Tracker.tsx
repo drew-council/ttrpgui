@@ -34,6 +34,7 @@ import {
 import { noteLabel } from "../shared/notes.ts";
 import type { Combat, Combatant } from "../shared/schema.ts";
 import type { Note } from "../shared/state.ts";
+import { renameCombat } from "./actions.ts";
 import { ActionButton, ActionItem, ActionMenu } from "./controls.tsx";
 import { Dice, Rolls } from "./Dice.tsx";
 import { useListNav } from "./list.ts";
@@ -56,7 +57,7 @@ import {
 	kindLabels,
 	kindOf,
 	pageMeta,
-	pageTitle,
+	TitleField,
 	useTabFocus,
 } from "./views.tsx";
 
@@ -339,7 +340,12 @@ export function CombatView({ arg: name }: { arg: string }) {
 	return (
 		<section className="mx-auto grid h-full max-w-[110rem] grid-cols-[minmax(0,1fr)_minmax(20rem,28rem)] grid-rows-[auto_auto_auto_minmax(0,1fr)] gap-x-6 px-6 pt-3 @min-[100rem]:grid-cols-[minmax(0,1fr)_34rem] @max-[52rem]:h-auto @max-[52rem]:grid-cols-[minmax(0,1fr)] @max-[52rem]:grid-rows-none">
 			<header className="col-span-full flex flex-wrap items-baseline gap-x-5">
-				<h1 className={cn(pageTitle, "text-2xl/[1.1]")}>{name}</h1>
+				<TitleField
+					name={name}
+					rename={renameCombat}
+					onDone={() => ref.current?.focus()}
+					className="w-auto text-2xl field-sizing-content md:text-2xl"
+				/>
 				<p className={cn(pageMeta, "mt-0")}>
 					<span className={cn(running && "font-bold text-primary")}>
 						{running ? `Round ${combat.round}` : "Not running"}

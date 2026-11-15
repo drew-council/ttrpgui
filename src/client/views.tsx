@@ -15,12 +15,12 @@ import {
 	isDateTitle,
 	labelParts,
 	mainImage,
-	noteLabel,
 	sessionOrder,
 } from "../shared/notes.ts";
 import { type ImageRole, imageRoles } from "../shared/schema.ts";
 import type { GameState, Note } from "../shared/state.ts";
 import { AtmosphereView } from "./Atmospheres.tsx";
+import { renameNote } from "./actions.ts";
 import {
 	ActionButton,
 	ActionItem,
@@ -34,7 +34,7 @@ import { MarkdownBox } from "./MarkdownBox.tsx";
 import { SaveInput, StatBlock } from "./StatBlock.tsx";
 import { getGame, send, useGame } from "./sync.ts";
 import { CombatView, combatTab } from "./Tracker.tsx";
-import { clickOpens, noteTab, openTab, pick, ui } from "./ui.ts";
+import { clickOpens, justRenamed, noteTab, openTab, pick, ui } from "./ui.ts";
 
 type View = {
 	/** Shown in tabs and the sidebar. */
@@ -66,11 +66,13 @@ export const views: Record<string, View> = {
 	new: { Label: () => "New tab", Body: Welcome },
 };
 
-/** Focuses a view's main element when its tab shows, and again each time `openTab` opens it. Not while the picker is open. */
+/** Focuses a view's main element when its tab shows, and again each time `openTab` opens it. Not while the picker is
+ * open, nor when a rename remounts the tab after focus left it. */
 export function useTabFocus(focus: () => void) {
 	const refocus = ui.use((s) => s.refocus);
 	// biome-ignore lint/correctness/useExhaustiveDependencies: runs on mount and on each refocus.
 	useEffect(() => {
+		if (justRenamed() && document.activeElement !== document.body) return;
 		if (!ui.get().picker) focus();
 	}, [refocus]);
 }
@@ -164,6 +166,46 @@ const KindLabel = ({ kind, name }: { kind: DisplayKind; name: string }) => (
 export const page = "mx-auto max-w-[46rem] px-8 pt-8 pb-12";
 export const pageTitle =
 	"font-serif text-4xl/[1.1] font-semibold italic wrap-anywhere";
+/** The borderless field a page title is edited in, until hovered or focused. Its text sits where the title's does. */
+const titleField =
+	"-mx-2 h-auto rounded-lg border-transparent px-2 hover:border-input focus-visible:border-input focus-visible:ring-0 dark:bg-transparent dark:focus-visible:bg-input/30";
+
+/** A page title that renames what it names: Enter or Tab saves and calls `onDone`, Escape reverts, blur saves. One
+ * line, so a long title ends in an ellipsis at rest and shows in full in its tooltip. */
+export function TitleField({
+	name,
+	rename,
+	onDone,
+	className,
+}: {
+	name: string;
+	rename: (from: string, to: string) => Promise<boolean>;
+	onDone?: () => void;
+	className?: string;
+}) {
+	const ref = useRef<HTMLInputElement>(null);
+	return (
+		<h1 className="min-w-0" title={name}>
+			<SaveInput
+				ref={ref}
+				label="Title"
+				saved={name}
+				onSave={async (to) =>
+					!!to.trim() && to.trim() !== name && rename(name, to.trim())
+				}
+				onDone={onDone ?? (() => ref.current?.blur())}
+				className={cn(
+					pageTitle,
+					titleField,
+					// The text sits exactly where the title did. A taller line leaves room for descenders, which an input clips.
+					"-my-[calc(0.25rem+1px)] block px-[calc(0.5rem-1px)] py-0 leading-[calc(1.1em+0.5rem)]! text-ellipsis md:text-4xl",
+					className,
+				)}
+			/>
+		</h1>
+	);
+}
+
 /** The line of facts under a page title. */
 export const pageMeta =
 	"mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground";
@@ -324,7 +366,8 @@ function NoteView({ arg: title }: { arg: string }) {
 							onDone={focusText}
 							className={cn(
 								pageTitle,
-								"-mx-2 h-auto rounded-lg border-transparent px-2 py-0.5 hover:border-input focus-visible:border-input focus-visible:ring-0 md:text-4xl/[1.1] dark:bg-transparent dark:focus-visible:bg-input/30",
+								titleField,
+								"py-0.5 md:text-4xl/[1.1]",
 								// The stand-in reads as the title until the field has focus.
 								(!isDateTitle(title) || metadata.date) &&
 									"placeholder:text-foreground",
@@ -333,7 +376,7 @@ function NoteView({ arg: title }: { arg: string }) {
 						/>
 					</h1>
 				) : (
-					<h1 className={pageTitle}>{noteLabel(title, note)}</h1>
+					<TitleField name={title} rename={renameNote} onDone={focusText} />
 				)}
 				<div className={pageMeta}>
 					<KindMark kind={kind} className="-mr-2" />

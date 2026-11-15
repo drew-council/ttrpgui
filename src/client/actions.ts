@@ -214,11 +214,10 @@ const onNote = onTab("note", (game) => game.notes);
 const inCombatTab = onTab("combat", (game) => game.combats);
 const inAtmosphereTab = onTab("atmosphere", (game) => game.atmospheres);
 
-/** Asks for a new name for `from`. `after` runs once the rename applies. */
+/** Asks for a new name for `from`, then calls `apply`. */
 function rename(
 	from: string,
-	mutation: (to: string) => Mutation,
-	after: (to: string) => void,
+	apply: (from: string, to: string) => unknown,
 	detail?: string,
 ) {
 	pick({
@@ -227,16 +226,37 @@ function rename(
 		items: [],
 		fromQuery: (to) =>
 			to && to !== from
-				? {
-						label: `Rename to “${to}”`,
-						detail,
-						run: async () => {
-							if (await send(mutation(to))) after(to);
-						},
-					}
+				? { label: `Rename to “${to}”`, detail, run: () => apply(from, to) }
 				: undefined,
 	});
 }
+
+/** Follows a rename from tab `from` to `to` once `sent` applies. Resolves whether it did. */
+async function followRename(sent: Promise<boolean>, from: string, to: string) {
+	if (!(await sent)) return false;
+	replaceTab(from, to);
+	return true;
+}
+
+/** Renames a note, which updates every link, and its tab. The Action and the title field both end here. */
+export const renameNote = (from: string, to: string) =>
+	followRename(
+		send({ type: "renameNote", from, to }),
+		noteTab(from),
+		noteTab(to),
+	);
+export const renameCombat = (from: string, to: string) =>
+	followRename(
+		send({ type: "renameCombat", from, to }),
+		combatTab(from),
+		combatTab(to),
+	);
+export const renameAtmosphere = (from: string, to: string) =>
+	followRename(
+		send({ type: "renameAtmosphere", from, to }),
+		atmosphereTab(from),
+		atmosphereTab(to),
+	);
 
 /** Asks before deleting `name`, then closes its tab. */
 function confirmDelete(
@@ -586,14 +606,7 @@ export const actions: Record<ActionId, Action> = {
 	"rename-note": {
 		title: "Rename note",
 		icon: PencilIcon,
-		...onNote((from) =>
-			rename(
-				from,
-				(to) => ({ type: "renameNote", from, to }),
-				(to) => replaceTab(noteTab(from), noteTab(to)),
-				"Updates every link",
-			),
-		),
+		...onNote((from) => rename(from, renameNote, "Updates every link")),
 	},
 	"delete-note": {
 		title: "Delete note",
@@ -778,13 +791,7 @@ export const actions: Record<ActionId, Action> = {
 	"rename-combat": {
 		title: "Rename combat",
 		icon: PencilIcon,
-		...inCombatTab((from) =>
-			rename(
-				from,
-				(to) => ({ type: "renameCombat", from, to }),
-				(to) => replaceTab(combatTab(from), combatTab(to)),
-			),
-		),
+		...inCombatTab((from) => rename(from, renameCombat)),
 	},
 	"delete-combat": {
 		title: "Delete combat",
@@ -866,14 +873,12 @@ export const actions: Record<ActionId, Action> = {
 	"rename-combatant": {
 		...onTracker("Rename combatant", ({ combat }) => {
 			const label = cursorLabel() as string;
-			rename(
-				label,
-				(to) => ({ type: "renameCombatant", combat, label, to }),
-				(to) =>
+			rename(label, async (_, to) => {
+				if (await send({ type: "renameCombatant", combat, label, to }))
 					ui.set({
 						selected: ui.get().selected.map((l) => (l === label ? to : l)),
-					}),
-			);
+					});
+			});
 		}),
 		icon: PencilIcon,
 	},
@@ -1069,13 +1074,7 @@ export const actions: Record<ActionId, Action> = {
 	"rename-atmosphere": {
 		title: "Rename atmosphere",
 		icon: PencilIcon,
-		...inAtmosphereTab((from) =>
-			rename(
-				from,
-				(to) => ({ type: "renameAtmosphere", from, to }),
-				(to) => replaceTab(atmosphereTab(from), atmosphereTab(to)),
-			),
-		),
+		...inAtmosphereTab((from) => rename(from, renameAtmosphere)),
 	},
 	"delete-atmosphere": {
 		title: "Delete atmosphere",

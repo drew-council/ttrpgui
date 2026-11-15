@@ -194,9 +194,19 @@ export function closeTab(tab: string) {
 	});
 }
 
+let renamedTab: string | undefined;
+
+/** Whether the active tab just took a new id from `replaceTab`, and so remounts. Asking clears it. */
+export function justRenamed() {
+	const was = renamedTab === ui.get().active;
+	renamedTab = undefined;
+	return was;
+}
+
 /** Renames `from` to `to` in the tabs and every tab's history, as after renaming what they show. */
 export function replaceTab(from: string, to: string) {
 	const { tabs, active, history } = ui.get();
+	if (active === from) renamedTab = to;
 	const rename = (t: string) => (t === from ? to : t);
 	ui.set({
 		tabs: tabs.map(rename),
