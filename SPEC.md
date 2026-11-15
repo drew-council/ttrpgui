@@ -87,6 +87,7 @@ Settled in the design interview. Where this section and the text above differ, t
 - One `Game` is open at a time. The start page lists recent ones with the last one under the cursor, so Enter reopens it. Switching goes back through the start page and is rare.
 - Keybinds live in one user-level config file. Most `Action`s have no bind. Every `Action` appears in the command palette.
 - A yes or no question is a dialog, never the picker: `Y` confirms, `N` or Escape cancels, and Enter alone never destroys anything.
+- Pickers chosen from again and again (quick open, the command palette, the atmosphere switcher, creatures to add, conditions) list the most recent rows first while the query is empty. Quick open counts every tab shown, not only its own picks, and never leads with the tab shown now. The lists persist per window, like tabs.
 - Lists use `j`/`k`. The `ttrpgtui` binds carry over: `g`/`G`, `Space` multi-select, `+`/`-` HP, `i` initiative, `n` new, `r` rename, `d` description, `u`/`Ctrl+R` undo and redo.
 - All text editing MUST reuse one markdown text box. Modal editing is deferred.
 - The control window often runs on a small screen (about 1280x800). The display usually runs on a 16:9 TV. These are considerations, not hard targets. Touch is not used.

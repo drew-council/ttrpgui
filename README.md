@@ -328,7 +328,7 @@ Ctrl+= (or Ctrl++), Ctrl+-, and Ctrl+0 zoom the window you press them in, from 5
 
 ## Keys
 
-Ctrl+P lists every command with its key; the palette shows only the commands that apply where focus is. Ctrl+K opens a note, combat, or atmosphere by title (it matches word starts and initials, like `cdra` or `cd` for Cinder Drake) or creates a note. Plain-letter keys never fire while typing; Escape leaves a text box so they work again. A question such as "Delete …?" takes `Y` to confirm, or `N` or Escape to cancel; Enter presses the highlighted button, which starts on the safe one.
+Ctrl+P lists every command with its key; the palette shows only the commands that apply where focus is. Ctrl+K opens a note, combat, or atmosphere by title (it matches word starts and initials, like `cdra` or `cd` for Cinder Drake) or creates a note. With nothing typed, it lists what you showed most recently first, the current tab aside, so Ctrl+K then Enter flips between two notes. The palette, the atmosphere switcher, and the creature and condition lists put your recent choices first the same way. These lists survive a restart. Plain-letter keys never fire while typing; Escape leaves a text box so they work again. A question such as "Delete …?" takes `Y` to confirm, or `N` or Escape to cancel; Enter presses the highlighted button, which starts on the safe one.
 
 | Where               | Key                       | Command                                          |
 | ------------------- | ------------------------- | ------------------------------------------------ |

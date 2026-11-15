@@ -4,6 +4,8 @@ import {
 	type History,
 	historyCap,
 	pushed,
+	recency,
+	remembered,
 	renamed,
 	step,
 } from "./history.ts";
@@ -76,4 +78,23 @@ test("a rename carries through both lists", () => {
 	expect(
 		renamed({ back: ["a", "b", "a"], forward: ["a", "c"] }, "a", "z"),
 	).toEqual({ back: ["z", "b", "z"], forward: ["z", "c"] });
+});
+
+test("a recent list puts the latest first, once, capped", () => {
+	expect(remembered(["a", "b", "c"], "b")).toEqual(["b", "a", "c"]);
+	expect(remembered([], "a")).toEqual(["a"]);
+	const full = Array.from({ length: historyCap }, (_, i) => String(i));
+	expect(remembered(full, "new")).toEqual(["new", ...full.slice(0, -1)]);
+});
+
+test("recent keys lead in order and the rest keep theirs", () => {
+	const rank = recency(["c", "a"]);
+	const items = ["a", "b", "c", "d"];
+	expect(items.toSorted((x, y) => rank(x) - rank(y))).toEqual([
+		"c",
+		"a",
+		"b",
+		"d",
+	]);
+	expect(rank("b")).toBe(rank("d"));
 });

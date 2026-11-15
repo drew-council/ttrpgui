@@ -1,6 +1,6 @@
 // Per-client UI state: tabs and their history, sidebar, the open picker or confirmation, stat block editing, the tracker
 // selection, the privacy screen, the dice roller and its rolls, and zoom. Tabs, their history, the sidebar and its
-// collapsed groups, and each page's zoom survive a reload.
+// collapsed groups, the pickers' recent lists, and each page's zoom survive a reload.
 import type { MouseEvent, ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { toast as sonner } from "sonner";
@@ -10,6 +10,7 @@ import {
 	emptyHistory,
 	type History,
 	pushed,
+	remembered,
 	renamed,
 	step,
 } from "./history.ts";
@@ -26,6 +27,8 @@ export type Item = {
 	view?: ReactNode;
 	/** Shown but not chosen, such as why a query is refused. */
 	disabled?: boolean;
+	/** Names the row in its picker's recent list where the label can change, such as a tab id. Defaults to the label. */
+	key?: string;
 	run: (newTab: boolean) => void;
 };
 
@@ -39,6 +42,10 @@ export type PickerSpec = {
 	fromQuery?: (query: string) => Item | undefined;
 	/** Replaces `items` whenever the query changes, such as with server search results. */
 	load?: (query: string) => Promise<Item[]>;
+	/** Opts in to recency: names the recent list. With an empty query, the rows chosen most recently lead. */
+	recent?: string;
+	/** The key of what is shown now, which never leads, such as the active tab. */
+	current?: string;
 };
 
 /** A yes or no question. `yes` and `no` label the buttons by what they do. The chosen side runs after the dialog is
@@ -64,6 +71,8 @@ type Ui = {
 	sidebar: boolean;
 	/** Labels of the collapsed sidebar groups. */
 	collapsed: string[];
+	/** Each picker's recent row keys, most recent first, by `PickerSpec.recent`. `tabs` holds the tabs shown. */
+	recent: Record<string, string[]>;
 	picker?: PickerSpec;
 	confirm?: ConfirmSpec;
 	/** The creature whose stat block is open as a form. */
@@ -100,6 +109,7 @@ export const ui = createStore<Ui>({
 	history: {},
 	sidebar: true,
 	collapsed: [],
+	recent: {},
 	selected: [],
 	refocus: 0,
 	display: false,
@@ -109,11 +119,26 @@ export const ui = createStore<Ui>({
 	...restore(),
 });
 ui.subscribe(() => {
-	const { tabs, active, history, sidebar, collapsed } = ui.get();
+	const { tabs, active, history, sidebar, collapsed, recent } = ui.get();
 	localStorage.setItem(
 		storageKey,
-		JSON.stringify({ tabs, active, history, sidebar, collapsed }),
+		JSON.stringify({ tabs, active, history, sidebar, collapsed, recent }),
 	);
+});
+
+/** Puts `key` first in the recent list `name`. */
+export function remember(name: string, key: string) {
+	const { recent } = ui.get();
+	ui.set({
+		recent: { ...recent, [name]: remembered(recent[name] ?? [], key) },
+	});
+}
+
+// Quick open lists the tabs shown most recently first, however they were opened.
+ui.subscribe(() => {
+	const { active, recent } = ui.get();
+	if (active && !active.startsWith("new:") && recent.tabs?.[0] !== active)
+		remember("tabs", active);
 });
 
 export const noteTab = (title: string) => `note:${title}`;
@@ -218,12 +243,13 @@ export function justRenamed() {
 	return was;
 }
 
-/** Renames `from` to `to` in the tabs and every tab's history, as after renaming what they show. */
+/** Renames `from` to `to` in the tabs, every tab's history, and the recent tabs, as after renaming what they show. */
 export function replaceTab(from: string, to: string) {
-	const { tabs, active, history } = ui.get();
+	const { tabs, active, history, recent } = ui.get();
 	if (active === from) renamedTab = to;
 	const rename = (t: string) => (t === from ? to : t);
 	ui.set({
+		recent: { ...recent, tabs: [...new Set(recent.tabs?.map(rename))] },
 		tabs: tabs.map(rename),
 		active: active && rename(active),
 		history: Object.fromEntries(

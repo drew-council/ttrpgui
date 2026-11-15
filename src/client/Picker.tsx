@@ -1,5 +1,6 @@
 // The one fuzzy picker: command palette, quick open, and prompts all use it. Confirmations use `Confirm`.
-// fuzzysort ranks and highlights; cmdk only handles the list keys, so its own filter is off.
+// fuzzysort ranks and highlights; cmdk only handles the list keys, so its own filter is off. A picker with `recent`
+// lists the rows chosen most recently first while the query is empty.
 import fuzzysort from "fuzzysort";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -12,7 +13,17 @@ import {
 } from "#components/ui/command.tsx";
 import { Dialog, DialogContent, DialogTitle } from "#components/ui/dialog.tsx";
 import { Kbd } from "#components/ui/kbd.tsx";
-import { closePopup, type Item, type PickerSpec, wantsNewTab } from "./ui.ts";
+import { recency } from "./history.ts";
+import {
+	closePopup,
+	type Item,
+	type PickerSpec,
+	remember,
+	ui,
+	wantsNewTab,
+} from "./ui.ts";
+
+const keyOf = (item: Item) => item.key ?? item.label;
 
 export function Picker({ spec }: { spec: PickerSpec }) {
 	const [query, setQuery] = useState(spec.value ?? "");
@@ -26,8 +37,19 @@ export function Picker({ spec }: { spec: PickerSpec }) {
 		};
 	}, [query, spec]);
 	const rows = useMemo(() => {
+		// The recent rows lead an empty query and break ties in a ranking.
+		const rank = recency(
+			(spec.recent ? (ui.get().recent[spec.recent] ?? []) : []).filter(
+				(key) => key !== spec.current,
+			),
+		);
+		const byRecent = (a: Item, b: Item) => rank(keyOf(a)) - rank(keyOf(b));
 		const found: { item: Item; label: ReactNode }[] = fuzzysort
-			.go(query, items, { keys: ["label", "title"], limit: 100 })
+			.go(query, items.toSorted(byRecent), {
+				keys: ["label", "title"],
+				limit: 100,
+			})
+			.toSorted((a, b) => b.score - a.score || byRecent(a.obj, b.obj))
 			.map((result) => ({
 				item: result.obj,
 				// Highlights only a match in the label, not one in the title behind it.
@@ -47,6 +69,7 @@ export function Picker({ spec }: { spec: PickerSpec }) {
 	// Whether the Enter or click that selects a row asked for a new tab. See `wantsNewTab`.
 	const newTab = useRef(false);
 	const choose = (item: Item) => {
+		if (spec.recent && items.includes(item)) remember(spec.recent, keyOf(item));
 		closePopup();
 		item.run(newTab.current);
 	};

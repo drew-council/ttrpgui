@@ -1,4 +1,5 @@
-// Each tab's back and forward history, as pure functions over one tab's `History`. `ui.ts` keeps one per tab id.
+// Each tab's back and forward history, as pure functions over one tab's `History`. `ui.ts` keeps one per tab id. Also
+// the recent lists pickers order their rows by.
 
 /** The tab ids a tab showed before (`back`) and after (`forward`) what it shows now. Each list ends with the nearest. */
 export type History = { back: string[]; forward: string[] };
@@ -47,3 +48,13 @@ export function renamed(history: History, from: string, to: string): History {
 		forward: history.forward.map(rename),
 	};
 }
+
+/** A recent list with `key` first, capped: what a picker records when a row is chosen. */
+export const remembered = (recent: string[], key: string) =>
+	[key, ...recent.filter((k) => k !== key)].slice(0, historyCap);
+
+/** Ranks keys by `recent`, most recent first: its index, else after every recent one. */
+export const recency = (recent: string[]) => {
+	const at = new Map(recent.map((key, i) => [key, i]));
+	return (key: string) => at.get(key) ?? recent.length;
+};

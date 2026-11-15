@@ -220,6 +220,7 @@ export function addCombatant(combat: string) {
 		{
 			title: "Add a combatant",
 			placeholder: "Creature",
+			recent: "creatures",
 			items: Object.keys(notes)
 				.filter((title) => canFight(notes[title]))
 				.sort()
@@ -283,6 +284,7 @@ export function toggleCondition(t: Target) {
 		{
 			title: `Toggle a condition on ${describe(t.labels)}`,
 			placeholder: "Condition",
+			recent: "conditions",
 			items: names.map((name) => ({
 				label: name,
 				detail: has(name) ? "Remove" : undefined,

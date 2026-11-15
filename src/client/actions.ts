@@ -418,14 +418,25 @@ function atmosphereItems(run: (name: string) => void) {
 export const switchAtmosphere = (name: string) =>
 	send({ type: "switchAtmosphere", name });
 
-/** An Action on the Atmosphere in the active tab, else on one picked. */
-const onAtmosphere = (title: string, run: (name: string) => void): Action => ({
+/** An Action on the Atmosphere in the active tab, else on one picked. `recent` opts the picker in to recency. */
+const onAtmosphere = (
+	title: string,
+	run: (name: string) => void,
+	recent?: string,
+): Action => ({
 	title,
 	when: () => Object.keys(getGame().atmospheres).length > 0,
 	run() {
-		const name = activeTab("atmosphere", getGame().atmospheres);
+		const { atmospheres, runtime } = getGame();
+		const name = activeTab("atmosphere", atmospheres);
 		if (name) run(name);
-		else pick({ title, items: atmosphereItems(run) });
+		else
+			pick({
+				title,
+				items: atmosphereItems(run),
+				recent,
+				current: activeAtmosphere(atmospheres, runtime),
+			});
 	},
 });
 
@@ -503,6 +514,7 @@ export const actions: Record<ActionId, Action> = {
 			const keys = binds(getGame().config.keys);
 			pick({
 				title: "Run a command",
+				recent: "commands",
 				items: available().map((id) => ({
 					label: actions[id].title,
 					hint: keys[id] && formatKey(keys[id]),
@@ -519,12 +531,16 @@ export const actions: Record<ActionId, Action> = {
 			const item = (label: string, detail: string, tab: string): Item => ({
 				label,
 				detail,
+				key: tab,
 				run: (newTab) => openTab(tab, newTab),
 			});
 			ask(
 				{
 					title: "Open a note",
 					placeholder: "Title",
+					// Every tab shown counts, not only those opened here. See `ui.ts`.
+					recent: "tabs",
+					current: ui.get().active,
 					items: [
 						// Sessions first, newest first.
 						...Object.keys(notes)
@@ -1059,7 +1075,7 @@ export const actions: Record<ActionId, Action> = {
 		icon: PlusIcon,
 	},
 	"switch-atmosphere": {
-		...onAtmosphere("Switch atmosphere", switchAtmosphere),
+		...onAtmosphere("Switch atmosphere", switchAtmosphere, "atmospheres"),
 		icon: CloudFogIcon,
 		label: "Make active",
 	},
