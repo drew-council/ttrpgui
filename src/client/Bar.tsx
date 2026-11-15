@@ -148,7 +148,7 @@ function Screen() {
 	const atmosphere = useGame((g) => activeAtmosphere(g.atmospheres, g.runtime));
 	return (
 		<>
-			{window.ttrpgui && (
+			{window.ttrpgui?.display && (
 				<ActionButton
 					id={open ? "close-display" : "open-display"}
 					icon={open ? MonitorIcon : MonitorOffIcon}
@@ -398,7 +398,7 @@ function Music() {
 	const track = useGame((g) => nowPlaying(g.atmospheres, g.runtime));
 	const paused = useGame((game) => game.runtime.music?.paused);
 	const saved = useGame((game) => game.runtime.music?.volume) ?? 100;
-	const silent = ui.use((s) => !!window.ttrpgui && !s.display);
+	const silent = ui.use((s) => !!window.ttrpgui?.display && !s.display);
 	const playable = useAvailable("toggle-music");
 	// The handle follows a drag at once; the volume is sent when the drag ends.
 	const [drag, setDrag] = useState<number>();

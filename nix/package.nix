@@ -84,7 +84,7 @@ stdenvNoCC.mkDerivation {
     runHook preInstall
     mkdir -p ${app}/src
     cp -r package.json dist ${app}
-    cp -r src/server src/shared src/electron.ts src/preload.cjs src/cli.ts ${app}/src
+    cp -r src/server src/shared src/electron.ts src/start.ts src/preload.cjs src/cli.ts ${app}/src
     cp -r ${nodeModules}/prod/node_modules ${app}
     install -Dm444 ${./ttrpgui.svg} $out/share/icons/hicolor/scalable/apps/ttrpgui.svg
     makeWrapper ${lib.getExe electron} $out/bin/ttrpgui \

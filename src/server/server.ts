@@ -3,8 +3,8 @@
 import { mkdir } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
-import { homedir } from "node:os";
-import { join, relative, resolve, sep } from "node:path";
+import { homedir, hostname } from "node:os";
+import { basename, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { watch } from "chokidar";
@@ -21,7 +21,9 @@ import { type History, runMutation } from "./mutations.ts";
 
 enablePatches();
 
-const clientDir = fileURLToPath(new URL("../../dist/client", import.meta.url));
+export const clientDir = fileURLToPath(
+	new URL("../../dist/client", import.meta.url),
+);
 
 const defaultConfigFile = join(
 	process.env.XDG_CONFIG_HOME || join(homedir(), ".config"),
@@ -78,6 +80,16 @@ export async function startServer({
 	const serveClient = sirv(clientDir, { dev: true, single: true });
 	const serveGame = sirv(gameDir, { dev: true });
 	const http = createServer(async (req, res) => {
+		// Who this is, for LAN discovery. See `discover` in `src/start.ts`.
+		if (req.url === "/info") {
+			res.setHeader("content-type", "application/json");
+			const info = {
+				app: "ttrpgui",
+				game: basename(gameDir),
+				host: hostname(),
+			};
+			return res.end(JSON.stringify(info));
+		}
 		if (req.url?.startsWith("/search?")) {
 			const query = new URLSearchParams(req.url.slice(8)).get("q") ?? "";
 			const hits = await searchNotes(gameDir, Object.keys(state.notes), query);
@@ -157,6 +169,7 @@ export async function startServer({
 		if (e.code === "EADDRINUSE")
 			throw new Error(
 				`Port ${port} is in use, often by another ttrpgui. Close it or pass --port N.`,
+				{ cause: e },
 			);
 		throw e;
 	});
@@ -166,7 +179,10 @@ export async function startServer({
 		clearTimeout(timer);
 		await watcher.close();
 		for (const client of wss.clients) client.terminate();
-		await new Promise((closed) => http.close(closed));
+		await new Promise((closed) => {
+			http.close(closed);
+			http.closeAllConnections();
+		});
 	}
 	return { url, close };
 }

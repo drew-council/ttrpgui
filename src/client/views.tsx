@@ -726,8 +726,8 @@ export function Welcome() {
 			</dl>
 			{window.ttrpgui && (
 				<ActionButton
-					id="open-game"
-					label="Open another Game"
+					id="start-page"
+					label="Back to the start page"
 					className="justify-self-start -ml-2"
 				/>
 			)}

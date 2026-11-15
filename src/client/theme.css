@@ -110,9 +110,12 @@
 	#app {
 		@apply h-full;
 	}
+	/* On the root, so the viewport's own scrollbar takes it too; it inherits from there. */
+	html {
+		scrollbar-color: var(--border) transparent;
+	}
 	body {
 		@apply bg-background font-sans text-base text-foreground antialiased;
-		scrollbar-color: var(--border) transparent;
 	}
 	button:not(:disabled) {
 		cursor: pointer;

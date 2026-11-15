@@ -4,6 +4,7 @@
 import type { MouseEvent } from "react";
 import { flushSync } from "react-dom";
 import { toast as sonner } from "sonner";
+import { bindHas, binds, eventKey } from "../shared/keys.ts";
 import {
 	emptyHistory,
 	type History,
@@ -262,4 +263,17 @@ export function zoom(step: -1 | 0 | 1) {
 	return applyZoom(
 		zoomLevels[Math.max(0, Math.min((at < 0 ? last : at) + step, last))],
 	);
+}
+
+const zoomSteps = [
+	["zoom-in", 1],
+	["zoom-out", -1],
+	["reset-zoom", 0],
+] as const;
+
+/** Zooms if `e` is a zoom bind, for pages without the Action registry. Returns whether it was. */
+export function zoomOnKey(e: KeyboardEvent, keys = binds()) {
+	const step = zoomSteps.find(([id]) => bindHas(keys[id], eventKey(e)))?.[1];
+	if (step !== undefined) zoom(step);
+	return step !== undefined;
 }

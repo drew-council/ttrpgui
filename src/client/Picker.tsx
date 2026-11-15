@@ -97,7 +97,9 @@ export function Picker({ spec }: { spec: PickerSpec }) {
 							>
 								<span className="min-w-0 flex-1 truncate">{label}</span>
 								{item.detail && (
-									<span className="text-sm text-faint">{item.detail}</span>
+									<span className="max-w-1/2 truncate text-sm text-faint">
+										{item.detail}
+									</span>
 								)}
 								{item.hint && (
 									<CommandShortcut className="tracking-normal">

@@ -40,7 +40,7 @@ export const defaultKeys = {
 	"move-statblock-item-up": "alt+arrowup",
 	"move-statblock-item-down": "alt+arrowdown",
 	"show-problems": "",
-	"open-game": "",
+	"start-page": "",
 	"new-combat": "",
 	"rename-combat": "f2",
 	"delete-combat": "",

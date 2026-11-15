@@ -19,11 +19,11 @@ import {
 	DownloadIcon,
 	EyeOffIcon,
 	FlagIcon,
-	FolderOpenIcon,
 	HashIcon,
 	HeartCrackIcon,
 	HeartPlusIcon,
 	HeartPulseIcon,
+	HouseIcon,
 	ImageIcon,
 	ImageOffIcon,
 	ListPlusIcon,
@@ -130,17 +130,6 @@ import {
 	roleLabel,
 	tabExists,
 } from "./views.tsx";
-
-declare global {
-	interface Window {
-		/** Set by the Electron preload. */
-		ttrpgui?: {
-			openGame(): void;
-			display(open: boolean): void;
-			onDisplay(show: (open: boolean) => void): void;
-		};
-	}
-}
 
 export type Action = {
 	title: string;
@@ -465,8 +454,9 @@ subscribeGame(() => {
 /** Music Actions that need tracks in the active Atmosphere. */
 const onTracks = { when: () => !noTracks(), unavailable: noTracks };
 
-const electron = () => window.ttrpgui !== undefined;
-window.ttrpgui?.onDisplay((display) => ui.set({ display }));
+/** Whether this window can open the display window: Electron, on a Game served here. */
+const hasDisplay = () => window.ttrpgui?.display !== undefined;
+window.ttrpgui?.onDisplay?.((display) => ui.set({ display }));
 
 /** Goes back (-1) or forward (1) in the active tab, past what no longer exists or is open in another tab. */
 const go = (direction: -1 | 1) => {
@@ -760,11 +750,11 @@ export const actions: Record<ActionId, Action> = {
 		title: "Show problems",
 		run: () => openTab("problems"),
 	},
-	"open-game": {
-		title: "Open another Game",
-		icon: FolderOpenIcon,
-		when: electron,
-		run: () => window.ttrpgui?.openGame(),
+	"start-page": {
+		title: "Back to the start page",
+		icon: HouseIcon,
+		when: () => window.ttrpgui !== undefined,
+		run: () => window.ttrpgui?.back(),
 	},
 	"new-combat": {
 		...create(
@@ -1025,14 +1015,14 @@ export const actions: Record<ActionId, Action> = {
 	"open-display": {
 		title: "Open the player display",
 		icon: MonitorUpIcon,
-		when: () => electron() && !ui.get().display,
-		run: () => window.ttrpgui?.display(true),
+		when: () => hasDisplay() && !ui.get().display,
+		run: () => window.ttrpgui?.display?.(true),
 	},
 	"close-display": {
 		title: "Close the player display",
 		icon: MonitorOffIcon,
 		when: () => ui.get().display,
-		run: () => window.ttrpgui?.display(false),
+		run: () => window.ttrpgui?.display?.(false),
 	},
 	"show-image": {
 		title: "Show an image on the display",

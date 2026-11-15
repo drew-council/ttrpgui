@@ -6,13 +6,15 @@ It is a headless server that owns a Game directory, with web clients for the con
 
 ## Install
 
-`nix run github:drew-council/ttrpgui` runs the desktop app; add `-- --game DIR` to open a specific Game. To install it, add the flake as an input and put `inputs.ttrpgui.packages.${system}.default` in `environment.systemPackages` or `home.packages`. That installs `ttrpgui`, with a launcher entry named "ttrpgui", and `ttrpgui-cli` for `serve` and `validate` (see "Server alone"). It brings its own `yt-dlp` and `ffmpeg`. With `NIXOS_OZONE_WL=1` it runs as a native Wayland window.
+`nix run github:drew-council/ttrpgui` runs the desktop app. To install it, add the flake as an input and put `inputs.ttrpgui.packages.${system}.default` in `environment.systemPackages` or `home.packages`. That installs `ttrpgui`, with a launcher entry named "ttrpgui", and `ttrpgui-cli` for `serve` and `validate` (see "Server alone"). It brings its own `yt-dlp` and `ffmpeg`. With `NIXOS_OZONE_WL=1` it runs as a native Wayland window.
 
-The first launch asks for a folder: a Game, or an empty folder for a new one. The app remembers the last Game in `$XDG_STATE_HOME/ttrpgui/last-game` and reopens it; if that folder is gone, it asks again. "Open another Game" (on an empty tab and in Ctrl+P) switches to any folder, and `--game DIR` opens one; both are remembered.
+Every launch shows the start page. On the left, **Open a Game**: recent Games, most recent first, and "Open folder…" (`O`) for any other folder. A folder that is not a Game yet is made one only after you say so. The "Host a display" switch (`H`) picks how the next Game opens, from the list or a folder: off, the notes and controls open here, with the player display a click away; on, this computer shows only the player display and serves the Game to the LAN for another computer to drive (see "Two machines"). It starts as the most recent Game was last opened and changes only when you flip it. The cursor starts on whatever you used last, so Enter resumes it. On the right, **Join a Game**: Games hosted on the LAN and servers joined before. A remembered server not seen on the LAN says "Not found". The × on a row, or Delete, forgets it. A server is remembered once it has answered. The page zooms with `Ctrl+=` `Ctrl+-` `Ctrl+0`. "Back to the start page" (on an empty tab and in Ctrl+P) returns there. Recents live in `$XDG_STATE_HOME/ttrpgui/recent.json`.
+
+Flags skip the start page, for scripts: `--game DIR` opens a Game (an empty or missing directory becomes a new one), `--display` opens only its player display, `--lan` listens on every interface, and `--connect URL` joins a server. `--display` or `--lan` without `--game` reopen the last Game. `--port N` (default 7373) sets the port a Game is served on, also from the start page.
 
 ## Game night
 
-1. `ttrpgui`, or `bun start` inside the dev shell. It reopens the last Game; `--game DIR` opens another, and an empty directory becomes a new Game.
+1. `ttrpgui`, or `bun start` inside the dev shell. Press Enter to open the last Game, or pick another.
 2. "Go live" in the table bar (or "Go live with a session" in Ctrl+P) picks or creates the Session. Its name in the bar opens a menu to open or end it; Ctrl+L opens it.
 3. The monitor button in the bar ("Open the player display") opens the second window; it lights up while the window is open, and a second press closes it. Drag it to the TV and press F for fullscreen. Music and wallpaper start there.
 4. Open a prepared combat from the sidebar or with Ctrl+K, and press "Start combat" (Shift+S). Closing the control window quits everything.
@@ -23,7 +25,7 @@ Table state lives in the Game (`runtime.toml`), so a restart picks up the runnin
 
 Every command is in the palette (Ctrl+P) with its key. The ones you would look for on screen also have a control, with the command and its key in a tooltip:
 
-- **Table bar**, along the bottom. On the left: the player display toggle (Electron only), the active atmosphere as a switcher, the live session (Go live, or its name with a menu that opens or ends it), the running combat and round, the shown image (show, a thumbnail with its note's name, hide), then problems. On the right, where they never move: the track, play or pause, skip, mute, a volume slider, the privacy screen (it hides the control window until the next key or click, which does nothing else), and the command palette. Play starts a track when none is current. Before the track it says "Paused" or "Muted", and in Electron "Display closed" while the display window is closed, since only the display makes sound; click it to open the display. A dimmed control's tooltip says why it is dimmed, such as "No tracks in Market Day". "Open another Game" is on an empty tab and in Ctrl+P.
+- **Table bar**, along the bottom. On the left: the player display toggle (Electron only), the active atmosphere as a switcher, the live session (Go live, or its name with a menu that opens or ends it), the running combat and round, the shown image (show, a thumbnail with its note's name, hide), then problems. On the right, where they never move: the track, play or pause, skip, mute, a volume slider, the privacy screen (it hides the control window until the next key or click, which does nothing else), and the command palette. Play starts a track when none is current. Before the track it says "Paused" or "Muted", and in Electron "Display closed" while the display window is closed, since only the display makes sound; click it to open the display. A dimmed control's tooltip says why it is dimmed, such as "No tracks in Market Day". "Back to the start page" is on an empty tab and in Ctrl+P.
 - **Tab bar**: the sidebar toggle, back, forward, and new tab.
 - **Sidebar**: a search button beside the filter, and groups by kind: Sessions (newest first), PCs, NPCs, Vehicles, Locations, Notes, Combats, Atmospheres. Each group header collapses it with a click, and has a count and a + that creates one of its kind (expanding the group). A new creature is an NPC; "Mark as PC" in its header makes it a PC. "New session" creates a session titled and dated today without asking and puts the cursor in its name. The active note is marked and scrolled into view, also on the header of a collapsed group that holds it; Ctrl+E starts the cursor there. The filter matches what rows show and note titles, and shows matches in collapsed groups too. Keys: `j` `k` `g` `G` move over headers and rows, `Enter` opens a row or toggles a header, `h` or Left collapses the cursor's group, `l` or Right expands it.
 - **Combat view**, a toolbar under the title: start or end, next turn, roll, add, undo, redo; then, for the selection or the cursor row, damage, heal, condition, temp HP, initiative, concentration, and select. The ⋯ menu holds the rest: max HP, death saves, legendary counters, rename, note, clear selection, remove, and the combat's atmosphere, session, party rest, rename, and delete. Shift+click selects rows.
@@ -39,10 +41,12 @@ In a browser tab, the browser keeps Ctrl+W, Ctrl+N, Ctrl+T, Ctrl+Tab, and Ctrl+S
 
 ## Two machines
 
-One machine runs the Game and shows the player display; a laptop drives it. Port 7373 unless both ends say `--port N`.
+One computer shows the player display; another drives it. Open `ttrpgui` on both.
 
-- Display machine: `ttrpgui --lan --display`. It serves the Game (`--game DIR`, else the last one, else a folder picker) to the LAN and opens only the player display. Press F for fullscreen. Closing the window quits. Its firewall must allow TCP 7373; on NixOS, `networking.firewall.allowedTCPPorts = [ 7373 ];`.
-- Laptop: `ttrpgui --connect http://igneous:7373`, with the display machine's name or address. It starts no server and opens the control window on that Game. Until the server answers, the window says so and keeps trying; a dropped connection shows "Reconnecting…" and recovers by itself. The display toggle and "Open another Game" are not there: the display window and the Game belong to the display machine. Pasted images and everything else go over the connection.
+- Display computer: pick the Game, turn on "Host a display" (`H`), and press Enter. It serves the Game to the LAN on port 7373 and shows only the player display, fullscreen and titled "Ironvale display — ttrpgui"; F leaves fullscreen and returns. While the pointer moves, the display says where to join it, such as "Join at igneous:7373 or 192.168.1.20:7373", and that closing the window stops hosting. Closing the window quits; the next launch shows the start page with "Host a display" already on. Its firewall must allow TCP 7373; on NixOS, `networking.firewall.allowedTCPPorts = [ 7373 ];`.
+- Laptop: under "Join a Game" the display computer appears by itself, with its Game, its name, and its address, while the start page is open. Choose it. If it does not appear, type its name or address in the field (`/`), such as `igneous` or `192.168.1.20:7373`. The control window opens on that Game. Until the server answers, the window says so and keeps trying (Escape or "Back to the start page" goes back, with the address in the field); an address that answers but is not a ttrpgui Game is never loaded: the start page says so; a dropped connection shows "Reconnecting…" and recovers by itself. The display toggle is not there: the display window and the Game belong to the display computer. Pasted images and everything else go over the connection. "Back to the start page" leaves, and the server stays in the list for next time.
+
+Discovery asks every address in each private IPv4 LAN's /24 for `GET /info` on port 7373 (or `--port N`), every few seconds; it needs nothing open on the laptop. It skips loopback, VPN, and container interfaces, and does not see other ports or subnets: type those addresses by hand. Only a display host or `ttrpgui-cli serve --lan` listens on the LAN; a Game opened normally listens on this computer only. A Game hosted on this computer is listed as "this computer".
 
 A browser at `http://igneous:7373/control` also works, with the browser keeping some keys (see "Server alone"). `ttrpgui-cli serve --lan --game DIR` is a host without a window.
 
@@ -53,7 +57,7 @@ This project uses Nix and direnv. Run `direnv allow`, or prefix commands with `n
 ```sh
 bun install
 bun start                    # build and launch the desktop app
-bun start -- --game DIR      # open a specific Game
+bun start -- --game DIR      # open a specific Game, skipping the start page
 bun run dev                  # hot-reloading client and server on a temp copy of the sample Game
 bun run cli serve --game DIR # server only, on localhost:7373 (--port N, --lan)
 bun run cli validate DIR     # report every problem in a Game; exits 1 if any exist
@@ -69,7 +73,7 @@ The client is React with Tailwind CSS and shadcn/ui; `CLAUDE.md` describes the s
 
 Electron runs with the Nix runtime, in the dev shell and in the package. Its npm package provides only the types and launcher, so keep its version at nixpkgs' (45.2.3 now). That Electron MUST bundle a Node that strips types (22.18 or later; Electron 45 bundles Node 24). The npm `playwright` version is pinned to nixpkgs' `playwright-driver`.
 
-`nix build` builds the package (`nix/package.nix`); the Vite client build is its only real step, a few seconds. Dependencies are a fixed-output derivation keyed by `bun.lock` and the dependency fields of `package.json`, so source edits never refetch them. After changing dependencies, `nix build` fails with a hash mismatch on `ttrpgui-node-modules`: put the `got:` hash in `nix/package.nix`. `TTRPGUI_BIN=result/bin/ttrpgui bun run smoke` runs the Electron smoke check against the package.
+`nix build` builds the package (`nix/package.nix`); the Vite client build is its only real step, a few seconds. Dependencies are a fixed-output derivation keyed by `bun.lock` and the dependency fields of `package.json`, so source edits never refetch them. After changing dependencies, `nix build` fails with a hash mismatch on `ttrpgui-node-modules`: put the `got:` hash in `nix/package.nix`. `TTRPGUI_BIN=result/bin/ttrpgui bun run smoke` runs the Electron smoke check against the package. `TTRPGUI_DISCOVER=127.0.0.1:7400,…` replaces the addresses the start page probes, so tests never probe the LAN or port 7373.
 
 ## Game directory format
 
@@ -324,6 +328,10 @@ Ctrl+P lists every command with its key; the palette shows only the commands tha
 |                     | `Ctrl+L`                  | open the live session                            |
 |                     | `Ctrl+Shift+L`            | privacy screen: hide this window until a key or click |
 |                     | `F2`                      | rename the note, combat, or atmosphere in the tab |
+| Start page          | `Tab`                     | switch between Open and Join                     |
+|                     | `H` / `O`                 | host a display switch / open a folder            |
+|                     | `/`                       | type an address to join                          |
+|                     | `Delete`                  | forget the recent Game or server                 |
 | Lists               | `j` `k` `g` `G`, arrows   | move                                             |
 |                     | `Enter` / `Ctrl+Enter`    | open / open in a new tab                         |
 | Anything you open   | click / `Ctrl+click`, middle-click | open / open in a new tab                 |

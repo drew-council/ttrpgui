@@ -69,8 +69,8 @@ The application is a headless server with clients.
 - The server owns the `Game` directory and all shared state. It MUST run without any window.
 - The control window and the display window are clients. They connect over a socket and receive updates as they happen.
 - State sync SHOULD use an existing library.
-- One launch starts the server and the control window together. The same program MUST be able to start the server alone.
-- The server listens on localhost by default. A launch option opens it to the LAN. Auth is never a concern.
+- A launch shows a start page: open a `Game` on this machine, or join one hosted on the LAN. Opening starts the server and the control window together. The same program MUST be able to start the server alone.
+- The server listens on localhost by default. Hosting a display, or a launch option, opens it to the LAN. Auth is never a concern.
 - v1 assumes one control client and one display client. Later, control and display MAY be separate LAN devices, and player devices MAY become clients.
 - Shared state: `Game` data, live `Session`, active `Atmosphere`, running `Combat`, shown image, combat undo history.
 - Per-client state: cursor, selection, open tabs.
@@ -84,7 +84,7 @@ Settled in the design interview. Where this section and the text above differ, t
 
 - The code MUST stay simple. A 90% solution in a tenth of the code is preferred.
 - React and TypeScript.
-- One `Game` is open at a time. The app reopens the last one. Switching is a full reload and is rare.
+- One `Game` is open at a time. The start page lists recent ones with the last one under the cursor, so Enter reopens it. Switching goes back through the start page and is rare.
 - Keybinds live in one user-level config file. Most `Action`s have no bind. Every `Action` appears in the command palette.
 - Lists use `j`/`k`. The `ttrpgtui` binds carry over: `g`/`G`, `Space` multi-select, `+`/`-` HP, `i` initiative, `n` new, `r` rename, `d` description, `u`/`Ctrl+R` undo and redo.
 - All text editing MUST reuse one markdown text box. Modal editing is deferred.

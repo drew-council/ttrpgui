@@ -12,9 +12,9 @@ import {
 	playerTracker,
 	videoFile,
 } from "../shared/display.ts";
-import { bindHas, binds, eventKey } from "../shared/keys.ts";
+import { binds } from "../shared/keys.ts";
 import { getGame, send, useGame } from "./sync.ts";
-import { zoom } from "./ui.ts";
+import { zoomOnKey } from "./ui.ts";
 import { KindMark } from "./views.tsx";
 
 /** URL of a file in the Game. */
@@ -74,15 +74,23 @@ export function Display() {
 			</Fade>
 			{tracker && <PlayerTracker {...tracker} />}
 			{name && <Music atmosphere={name} />}
-			{!idle && !document.fullscreenElement && (
-				<p className="absolute top-6 right-8 z-3 text-muted-foreground text-shadow-glow">
-					Double-click or press <Kbd>F</Kbd> for fullscreen
-				</p>
+			{!idle && (
+				<div className="absolute top-6 right-8 z-3 grid justify-items-end gap-1 text-muted-foreground text-shadow-glow">
+					{!document.fullscreenElement && (
+						<p>
+							Double-click or press <Kbd>F</Kbd> for fullscreen
+						</p>
+					)}
+					{join && <p>Join at {join}</p>}
+					{join && <p>Close this window to stop hosting</p>}
+				</div>
 			)}
 		</div>
 	);
 }
 
+/** Where another computer joins, on a display that hosts its Game (`?join=`, set by `electron.ts`). */
+const join = new URLSearchParams(location.search).get("join");
 const cover = "block size-full object-cover";
 /** The display fades everything in slowly. Reduced motion still runs the animations, since Fade waits for their end. */
 const fadeIn = "animate-in fill-mode-both fade-in motion-reduce:duration-1";
@@ -332,12 +340,6 @@ function toggleFullscreen() {
 	else void document.documentElement.requestFullscreen();
 }
 
-const zooms = [
-	["zoom-in", 1],
-	["zoom-out", -1],
-	["reset-zoom", 0],
-] as const;
-
 /** True once the pointer has rested a few seconds, which hides it and the fullscreen hint. F toggles fullscreen;
  * the zoom binds zoom this page only. */
 function useIdle() {
@@ -350,11 +352,9 @@ function useIdle() {
 			timer = setTimeout(() => setIdle(true), 4000);
 		};
 		const onKey = (e: KeyboardEvent) => {
-			const keys = binds(getGame().config.keys);
-			const step = zooms.find(([id]) => bindHas(keys[id], eventKey(e)))?.[1];
-			if (step !== undefined) zoom(step);
-			else if (e.key === "f" || e.key === "F11") toggleFullscreen();
-			else return;
+			const fullscreen = e.key === "f" || e.key === "F11";
+			if (fullscreen) toggleFullscreen();
+			else if (!zoomOnKey(e, binds(getGame().config.keys))) return;
 			e.preventDefault();
 		};
 		wake();
