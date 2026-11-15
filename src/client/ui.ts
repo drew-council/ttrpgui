@@ -143,8 +143,22 @@ export function remember(name: string, key: string) {
 	});
 }
 
-/** The focused group's active tab: the one Actions act on. */
-export const activeTab = (s: Groups = ui.get()) => s.groups[s.focus]?.active;
+let acting: number | undefined;
+
+/** Runs `fn` as if group `group` had focus, as a control in that group sees its Actions. See `GroupContext`. */
+export function asFocused<T>(group: number | undefined, fn: () => T) {
+	const was = acting;
+	acting = group ?? was;
+	try {
+		return fn();
+	} finally {
+		acting = was;
+	}
+}
+
+/** The focused group's active tab: the one Actions act on. See `asFocused`. */
+export const activeTab = (s: Groups = ui.get()) =>
+	s.groups[acting ?? s.focus]?.active;
 
 /** The focused group. */
 const focused = (s: Groups = ui.get()) => s.groups[s.focus] ?? { tabs: [] };
@@ -241,9 +255,10 @@ export function travel(direction: -1 | 1, exists: (tab: string) => boolean) {
 	});
 }
 
+const emptyTab = () => `new:${Math.random().toString(36).slice(2, 8)}`;
+
 /** Opens an empty tab beside the active one. The next plain open fills it. */
-export const newTab = () =>
-	openTab(`new:${Math.random().toString(36).slice(2, 8)}`, true);
+export const newTab = () => openTab(emptyTab(), true);
 
 /** Whether a click asks for a new tab: Ctrl or Cmd held, or the middle button. */
 export const wantsNewTab = (e: {
@@ -266,8 +281,16 @@ export function closeTab(tab: string) {
 	ui.set({ ...without(s, tab), history: withoutHistory(s.history, tab) });
 }
 
-/** Where a tab's view was as it unmounted: its pane's scroll offset and its text box's selection. */
-export type Place = { top: number; anchor?: number; head?: number };
+/** Where a tab's view was as it unmounted: its pane's scroll offset, or with its text box at the top, the position
+ * there and how far below it; its text box's selection; its tracker's cursor and selection. */
+export type Place = {
+	top: number;
+	line?: { pos: number; offset: number };
+	anchor?: number;
+	head?: number;
+	cursor?: string;
+	selected?: string[];
+};
 /** Places by tab id, in memory only. The least recently left go first. See `TabPane`. */
 export const places = new Map<string, Place>();
 
@@ -339,6 +362,28 @@ export function shiftTab(step: -1 | 1) {
 		moveTab(active, s.focus, tabs.indexOf(active) + (step < 0 ? -1 : 2));
 }
 
+/** The narrowest a tab group may be, in rem. */
+export const minGroupWidth = 22;
+/** The element the tab groups share. `Control` sets it. */
+export const groupArea: { current: HTMLElement | null } = { current: null };
+
+/** Whether the group area has room for `count` groups. */
+export function roomFor(count: number) {
+	const rem = Number.parseFloat(
+		getComputedStyle(document.documentElement).fontSize,
+	);
+	return (groupArea.current?.clientWidth ?? 0) >= count * minGroupWidth * rem;
+}
+export const noRoom = () =>
+	roomFor(ui.get().groups.length + 1) ? undefined : "No room for another group";
+
+/** `next`, unless it changes nothing or adds a group there is no room for. */
+export const change = (s: Groups, next: Groups) =>
+	sameGroups(s, next) ||
+	(next.groups.length > s.groups.length && !roomFor(next.groups.length))
+		? undefined
+		: next;
+
 /** Where moving the active tab to the next (1) or previous (-1) group puts it: the end of that group, else a new group
  * at that edge. Undefined when that changes nothing, as for the only tab of an edge group. */
 export function groupMove(step: -1 | 1) {
@@ -346,18 +391,25 @@ export function groupMove(step: -1 | 1) {
 	const active = activeTab(s);
 	if (!active) return;
 	const to = s.focus + step;
-	const next = s.groups[to]
-		? placed(s, active, to, s.groups[to].tabs.length)
-		: placed(s, active, Math.max(to, 0));
-	return sameGroups(s, next) ? undefined : next;
+	return change(
+		s,
+		s.groups[to]
+			? placed(s, active, to, s.groups[to].tabs.length)
+			: placed(s, active, Math.max(to, 0)),
+	);
 }
 
-/** Where moving the active tab into a new group to the right of its own puts it, unless that changes nothing. */
+/** Where moving the active tab into a new group to the right of its own puts it. Its group's only tab stays, and an
+ * empty tab opens there instead. */
 export function splitMove() {
 	const s = ui.get();
 	const active = activeTab(s);
-	const next = active && placed(s, active, s.focus + 1);
-	return next && !sameGroups(s, next) ? next : undefined;
+	if (!active) return;
+	const next = placed(s, active, s.focus + 1);
+	return change(
+		s,
+		sameGroups(s, next) ? placed(s, emptyTab(), s.focus + 1) : next,
+	);
 }
 
 /** Focuses the next (1) or previous (-1) group, which focuses its view. */

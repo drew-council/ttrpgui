@@ -57,6 +57,7 @@ import {
 	noteTab,
 	openTab,
 	pick,
+	places,
 	toast,
 } from "./ui.ts";
 import {
@@ -330,7 +331,9 @@ export function CombatView({ arg: name }: { arg: string }) {
 	const notes = useGame((game) => game.notes);
 	const running = useGame((game) => game.runtime.combat === name);
 	const pane = usePane();
-	const [selected, select] = useState<string[]>([]);
+	// Its place, when it comes back by Back or Forward or is reopened. See `restorePlace`.
+	const [place] = useState(() => places.get(combatTab(name)));
+	const [selected, select] = useState(place?.selected ?? []);
 	const note = useRef<EditorView>(null);
 	const labels = useMemo(() => order(combat, notes), [combat, notes]);
 	const openCreature = (i: number, newTab: boolean) => {
@@ -346,7 +349,7 @@ export function CombatView({ arg: name }: { arg: string }) {
 	// The cursor follows the turn; otherwise it stays on its Combatant when the order changes, even when renamed.
 	const turn = combat.turn;
 	const last = useRef<{ turn?: string; cursor?: string; labels?: string[] }>(
-		{},
+		place ? { turn: combat.turn, cursor: place.cursor } : {},
 	);
 	useEffect(() => {
 		const { cursor: was, labels: before = [] } = last.current;
@@ -450,10 +453,10 @@ export function CombatView({ arg: name }: { arg: string }) {
 								e.preventDefault();
 								ref.current?.focus();
 							}}
-							// Cursor: an outline, brighter while the tracker has focus. Selection: blue. Active turn: amber. They combine.
+							// Cursor: an outline, brighter while the tracker has focus, fainter outside the focused group. Selection: blue. Active turn: amber. They combine.
 							className={cn(
 								columns,
-								"min-h-11 shrink-0 rounded-lg border border-transparent py-1 aria-selected:border-border group-focus/tracker:aria-selected:border-muted-foreground data-picked:shadow-[inset_3px_0_var(--select)] data-picked:not-data-turn:bg-select/14 data-turn:bg-primary/14",
+								"min-h-11 shrink-0 rounded-lg border border-transparent py-1 aria-selected:border-border group-focus/tracker:aria-selected:border-muted-foreground in-data-unfocused:aria-selected:border-border/40 data-picked:shadow-[inset_3px_0_var(--select)] data-picked:not-data-turn:bg-select/14 data-turn:bg-primary/14",
 							)}
 						>
 							<Row

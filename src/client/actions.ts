@@ -114,6 +114,7 @@ import {
 	groupMove,
 	type Item,
 	newTab,
+	noRoom,
 	noteTab,
 	openRoller,
 	openTab,
@@ -529,6 +530,7 @@ const inGroup = {
 /** Moves the active tab to the next (1) or previous (-1) group. See `groupMove`. */
 const toGroup = (step: -1 | 1) => ({
 	when: () => groupMove(step) !== undefined,
+	unavailable: noRoom,
 	run: () => ui.set(groupMove(step) ?? {}),
 });
 
@@ -645,8 +647,9 @@ export const actions: Record<ActionId, Action> = {
 		run: () => shiftTab(1),
 	},
 	"split-right": {
-		title: "Move tab into a new group on the right",
+		title: "Split tab right into a new group",
 		when: () => splitMove() !== undefined,
+		unavailable: noRoom,
 		run: () => ui.set(splitMove() ?? {}),
 	},
 	"move-tab-to-next-group": {
@@ -899,6 +902,7 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"next-turn": {
 		...sendForCombat("Next turn", "nextTurn", running),
+		unavailable: () => "The combat has not started",
 		icon: StepForwardIcon,
 		label: "Next turn",
 	},

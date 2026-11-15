@@ -92,3 +92,15 @@ test("splitting a group's only tab beside itself changes nothing", () => {
 	expect(sameGroups(placed(two, "c", 2), two)).toBe(true);
 	expect(sameGroups(placed(two, "a", 0), two)).toBe(false);
 });
+
+test("a tab not yet open goes into a new group, as splitting a group's only tab opens an empty one", () => {
+	const one: Groups = { groups: [{ tabs: ["a"], active: "a" }], focus: 0 };
+	expect(placed(one, "a", 1)).toEqual(one);
+	expect(placed(one, "new:x", 1)).toEqual({
+		groups: [
+			{ tabs: ["a"], active: "a" },
+			{ tabs: ["new:x"], active: "new:x" },
+		],
+		focus: 1,
+	});
+});

@@ -172,17 +172,30 @@ export function focusPane(pane = activePane()) {
 	else if (pane) focusMain(pane);
 }
 
-/** Where a pane's view is now. See `savePlace`. */
+/** Where a pane's view is now. See `savePlace`. A text box at the top keeps the position there rather than the offset,
+ * since a text box laid out again estimates the heights of lines it has not drawn. */
 export function placeOf(pane: Pane): Place {
-	const selection = pane.editor?.current?.state.selection.main;
+	const view = pane.editor?.current;
+	const selection = view?.state.selection.main;
+	const y = view
+		? (pane.root?.getBoundingClientRect().top ?? 0) - view.documentTop
+		: -1;
+	const line =
+		view && y >= 0 && y < view.contentHeight
+			? view.lineBlockAtHeight(y)
+			: undefined;
+	const tracker = pane.tracker;
 	return {
 		top: pane.root?.scrollTop ?? 0,
+		...(line && { line: { pos: line.from, offset: y - line.top } }),
 		...(selection && { anchor: selection.anchor, head: selection.head }),
+		...(tracker && { cursor: tracker.cursor, selected: tracker.selected }),
 	};
 }
 
 /** Puts a pane's view back at `place` once its content has laid out, and again as it grows, such as when its text or
- * images load, until the user scrolls, presses, or types, or two seconds pass. Returns the stop. */
+ * images load or its text box measures lines, until the user scrolls, presses, or types, or two seconds pass. Returns
+ * the stop. A tracker takes its cursor and selection itself, as it mounts. */
 export function restorePlace(pane: Pane, place: Place) {
 	const root = pane.root;
 	if (!root) return;
@@ -199,7 +212,15 @@ export function restorePlace(pane: Pane, place: Place) {
 			});
 			anchor = undefined;
 		}
-		root.scrollTop = place.top;
+		const { line } = place;
+		root.scrollTop =
+			view && line
+				? root.scrollTop +
+					view.documentTop +
+					view.lineBlockAt(Math.min(line.pos, view.state.doc.length)).top +
+					line.offset -
+					root.getBoundingClientRect().top
+				: place.top;
 	});
 	for (const child of root.children) observer.observe(child);
 	const inputs = ["wheel", "pointerdown", "keydown"];
@@ -519,7 +540,7 @@ function NoteView({ arg: title }: { arg: string }) {
 							className={cn(
 								pageTitle,
 								titleField,
-								"py-0.5 md:text-4xl/[1.1]",
+								"py-0.5 text-ellipsis md:text-4xl/[1.1]",
 								// The stand-in reads as the title until the field has focus.
 								(!isDateTitle(title) || metadata.date) &&
 									"placeholder:text-foreground",

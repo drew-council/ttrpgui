@@ -15,28 +15,23 @@ import { TooltipProvider } from "#components/ui/tooltip.tsx";
 import { useKeybinds } from "./actions.ts";
 import { Bar } from "./Bar.tsx";
 import { Confirm } from "./Confirm.tsx";
-import { ActionButton } from "./controls.tsx";
-import {
-	allTabs,
-	type Group,
-	groupOf,
-	placed,
-	sameGroups,
-	without,
-} from "./groups.ts";
+import { ActionButton, GroupContext } from "./controls.tsx";
+import { allTabs, type Group, groupOf, placed, without } from "./groups.ts";
 import { Picker } from "./Picker.tsx";
 import { PrivacyScreen } from "./PrivacyScreen.tsx";
 import { Roller } from "./Roller.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 import { getGame, useGame } from "./sync.ts";
 import {
+	change,
 	closeTab,
+	groupArea,
+	minGroupWidth,
 	mountKey,
 	moveTab,
 	places,
 	savePlace,
 	toast,
-	travelTarget,
 	ui,
 } from "./ui.ts";
 import {
@@ -73,11 +68,12 @@ export function Control() {
 				)}
 			>
 				{sidebar && <Sidebar />}
-				{/* A column per group: its tab bar on top, its panes stacked under it. */}
+				{/* A column per group: its tab bar on top, its panes stacked under it. Too narrow for them, it scrolls. */}
 				<main
-					className="relative grid min-h-0 grid-rows-[auto_minmax(0,1fr)]"
+					ref={groupArea}
+					className="relative grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-x-auto"
 					style={{
-						gridTemplateColumns: `repeat(${groups.length}, minmax(0, 1fr))`,
+						gridTemplateColumns: `repeat(${groups.length}, minmax(${minGroupWidth}rem, 1fr))`,
 					}}
 				>
 					{groups.map((_, i) => (
@@ -199,32 +195,40 @@ function TabPane({
 	);
 	return (
 		<PaneContext value={pane}>
-			{/* Hidden, it skips rendering and takes no focus or input. Its layout stays, so its scroll positions do. */}
-			<div
-				inert={!shown}
-				style={{ gridArea: `2 / ${group + 1} / 3 / ${group + 2}` }}
-				className={cn(
-					"absolute inset-0",
-					group > 0 && "border-l",
-					!shown && "invisible [content-visibility:hidden]",
-				)}
-			>
+			<GroupContext value={group}>
+				{/* Hidden, it skips rendering and takes no focus or input. Its layout stays, so its scroll positions do. Outside
+			    the focused group, its view mutes its cursors (`in-data-unfocused:`). */}
 				<div
-					ref={(root) => {
-						pane.root = root;
-					}}
-					role="tabpanel"
-					tabIndex={-1}
-					className="@container h-full overflow-y-auto outline-none"
-					onPointerDownCapture={() => focusOn(group)}
-					onFocus={(e) => {
-						if (e.currentTarget.contains(e.target)) pane.last = e.target;
-						focusOn(group);
-					}}
+					inert={!shown}
+					data-unfocused={!focused || undefined}
+					style={{ gridArea: `2 / ${group + 1} / 3 / ${group + 2}` }}
+					className={cn(
+						"absolute inset-0",
+						group > 0 && "border-l",
+						!shown && "invisible [content-visibility:hidden]",
+					)}
 				>
-					{body}
+					<div
+						ref={(root) => {
+							pane.root = root;
+						}}
+						role="tabpanel"
+						tabIndex={-1}
+						className="@container h-full overflow-y-auto outline-none"
+						// Focus moves in before the press acts, so what it runs, or a menu it opens, sees this group focused.
+						onPointerDownCapture={() => {
+							focusOn(group);
+							if (!pane.root?.contains(document.activeElement)) focusPane(pane);
+						}}
+						onFocus={(e) => {
+							if (e.currentTarget.contains(e.target)) pane.last = e.target;
+							focusOn(group);
+						}}
+					>
+						{body}
+					</div>
 				</div>
-			</div>
+			</GroupContext>
 		</PaneContext>
 	);
 }
@@ -240,7 +244,7 @@ type Side = "left" | "right" | "middle";
 
 /** While a tab is dragged, the drop target over group `group`'s content. Its left or right quarter makes a new group
  * on that side, the middle of another group moves the tab to its end. The part a drop would fill tints; a drop that
- * would change nothing is refused. */
+ * would change nothing, or make a group there is no room for, is refused. */
 function DropZone({ group, tab }: { group: number; tab: string }) {
 	const [side, setSide] = useState<Side>();
 	const target = (e: DragEvent) => {
@@ -248,13 +252,15 @@ function DropZone({ group, tab }: { group: number; tab: string }) {
 		const x = (e.clientX - r.left) / r.width;
 		const side: Side = x < 0.25 ? "left" : x > 0.75 ? "right" : "middle";
 		const s = ui.get();
-		const next =
+		const next = change(
+			s,
 			side !== "middle"
 				? placed(s, tab, group + Number(side === "right"))
 				: groupOf(s, tab) !== group
 					? placed(s, tab, group, s.groups[group]?.tabs.length)
-					: s;
-		return sameGroups(s, next) ? undefined : { side, next };
+					: s,
+		);
+		return next && { side, next };
 	};
 	const over = (e: DragEvent) => {
 		const to = target(e);
@@ -296,14 +302,10 @@ function DropZone({ group, tab }: { group: number; tab: string }) {
 const noGroup: Group = { tabs: [] };
 
 /** Group `group`'s tab bar. Its active tab's marker shows in full only while the group has focus. A press in it focuses
- * the group first, so its buttons act on it. */
+ * the group first, so its buttons act on it. A wheel scrolls its tabs sideways. */
 function TabBar({ group }: { group: number }) {
 	const { tabs, active } = ui.use((s) => s.groups[group] ?? noGroup);
 	const focused = ui.use((s) => s.focus === group);
-	const exists = (tab: string) => tabExists(tab, getGame());
-	/** Whether this group's history leads back (-1) or forward (1). */
-	const can = (direction: -1 | 1) =>
-		!!travelTarget(direction, exists, { ...ui.get(), focus: group });
 	const tablist = useRef<HTMLDivElement>(null);
 	/** Where a dragged tab would land: the gap before `tabs[gap]`. */
 	const [gap, setGap] = useState<number>();
@@ -328,100 +330,105 @@ function TabBar({ group }: { group: number }) {
 			?.scrollIntoView({ block: "nearest", inline: "nearest" });
 	}, [active, tabs]);
 	return (
-		<div
-			style={{ gridColumn: group + 1 }}
-			className={cn(
-				"flex h-9 min-w-0 border-b bg-card",
-				group > 0 && "border-l",
-			)}
-			onPointerDownCapture={() => focusOn(group)}
-		>
-			<span className="flex flex-none items-center gap-0.5 px-1">
-				{group === 0 && <ActionButton id="toggle-sidebar" />}
-				<ActionButton id="go-back" disabled={!can(-1)} />
-				<ActionButton id="go-forward" disabled={!can(1)} />
-			</span>
+		<GroupContext value={group}>
 			<div
-				role="tablist"
-				ref={tablist}
-				className="flex min-w-0 flex-1 scroll-pr-10 overflow-x-auto border-l [scrollbar-width:none]"
-				onDragEnter={dragOver}
-				onDragOver={dragOver}
-				onDragLeave={(e) => {
-					if (!e.currentTarget.contains(e.relatedTarget as Node))
-						setGap(undefined);
-				}}
-				onDrop={(e) => {
-					const tab = e.dataTransfer.getData(tabDrag);
-					if (!tab) return;
-					e.preventDefault();
-					moveTab(tab, group, gapAt(e));
-					setGap(undefined);
-					ui.set({ drag: undefined });
-				}}
+				style={{ gridColumn: group + 1 }}
+				className={cn(
+					"flex h-9 min-w-0 border-b bg-card",
+					group > 0 && "border-l",
+				)}
+				onPointerDownCapture={() => focusOn(group)}
 			>
-				{tabs.map((tab, i) => (
-					// biome-ignore lint/a11y/useKeyWithClickEvents: keyboard users switch tabs with Actions.
-					<div
-						key={tab}
-						role="tab"
-						tabIndex={-1}
-						aria-selected={tab === active}
-						draggable
-						onDragStart={(e) => {
-							e.dataTransfer.setData(tabDrag, tab);
-							e.dataTransfer.effectAllowed = "move";
-							// Changing the page as the drag starts would cancel it.
-							setTimeout(() => ui.set({ drag: tab }));
-						}}
-						// A press focuses it, since refusing focus would stop it dragging. A click or a drag hands focus to the
-						// shown view, as showing a tab does.
-						onDragEnd={() => {
-							setGap(undefined);
-							ui.set({ drag: undefined });
-							focusPane();
-						}}
-						onClick={() => {
-							moveTab(tab, group, i);
-							focusPane();
-						}}
-						onAuxClick={(e) => e.button === 1 && closeTab(tab)}
-						onMouseDown={(e) => e.button === 1 && e.preventDefault()}
-						className={cn(
-							"group relative flex max-w-60 min-w-0 flex-none cursor-pointer items-center gap-2 border-r bg-card pr-1 pl-3 text-muted-foreground aria-selected:-mb-px aria-selected:bg-background aria-selected:text-foreground",
-							focused
-								? "aria-selected:shadow-[inset_0_2px_var(--primary)]"
-								: "aria-selected:shadow-[inset_0_2px_var(--faint)]",
-							// A drag's insertion mark: at this tab's left, or at the last tab's right for the end.
-							gap === i && `${insertMark} before:left-0`,
-							gap === tabs.length &&
-								i === tabs.length - 1 &&
-								`${insertMark} before:-right-px`,
-						)}
-					>
-						<TabLabel tab={tab} />
-						<Button
-							variant="ghost"
-							size="icon-xs"
-							aria-label="Close tab"
-							className="invisible text-faint group-hover:visible group-aria-selected:visible"
-							// Focus stays in the view rather than falling to the page with the closed tab.
-							onMouseDown={(e) => e.preventDefault()}
-							onClick={(e) => {
-								e.stopPropagation();
-								closeTab(tab);
-							}}
-						>
-							<XIcon />
-						</Button>
-					</div>
-				))}
-				{/* Stays in view when the tabs overflow. */}
-				<span className="sticky right-0 flex flex-none items-center bg-card px-1">
-					<ActionButton id="new-tab" />
+				<span className="flex flex-none items-center gap-0.5 px-1">
+					{group === 0 && <ActionButton id="toggle-sidebar" />}
+					<ActionButton id="go-back" />
+					<ActionButton id="go-forward" />
 				</span>
+				<div
+					role="tablist"
+					ref={tablist}
+					className="flex min-w-0 flex-1 scroll-pr-10 overflow-x-auto border-l [scrollbar-width:none]"
+					onWheel={(e) => {
+						if (!e.deltaX) e.currentTarget.scrollLeft += e.deltaY;
+					}}
+					onDragEnter={dragOver}
+					onDragOver={dragOver}
+					onDragLeave={(e) => {
+						if (!e.currentTarget.contains(e.relatedTarget as Node))
+							setGap(undefined);
+					}}
+					onDrop={(e) => {
+						const tab = e.dataTransfer.getData(tabDrag);
+						if (!tab) return;
+						e.preventDefault();
+						moveTab(tab, group, gapAt(e));
+						setGap(undefined);
+						ui.set({ drag: undefined });
+					}}
+				>
+					{tabs.map((tab, i) => (
+						// biome-ignore lint/a11y/useKeyWithClickEvents: keyboard users switch tabs with Actions.
+						<div
+							key={tab}
+							role="tab"
+							tabIndex={-1}
+							aria-selected={tab === active}
+							draggable
+							onDragStart={(e) => {
+								e.dataTransfer.setData(tabDrag, tab);
+								e.dataTransfer.effectAllowed = "move";
+								// Changing the page as the drag starts would cancel it.
+								setTimeout(() => ui.set({ drag: tab }));
+							}}
+							// A press focuses it, since refusing focus would stop it dragging. A click or a drag hands focus to the
+							// shown view, as showing a tab does.
+							onDragEnd={() => {
+								setGap(undefined);
+								ui.set({ drag: undefined });
+								focusPane();
+							}}
+							onClick={() => {
+								moveTab(tab, group, i);
+								focusPane();
+							}}
+							onAuxClick={(e) => e.button === 1 && closeTab(tab)}
+							onMouseDown={(e) => e.button === 1 && e.preventDefault()}
+							className={cn(
+								"group relative flex max-w-60 min-w-0 flex-none cursor-pointer items-center gap-2 border-r bg-card pr-1 pl-3 text-muted-foreground aria-selected:-mb-px aria-selected:bg-background aria-selected:text-foreground",
+								focused
+									? "aria-selected:shadow-[inset_0_2px_var(--primary)]"
+									: "aria-selected:shadow-[inset_0_2px_var(--faint)]",
+								// A drag's insertion mark: at this tab's left, or at the last tab's right for the end.
+								gap === i && `${insertMark} before:left-0`,
+								gap === tabs.length &&
+									i === tabs.length - 1 &&
+									`${insertMark} before:-right-px`,
+							)}
+						>
+							<TabLabel tab={tab} />
+							<Button
+								variant="ghost"
+								size="icon-xs"
+								aria-label="Close tab"
+								className="invisible text-faint group-hover:visible group-aria-selected:visible"
+								// Focus stays in the view rather than falling to the page with the closed tab.
+								onMouseDown={(e) => e.preventDefault()}
+								onClick={(e) => {
+									e.stopPropagation();
+									closeTab(tab);
+								}}
+							>
+								<XIcon />
+							</Button>
+						</div>
+					))}
+					{/* Stays in view when the tabs overflow. */}
+					<span className="sticky right-0 flex flex-none items-center bg-card px-1">
+						<ActionButton id="new-tab" />
+					</span>
+				</div>
 			</div>
-		</div>
+		</GroupContext>
 	);
 }
 

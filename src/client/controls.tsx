@@ -6,8 +6,10 @@ import { cn } from "cn";
 import { EllipsisIcon, type LucideIcon } from "lucide-react";
 import {
 	type ComponentProps,
+	createContext,
 	type MouseEvent,
 	type ReactNode,
+	useContext,
 	useEffect,
 	useState,
 	useSyncExternalStore,
@@ -29,7 +31,7 @@ import {
 import { type ActionId, binds, formatKey } from "../shared/keys.ts";
 import { actions, canRun } from "./actions.ts";
 import { getGame, subscribeGame } from "./sync.ts";
-import { ui } from "./ui.ts";
+import { asFocused, ui } from "./ui.ts";
 
 function subscribe(onChange: () => void) {
 	const later = () => setTimeout(onChange);
@@ -44,9 +46,17 @@ function subscribe(onChange: () => void) {
 	};
 }
 
+/** The tab group a control sits in, if any. It asks after its Actions as if that group had focus, as it will once
+ * pressed, since a press in a group focuses it. */
+export const GroupContext = createContext<number | undefined>(undefined);
+
 /** Whether a control may run `id` now. Rerenders when that changes. */
-export const useAvailable = (id: ActionId) =>
-	useSyncExternalStore(subscribe, () => canRun(id, true));
+export function useAvailable(id: ActionId) {
+	const group = useContext(GroupContext);
+	return useSyncExternalStore(subscribe, () =>
+		asFocused(group, () => canRun(id, true)),
+	);
+}
 
 /** The current bind of `id`, formatted, if it has one. */
 export const bindOf = (id: ActionId) => {
@@ -175,13 +185,16 @@ export function ActionButton({
 } & Omit<ComponentProps<typeof Button>, "title" | "size" | "onClick">) {
 	const action = actions[id];
 	const available = useAvailable(id);
+	const group = useContext(GroupContext);
 	return (
 		<ToolButton
 			icon={icon === null ? undefined : (icon ?? action.icon)}
 			label={label ?? action.label}
 			title={title ?? action.title}
 			bind={bindOf(id)}
-			detail={available ? detail : action.unavailable?.()}
+			detail={
+				available ? detail : asFocused(group, () => action.unavailable?.())
+			}
 			disabled={!available}
 			{...props}
 			onClick={() => canRun(id, true) && action.run()}
