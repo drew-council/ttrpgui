@@ -1,5 +1,6 @@
 // Combat rules as plain edits of Combat data: turn order, turns, HP, conditions, and initiative.
 // Each edits its argument in place, so callers pass a copy. Mutations are thin wrappers around them.
+import { rollDie } from "./dice.ts";
 import type { Combat, Combatant, Hp, Kind, Statblock } from "./schema.ts";
 import type { Note } from "./state.ts";
 
@@ -234,7 +235,7 @@ export function rollInitiative(
 		if (c.initiative !== undefined || isPc(notes, c)) continue;
 		const roll =
 			rolls.get(c.creature) ??
-			1 + Math.floor(random() * 20) + (statblockOf(notes, c).initiative ?? 0);
+			rollDie(20, random) + (statblockOf(notes, c).initiative ?? 0);
 		rolls.set(c.creature, roll);
 		c.initiative = roll;
 	}

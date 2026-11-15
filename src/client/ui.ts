@@ -1,9 +1,10 @@
 // Per-client UI state: tabs and their history, sidebar, the open picker, stat block editing, the tracker selection, the
-// privacy screen, and zoom. Tabs, their history, the sidebar and its collapsed groups, and each page's zoom survive a
-// reload.
-import type { MouseEvent } from "react";
+// privacy screen, the dice roller and its rolls, and zoom. Tabs, their history, the sidebar and its collapsed groups,
+// and each page's zoom survive a reload.
+import type { MouseEvent, ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { toast as sonner } from "sonner";
+import type { Rolled } from "../shared/dice.ts";
 import { bindHas, binds, eventKey } from "../shared/keys.ts";
 import {
 	emptyHistory,
@@ -21,6 +22,10 @@ export type Item = {
 	title?: string;
 	detail?: string;
 	hint?: string;
+	/** Shown instead of `label`, such as a typeset dice expression. */
+	view?: ReactNode;
+	/** Shown but not chosen, such as why a query is refused. */
+	disabled?: boolean;
 	run: (newTab: boolean) => void;
 };
 
@@ -58,7 +63,13 @@ type Ui = {
 	display: boolean;
 	/** Whether the privacy screen covers this window. See `PrivacyScreen`. */
 	privacy: boolean;
+	/** Whether the dice roller is open. See `Roller`. */
+	roller: boolean;
+	/** This window's rolls, newest first; `label` says what a number prompt did with one. Never persisted or synced:
+	 * they are the game master's own. */
+	rolls: { id: number; text: string; rolls: Rolled[]; label?: string }[];
 };
+export type RollEntry = Ui["rolls"][number];
 
 const storageKey = "ttrpgui.ui";
 function restore(): Partial<Ui> {
@@ -78,6 +89,8 @@ export const ui = createStore<Ui>({
 	refocus: 0,
 	display: false,
 	privacy: false,
+	roller: false,
+	rolls: [],
 	...restore(),
 });
 ui.subscribe(() => {
@@ -205,10 +218,22 @@ export function cycleTab(step: number) {
 
 let returnFocus: Element | null = null;
 
-export function pick(picker: PickerSpec) {
-	if (!ui.get().picker) returnFocus = document.activeElement;
-	ui.set({ picker });
+/** Opens the picker or the dice roller in place of the other. Focus returns to where it was before the first opened. */
+function popup(open: Pick<Ui, "picker" | "roller">) {
+	const { picker, roller } = ui.get();
+	if (!picker && !roller) returnFocus = document.activeElement;
+	ui.set(open);
 }
+
+export const pick = (picker: PickerSpec) => popup({ picker, roller: false });
+
+/** Puts a roll at the top of the dice roller's list, from the roller or a number prompt, and returns it. */
+export function addRoll(roll: Omit<RollEntry, "id">) {
+	const entry = { ...roll, id: performance.now() };
+	ui.set({ rolls: [entry, ...ui.get().rolls].slice(0, 50) });
+	return entry;
+}
+export const openRoller = () => popup({ picker: undefined, roller: true });
 
 /** A text prompt. `label` names what Enter does with the trimmed query, or returns undefined to refuse it. */
 export function ask(
@@ -228,15 +253,18 @@ export function ask(
 	});
 }
 
-/** Closes the picker and returns focus to where it was. A running item may then move it. */
-export function closePicker() {
+/** Closes the picker or the dice roller and returns focus to where it was. A running item may then move it. */
+export function closePopup() {
+	const { picker, roller } = ui.get();
+	if (!picker && !roller) return;
 	// The dialog's focus trap must be gone before focus can leave it.
-	flushSync(() => ui.set({ picker: undefined }));
+	flushSync(() => ui.set({ picker: undefined, roller: false }));
 	if (returnFocus instanceof HTMLElement) returnFocus.focus();
 }
 
 /** Shows a message for a few seconds. The control window's `Toaster` renders it. A toast with the same `id` replaces it. */
-export const toast = (message: string, id?: string) => sonner(message, { id });
+export const toast = (message: ReactNode, id?: string) =>
+	sonner(message, { id });
 
 const displayPage = location.pathname.startsWith("/display");
 const zoomKey = `ttrpgui.zoom.${displayPage ? "display" : "control"}`;

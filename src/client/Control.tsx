@@ -10,6 +10,7 @@ import { Bar } from "./Bar.tsx";
 import { ActionButton } from "./controls.tsx";
 import { Picker } from "./Picker.tsx";
 import { PrivacyScreen } from "./PrivacyScreen.tsx";
+import { Roller } from "./Roller.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 import { getGame, useGame } from "./sync.ts";
 import { closeTab, toast, ui } from "./ui.ts";
@@ -19,7 +20,7 @@ export function Control() {
 	useKeybinds();
 	useProblemToasts();
 	useEffect(forgetMissingTabs, []);
-	const { sidebar, active, picker } = ui.use((s) => s);
+	const { sidebar, active, picker, roller } = ui.use((s) => s);
 	return (
 		<TooltipProvider>
 			<div
@@ -43,8 +44,11 @@ export function Control() {
 				</main>
 				<Bar />
 			</div>
+			{roller && <Roller />}
 			{picker && <Picker key={picker.title} spec={picker} />}
 			<Toaster
+				// Under the dialogs (z-50), so an open popup covers it.
+				className="toaster group z-40!"
 				position="bottom-right"
 				offset={{ right: "1rem", bottom: "3rem" }}
 				duration={6000}

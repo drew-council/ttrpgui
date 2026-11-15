@@ -118,7 +118,7 @@ Settled in the design interview. Where this section and the text above differ, t
 - Every stat block field is optional. Known fields: AC, HP, speed, abilities, saves, skills, resistances and immunities, senses, languages, CR, initiative bonus, legendary action count, legendary resistance count.
 - All other content is an ordered list of freely named sections. Each holds entries of a name plus markdown text.
 - The layout is neutral between 5e 2014 and 2024.
-- Initiative is the only thing the app rolls. No spell slot tracking in v1.
+- No spell slot tracking in v1.
 - No stat block import in v1. D&D Beyond import is a future feature.
 
 ## Combat
@@ -140,6 +140,14 @@ Settled in the design interview. Where this section and the text above differ, t
 - Legendary counters appear when the stat block defines them. Legendary actions refill at the start of that creature's turn.
 - `Combatant`s can be removed. Undo and redo cover combat edits.
 - The control view shows the tracker on the left and the stat block of the `Combatant` under the cursor on the right. One key opens that `Creature`'s note.
+
+## Dice
+
+- One dice syntax everywhere: `NdM` with keep highest or lowest (`2d20kh1`, `4d6k3`), integers, `+ - * /`, and parentheses. Division rounds down at each division, as in D&D.
+- A dice roller popup, one key away from anywhere, rolls and shows each die and the total. Without dice it is a calculator. `3x d20+5` (or `d20+5 x3`) and comma lists are separate rolls, not summed. The typeset preview stays while typing: unfinished input shows where more is needed.
+- Rolls are the game master's own. They stay in the control window's memory and MUST NOT reach the server or the display.
+- Every number prompt takes arithmetic or one roll. A roll applies its total and shows its dice in a toast and in the roller's list.
+- Stat block fields stay plain numbers.
 
 ## Live mode
 

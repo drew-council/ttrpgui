@@ -23,21 +23,31 @@ import {
 	order,
 	statblockOf,
 } from "../shared/combat.ts";
+import {
+	hasDice,
+	isNumber,
+	parse,
+	rollAll,
+	showNumber,
+	value,
+} from "../shared/dice.ts";
 import { noteLabel } from "../shared/notes.ts";
 import type { Combat, Combatant } from "../shared/schema.ts";
-import { toInt } from "../shared/statblock.ts";
 import type { Note } from "../shared/state.ts";
 import { ActionButton, ActionItem, ActionMenu } from "./controls.tsx";
+import { Dice, Rolls } from "./Dice.tsx";
 import { useListNav } from "./list.ts";
 import { MarkdownBox } from "./MarkdownBox.tsx";
 import { fieldBox, StatBlock } from "./StatBlock.tsx";
 import { getGame, send, useGame } from "./sync.ts";
 import {
+	addRoll,
 	ask,
 	clickOpens,
 	type Item,
 	noteTab,
 	openTab,
+	pick,
 	toast,
 	ui,
 } from "./ui.ts";
@@ -93,30 +103,95 @@ export const focusNote = () => noteEditor.current?.focus();
 const combatantsOf = ({ combat, labels }: Target) =>
 	labels.map((l) => getGame().combats[combat]?.combatants?.[l]);
 
-/** Prompts for a whole number of at least `min`. */
+/** Where a label puts a dice expression. */
+const slot = "\0";
+
+/** Prompts for a whole number of at least `min`, or arithmetic, or dice (`dice.ts`). `label` says what Enter does with
+ * a number, or places `slot` where the dice go. Dice roll once on Enter, the total raised to `min`. The roll joins the
+ * dice roller's list and a toast, labeled with what it did to `subject`, who or what it affects. */
 export function askNumber(
 	spec: {
 		title: string;
-		label: (n: number) => string;
+		label: (n: string) => string;
+		subject: string;
 		min?: number;
 		value?: string;
 		items?: Item[];
 	},
 	apply: (n: number) => void,
 ) {
-	const { label, min = 0, ...rest } = spec;
-	const parse = (query: string) => {
-		const n = toInt(query);
-		return typeof n === "number" && n >= min ? n : undefined;
-	};
-	ask(
-		{ placeholder: "Number", ...rest },
-		(query) => {
-			const n = parse(query);
-			return n === undefined ? undefined : label(n);
+	const { label, subject, min = 0, ...rest } = spec;
+	const note = (text: string, className: string): Item => ({
+		label: text,
+		view: <span className={className}>{text}</span>,
+		disabled: true,
+		run() {},
+	});
+	pick({
+		placeholder: "Number, or dice like 2d6+3",
+		items: [],
+		...rest,
+		fromQuery(query) {
+			if (!query) return;
+			const { entries, error } = parse(query);
+			const [entry, ...more] = entries;
+			if (!entry) return note(error ?? "", "text-destructive");
+			if (more.length || entry.times > 1)
+				return note("One roll only here", "text-destructive");
+			const { expr } = entry;
+			if (!error && !hasDice(expr)) {
+				const n = value(expr);
+				if (n < min)
+					return note(`At least ${showNumber(min)}`, "text-destructive");
+				return {
+					label: label(showNumber(n)),
+					view: isNumber(expr) ? undefined : (
+						<span className="flex items-baseline gap-3">
+							{label(showNumber(n))}
+							<Dice expr={expr} className="text-sm text-muted-foreground" />
+						</span>
+					),
+					run: () => apply(n),
+				};
+			}
+			const [before, after] = label(slot).split(slot);
+			// Unfinished input keeps the same row, with the parser's message.
+			return {
+				label: query,
+				detail: error ?? "Enter rolls",
+				disabled: !!error,
+				view: (
+					<span className="flex flex-wrap items-baseline gap-x-1">
+						{before}
+						<Dice expr={expr} />
+						{after}
+					</span>
+				),
+				run() {
+					const rolls = rollAll([entry]);
+					if (typeof rolls === "string") return toast(rolls);
+					const [rolled] = rolls;
+					if (!rolled) return;
+					const n = Math.max(min, rolled.total);
+					apply(n);
+					const raised = ` · ${showNumber(rolled.total)} raised to the minimum`;
+					const what = `${label(showNumber(n))} · ${subject}`;
+					const roll = addRoll({
+						text: query,
+						rolls: [{ ...rolled, total: n }],
+						label: n === rolled.total ? what : what + raised,
+					});
+					// One id, so a new roll replaces the last roll's toast.
+					toast(
+						<div className="max-h-48 w-full overflow-hidden">
+							<Rolls roll={roll} />
+						</div>,
+						"roll",
+					);
+				},
+			};
 		},
-		(query) => apply(parse(query) as number),
-	);
+	});
 }
 
 /** Toasts the concentration save DC for targets that are concentrating. */
@@ -134,6 +209,7 @@ export function addCombatant(combat: string) {
 			{
 				title: `How many “${creature}”?`,
 				label: (n) => `Add ${n}`,
+				subject: creature,
 				min: 1,
 				value: "1",
 			},
@@ -190,7 +266,8 @@ export function toggleCondition(t: Target) {
 		askNumber(
 			{
 				title: `How many rounds of ${name}?`,
-				label: (n) => `${name} for ${n} ${n === 1 ? "round" : "rounds"}`,
+				label: (n) => `${name} for ${n} ${n === "1" ? "round" : "rounds"}`,
+				subject: describe(t.labels),
 				min: 1,
 				items: [
 					{

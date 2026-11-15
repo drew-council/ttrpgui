@@ -136,7 +136,8 @@ export function Bar() {
 			<Trouble />
 			<span className="min-w-6 flex-1" />
 			<Music />
-			<ActionButton id="privacy-screen" className="ml-6" />
+			<ActionButton id="roll-dice" className="ml-6" />
+			<ActionButton id="privacy-screen" />
 			<ActionButton id="command-palette" label="" />
 		</footer>
 	);

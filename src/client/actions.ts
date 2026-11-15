@@ -75,7 +75,6 @@ import {
 } from "../shared/keys.ts";
 import { localDate, noteLabel, sessionOrder } from "../shared/notes.ts";
 import type { Kind } from "../shared/schema.ts";
-import { signed } from "../shared/statblock.ts";
 import type { GameState, Note } from "../shared/state.ts";
 import { atmosphereTab } from "./Atmospheres.tsx";
 import { isTextField } from "./list.ts";
@@ -106,12 +105,13 @@ import {
 } from "./Tracker.tsx";
 import {
 	ask,
-	closePicker,
+	closePopup,
 	closeTab,
 	cycleTab,
 	type Item,
 	newTab,
 	noteTab,
+	openRoller,
 	openTab,
 	pick,
 	replaceTab,
@@ -313,13 +313,18 @@ const sendForCombat = (
 const amount = (
 	title: string,
 	type: Extract<Mutation, { amount: number }>["type"],
-	label: (n: number) => string,
+	label: (n: string) => string,
 	min = 0,
 	after?: (t: Target, n: number) => void,
 ) =>
 	onTracker(title, (t) =>
 		askNumber(
-			{ title: `${title}: ${describe(t.labels)}`, label, min },
+			{
+				title: `${title}: ${describe(t.labels)}`,
+				subject: describe(t.labels),
+				label,
+				min,
+			},
 			async (n) => {
 				if (await send({ type, ...t, amount: n } as Mutation)) after?.(t, n);
 			},
@@ -543,9 +548,14 @@ export const actions: Record<ActionId, Action> = {
 		title: "Hide window (privacy screen)",
 		icon: EyeOffIcon,
 		run() {
-			if (ui.get().picker) closePicker();
+			closePopup();
 			ui.set({ privacy: true });
 		},
+	},
+	"roll-dice": {
+		title: "Roll dice",
+		icon: DicesIcon,
+		run: () => (ui.get().roller ? closePopup() : openRoller()),
 	},
 	"close-tab": {
 		title: "Close tab",
@@ -907,7 +917,7 @@ export const actions: Record<ActionId, Action> = {
 		...amount(
 			"Adjust max HP",
 			"setMaxAdjust",
-			(n) => `Set the max HP adjustment to ${signed(n)}`,
+			(n) => `Set the max HP adjustment to ${/^\d/.test(n) ? "+" : ""}${n}`,
 			-Infinity,
 		),
 		icon: HeartPulseIcon,

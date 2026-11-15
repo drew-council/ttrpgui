@@ -12,7 +12,7 @@ import {
 } from "#components/ui/command.tsx";
 import { Dialog, DialogContent, DialogTitle } from "#components/ui/dialog.tsx";
 import { Kbd } from "#components/ui/kbd.tsx";
-import { closePicker, type Item, type PickerSpec, wantsNewTab } from "./ui.ts";
+import { closePopup, type Item, type PickerSpec, wantsNewTab } from "./ui.ts";
 
 export function Picker({ spec }: { spec: PickerSpec }) {
 	const [query, setQuery] = useState(spec.value ?? "");
@@ -40,21 +40,23 @@ export function Picker({ spec }: { spec: PickerSpec }) {
 					: result.obj.label,
 			}));
 		const extra = spec.fromQuery?.(query.trim());
-		return extra ? [...found, { item: extra, label: extra.label }] : found;
+		return extra
+			? [...found, { item: extra, label: extra.view ?? extra.label }]
+			: found;
 	}, [query, items, spec]);
 	// Whether the Enter or click that selects a row asked for a new tab. See `wantsNewTab`.
 	const newTab = useRef(false);
 	const choose = (item: Item) => {
-		closePicker();
+		closePopup();
 		item.run(newTab.current);
 	};
 
 	return (
-		<Dialog open onOpenChange={(open) => open || closePicker()}>
+		<Dialog open onOpenChange={(open) => open || closePopup()}>
 			<DialogContent
 				showCloseButton={false}
 				aria-describedby={undefined}
-				// closePicker returns focus itself, before a chosen row may move it.
+				// closePopup returns focus itself, before a chosen row may move it.
 				onCloseAutoFocus={(e) => e.preventDefault()}
 				className="top-[12vh] flex max-h-[70vh] translate-y-0 flex-col gap-0 overflow-hidden rounded-xl border p-0 shadow-overlay ring-0 sm:max-w-[38rem]"
 			>
@@ -85,6 +87,7 @@ export function Picker({ spec }: { spec: PickerSpec }) {
 								// biome-ignore lint/suspicious/noArrayIndexKey: rows are positions in a ranking.
 								key={i}
 								value={String(i)}
+								disabled={item.disabled}
 								onSelect={() => choose(item)}
 								onMouseDown={(e) => {
 									newTab.current = wantsNewTab(e);
@@ -93,7 +96,7 @@ export function Picker({ spec }: { spec: PickerSpec }) {
 								}}
 								// cmdk selects on a primary click only.
 								onAuxClick={(e) => e.button === 1 && choose(item)}
-								className="gap-2 px-3 py-2 text-base data-selected:bg-primary/14 data-selected:shadow-[inset_2px_0_var(--primary)]"
+								className="gap-2 px-3 py-2 text-base data-[disabled=true]:opacity-100 data-selected:bg-primary/14 data-selected:shadow-[inset_2px_0_var(--primary)]"
 							>
 								<span className="min-w-0 flex-1 truncate">{label}</span>
 								{item.detail && (

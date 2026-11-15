@@ -17,6 +17,7 @@ export const defaultKeys = {
 	"zoom-out": "ctrl+-",
 	"reset-zoom": "ctrl+0",
 	"privacy-screen": "ctrl+shift+l",
+	"roll-dice": "alt+r",
 	"new-note": "ctrl+n",
 	"new-session": "",
 	"new-creature": "",

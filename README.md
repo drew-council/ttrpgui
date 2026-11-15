@@ -25,7 +25,7 @@ Table state lives in the Game (`runtime.toml`), so a restart picks up the runnin
 
 Every command is in the palette (Ctrl+P) with its key. The ones you would look for on screen also have a control, with the command and its key in a tooltip:
 
-- **Table bar**, along the bottom. On the left: the player display toggle (Electron only), the active atmosphere as a switcher, the live session (Go live, or its name with a menu that opens or ends it), the running combat and round, the shown image (show, a thumbnail with its note's name, hide), then problems. On the right, where they never move: the track, play or pause, skip, mute, a volume slider, the privacy screen (it hides the control window until the next key or click, which does nothing else), and the command palette. Play starts a track when none is current. Before the track it says "Paused" or "Muted", and in Electron "Display closed" while the display window is closed, since only the display makes sound; click it to open the display. A dimmed control's tooltip says why it is dimmed, such as "No tracks in Market Day". "Back to the start page" is on an empty tab and in Ctrl+P.
+- **Table bar**, along the bottom. On the left: the player display toggle (Electron only), the active atmosphere as a switcher, the live session (Go live, or its name with a menu that opens or ends it), the running combat and round, the shown image (show, a thumbnail with its note's name, hide), then problems. On the right, where they never move: the track, play or pause, skip, mute, a volume slider, the dice roller, the privacy screen (it hides the control window until the next key or click, which does nothing else), and the command palette. Play starts a track when none is current. Before the track it says "Paused" or "Muted", and in Electron "Display closed" while the display window is closed, since only the display makes sound; click it to open the display. A dimmed control's tooltip says why it is dimmed, such as "No tracks in Market Day". "Back to the start page" is on an empty tab and in Ctrl+P.
 - **Tab bar**: the sidebar toggle, back, forward, and new tab.
 - **Sidebar**: a search button beside the filter, and groups by kind: Sessions (newest first), PCs, NPCs, Vehicles, Locations, Notes, Combats, Atmospheres. Each group header collapses it with a click, and has a count and a + that creates one of its kind (expanding the group). A new creature is an NPC; "Mark as PC" in its header makes it a PC. "New session" creates a session titled and dated today without asking and puts the cursor in its name. The active note is marked and scrolled into view, also on the header of a collapsed group that holds it; Ctrl+E starts the cursor there. The filter matches what rows show and note titles, and shows matches in collapsed groups too. Keys: `j` `k` `g` `G` move over headers and rows, `Enter` opens a row or toggles a header, `h` or Left collapses the cursor's group, `l` or Right expands it.
 - **Combat view**, a toolbar under the title: start or end, next turn, roll, add, undo, redo; then, for the selection or the cursor row, damage, heal, condition, temp HP, initiative, concentration, and select. The ⋯ menu holds the rest: max HP, death saves, legendary counters, rename, note, clear selection, remove, and the combat's atmosphere, session, party rest, rename, and delete. Shift+click selects rows.
@@ -282,9 +282,24 @@ volume = 80                                # percent; absent means 100
 | `S` `E`        | start, end                                 | `t`       | next turn                       |
 | `u`            | undo                                       | `Ctrl+R`  | redo                            |
 
-Operations apply to the selection, or to the cursor row when nothing is selected. Undo history is per combat and shared by every control window. It is lost on restart and when the combat is renamed. Restarting an ended combat keeps NPC damage; NPCs added later start at full.
+Operations apply to the selection, or to the cursor row when nothing is selected. A number prompt (damage, heal, initiative, and the rest) also takes arithmetic, which shows its value as you type (`27/2` deals 13), or one dice roll (`2d6+3`): Enter rolls it, applies the total (raised to the prompt's minimum, such as 0 damage), and shows each die in a toast and at the top of the dice roller's list, labeled with what it did and to whom. One roll applies to every target. Undo history is per combat and shared by every control window. It is lost on restart and when the combat is renamed. Restarting an ended combat keeps NPC damage; NPCs added later start at full.
 
 "Go live" marks the Session being run; Ctrl+L opens its note, and a combat started while live joins it.
+
+## Dice
+
+`Alt+R`, or the dice button in the table bar, opens the dice roller from anywhere, even while typing. It typesets the expression as you type; without dice it is a calculator and shows the value at once. Until the input is complete it shows `…` where more is needed and says what is missing. Enter, or the Roll button, rolls and adds the result to the top of the list, with every die and the total; the text stays selected, so Enter rolls again. Up and Down recall earlier inputs, and Down past the newest brings back what you were typing. PageUp and PageDown scroll the list. Escape closes it; the rolls stay until the window reloads. They are never saved or shown to the players.
+
+| Input            | Meaning                                                        |
+| ---------------- | -------------------------------------------------------------- |
+| `2d6+3`, `d20`   | dice, then `+ - * /`, parentheses, and minus                   |
+| `2d20kh1`, `2d20kl1` | advantage, disadvantage: keep the highest or lowest; dropped dice are struck through |
+| `4d6kh3`, `4d6k3` | keep the highest 3 of 4; `k` alone is `kh`                    |
+| `5d10+(3-6)/2`   | division rounds down at each division, so `(3-6)/2` is −2      |
+| `3x d20+5`, `d20+5 x3` | three separate rolls, not summed, numbered               |
+| `1d20+5, 1d8+3`  | separate rolls of different expressions                        |
+
+A leading minus negates the whole term, so `-7/2` is −3, like `0-7/2`; `(-7)/2` is −4. `x` repeats a roll and `*` multiplies, so `3x2` is an error. A term rolls at most 100 dice of at most 1000 sides, and one Enter at most 20 rolls. A d20 showing 20 is green, a 1 is red. In a rolled row, a part without dice shows its value: `5d10+(3-5)/2` reads `5d10 … − 1`.
 
 ## Player display
 
@@ -327,6 +342,7 @@ Ctrl+P lists every command with its key; the palette shows only the commands tha
 |                     | `Ctrl+=` `Ctrl+-` / `Ctrl+0` | zoom in, out / reset                          |
 |                     | `Ctrl+L`                  | open the live session                            |
 |                     | `Ctrl+Shift+L`            | privacy screen: hide this window until a key or click |
+|                     | `Alt+R`                   | roll dice                                        |
 |                     | `F2`                      | rename the note, combat, or atmosphere in the tab |
 | Start page          | `Tab`                     | switch between Open and Join                     |
 |                     | `H` / `O`                 | host a display switch / open a folder            |
