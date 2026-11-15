@@ -1,6 +1,6 @@
-// Per-client UI state: tabs and their history, sidebar, the open picker, stat block editing, the tracker selection, the
-// privacy screen, the dice roller and its rolls, and zoom. Tabs, their history, the sidebar and its collapsed groups,
-// and each page's zoom survive a reload.
+// Per-client UI state: tabs and their history, sidebar, the open picker or confirmation, stat block editing, the tracker
+// selection, the privacy screen, the dice roller and its rolls, and zoom. Tabs, their history, the sidebar and its
+// collapsed groups, and each page's zoom survive a reload.
 import type { MouseEvent, ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { toast as sonner } from "sonner";
@@ -41,6 +41,20 @@ export type PickerSpec = {
 	load?: (query: string) => Promise<Item[]>;
 };
 
+/** A yes or no question. `yes` and `no` label the buttons by what they do. The chosen side runs after the dialog is
+ * gone and focus is back where it was. */
+export type ConfirmSpec = {
+	title: string;
+	/** What saying yes loses, or other context. */
+	detail?: string;
+	yes: string;
+	/** Defaults to "Cancel". */
+	no?: string;
+	destructive?: boolean;
+	run: () => void;
+	cancel?: () => void;
+};
+
 type Ui = {
 	/** Tab ids like `note:Cinder Drake`, `problems`, or `new:k3j9x` for an empty tab. See `views.tsx`. */
 	tabs: string[];
@@ -51,6 +65,7 @@ type Ui = {
 	/** Labels of the collapsed sidebar groups. */
 	collapsed: string[];
 	picker?: PickerSpec;
+	confirm?: ConfirmSpec;
 	/** The creature whose stat block is open as a form. */
 	editing?: string;
 	/** A place in a note tab to move the cursor to, consumed by the note view. */
@@ -228,14 +243,26 @@ export function cycleTab(step: number) {
 
 let returnFocus: Element | null = null;
 
-/** Opens the picker or the dice roller in place of the other. Focus returns to where it was before the first opened. */
-function popup(open: Pick<Ui, "picker" | "roller">) {
-	const { picker, roller } = ui.get();
-	if (!picker && !roller) returnFocus = document.activeElement;
-	ui.set(open);
+const closed: Pick<Ui, "picker" | "confirm" | "roller"> = {
+	picker: undefined,
+	confirm: undefined,
+	roller: false,
+};
+const popupOpen = () => {
+	const { picker, confirm, roller } = ui.get();
+	return !!(picker || confirm || roller);
+};
+
+/** Opens the picker, a confirmation, or the dice roller in place of the others. Focus returns to where it was before
+ * the first opened. */
+function popup(open: Partial<typeof closed>) {
+	if (!popupOpen()) returnFocus = document.activeElement;
+	ui.set({ ...closed, ...open });
 }
 
-export const pick = (picker: PickerSpec) => popup({ picker, roller: false });
+export const pick = (picker: PickerSpec) => popup({ picker });
+/** Asks a yes or no question. Use `pick` for a choice. */
+export const confirm = (confirm: ConfirmSpec) => popup({ confirm });
 
 /** Puts a roll at the top of the dice roller's list, from the roller or a number prompt, and returns it. */
 export function addRoll(roll: Omit<RollEntry, "id">) {
@@ -243,7 +270,7 @@ export function addRoll(roll: Omit<RollEntry, "id">) {
 	ui.set({ rolls: [entry, ...ui.get().rolls].slice(0, 50) });
 	return entry;
 }
-export const openRoller = () => popup({ picker: undefined, roller: true });
+export const openRoller = () => popup({ roller: true });
 
 /** A text prompt. `label` names what Enter does with the trimmed query, or returns undefined to refuse it. */
 export function ask(
@@ -263,12 +290,11 @@ export function ask(
 	});
 }
 
-/** Closes the picker or the dice roller and returns focus to where it was. A running item may then move it. */
+/** Closes the open popup and returns focus to where it was. A running item may then move it. */
 export function closePopup() {
-	const { picker, roller } = ui.get();
-	if (!picker && !roller) return;
+	if (!popupOpen()) return;
 	// The dialog's focus trap must be gone before focus can leave it.
-	flushSync(() => ui.set({ picker: undefined, roller: false }));
+	flushSync(() => ui.set(closed));
 	if (returnFocus instanceof HTMLElement) returnFocus.focus();
 }
 

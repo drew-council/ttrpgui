@@ -9,9 +9,9 @@ import { Input } from "#components/ui/input.tsx";
 import { Kbd } from "#components/ui/kbd.tsx";
 import { Switch } from "#components/ui/switch.tsx";
 import type { Found, StartRecents } from "./bridge.ts";
+import { Confirm } from "./Confirm.tsx";
 import { isTextField, listClass, rowClass, useListNav } from "./list.ts";
-import { Picker } from "./Picker.tsx";
-import { clickOpens, pick, ui, zoomOnKey } from "./ui.ts";
+import { clickOpens, confirm, ui, zoomOnKey } from "./ui.ts";
 
 const start = window.ttrpgui?.start as NonNullable<
 	NonNullable<Window["ttrpgui"]>["start"]
@@ -56,7 +56,7 @@ export function Start() {
 		failed ? { side: "servers", text: `${failed}.`, error: true } : undefined,
 	);
 	const [typed, setTyped] = useState(retried.get("server") ?? "");
-	const picker = ui.use((s) => s.picker);
+	const asking = ui.use((s) => s.confirm);
 	const addressRef = useRef<HTMLInputElement>(null);
 
 	useEffect(() => {
@@ -128,16 +128,11 @@ export function Start() {
 		if (!picked) return;
 		const name = picked.dir.split("/").pop() || picked.dir;
 		if (picked.game) return open(picked.dir, name);
-		pick({
+		confirm({
 			title: `${name} is not a Game yet. Make it one?`,
-			items: [
-				{
-					label: "Make it a Game",
-					detail: "Adds a notes folder",
-					run: () => open(picked.dir, name),
-				},
-				{ label: "Cancel", run() {} },
-			],
+			detail: "Adds a notes folder to it.",
+			yes: "Make it a Game",
+			run: () => open(picked.dir, name),
 		});
 	}
 
@@ -162,7 +157,7 @@ export function Start() {
 		list.ref.current?.focus();
 	}
 
-	// Page keys, while not typing and no picker is open. The zoom binds work everywhere.
+	// Page keys, while not typing and no confirmation is open. The zoom binds work everywhere.
 	useEffect(() => {
 		const keys: Record<string, () => void> = {
 			h: () => setHost(!host),
@@ -173,7 +168,7 @@ export function Start() {
 			acted.current = true;
 			if (zoomOnKey(e)) return e.preventDefault();
 			const run = keys[e.key];
-			const typing = isTextField(e.target) || ui.get().picker;
+			const typing = isTextField(e.target) || ui.get().confirm;
 			if (!run || typing || e.ctrlKey || e.altKey || e.metaKey) return;
 			e.preventDefault();
 			run();
@@ -413,7 +408,7 @@ export function Start() {
 					</span>
 				))}
 			</footer>
-			{picker && <Picker key={picker.title} spec={picker} />}
+			{asking && <Confirm key={asking.title} spec={asking} />}
 		</div>
 	);
 }

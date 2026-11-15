@@ -25,7 +25,7 @@ import {
 import { ActionButton } from "./controls.tsx";
 import { MarkdownBox } from "./MarkdownBox.tsx";
 import { getGame, send, useGame } from "./sync.ts";
-import { pick, toast, ui } from "./ui.ts";
+import { confirm, pick, toast, ui } from "./ui.ts";
 
 type Field = {
 	key: Exclude<keyof Statblock, "abilities" | "sections">;
@@ -498,15 +498,14 @@ export const removeItem = atCursor(({ title, section: s, entry: e }) => {
 		else focusName(s, e > 0 ? e - 1 : undefined);
 	};
 	if (entry && !entry.name && !entry.text) return void remove();
-	const what = entry
-		? `the entry “${entry.name}”`
-		: `the section “${section.name}” and everything in it`;
-	pick({
-		title: `Remove ${what}?`,
-		items: [
-			{ label: "Keep it", run: () => focusName(s, e) },
-			{ label: "Remove", run: remove },
-		],
+	confirm({
+		title: `Remove the ${entry ? "entry" : "section"} “${(entry ?? section).name}”?`,
+		detail: entry ? undefined : "Removes every entry in it.",
+		yes: "Remove",
+		no: "Keep",
+		destructive: true,
+		run: remove,
+		cancel: () => focusName(s, e),
 	});
 });
 

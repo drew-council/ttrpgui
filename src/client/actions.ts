@@ -107,6 +107,7 @@ import {
 	ask,
 	closePopup,
 	closeTab,
+	confirm,
 	cycleTab,
 	type Item,
 	newTab,
@@ -258,24 +259,22 @@ export const renameAtmosphere = (from: string, to: string) =>
 		atmosphereTab(to),
 	);
 
-/** Asks before deleting `name`, then closes its tab. */
+/** Asks before deleting what `tab` shows, then closes it. */
 function confirmDelete(
 	title: string,
-	name: string,
+	detail: string,
 	mutation: Mutation,
 	tab: string,
 ) {
-	pick({
+	confirm({
 		title,
-		items: [
-			{ label: "Keep it", run() {} },
-			{
-				label: `Delete “${name}”`,
-				run: async () => {
-					if (await send(mutation)) closeTab(tab);
-				},
-			},
-		],
+		detail,
+		yes: "Delete",
+		no: "Keep",
+		destructive: true,
+		run: async () => {
+			if (await send(mutation)) closeTab(tab);
+		},
 	});
 }
 
@@ -613,8 +612,8 @@ export const actions: Record<ActionId, Action> = {
 		icon: TrashIcon,
 		...onNote((title) =>
 			confirmDelete(
-				`Delete “${noteLabel(title, getGame().notes[title])}”? Links to it will be left dangling.`,
-				noteLabel(title, getGame().notes[title]),
+				`Delete “${noteLabel(title, getGame().notes[title])}”?`,
+				"Deletes its text, stat block, and images. Links to it stay as text and show as missing.",
 				{ type: "deleteNote", title },
 				noteTab(title),
 			),
@@ -799,7 +798,7 @@ export const actions: Record<ActionId, Action> = {
 		...inCombatTab((name) =>
 			confirmDelete(
 				`Delete the combat “${name}”?`,
-				name,
+				"Deletes its combatants and their state, and ends it if it is running.",
 				{ type: "deleteCombat", name },
 				combatTab(name),
 			),
@@ -1081,8 +1080,8 @@ export const actions: Record<ActionId, Action> = {
 		icon: TrashIcon,
 		...inAtmosphereTab((name) =>
 			confirmDelete(
-				`Delete the atmosphere “${name}” and its media?`,
-				name,
+				`Delete the atmosphere “${name}”?`,
+				"Deletes its wallpaper, music, and links. Combats that use it lose it.",
 				{ type: "deleteAtmosphere", name },
 				atmosphereTab(name),
 			),
@@ -1161,6 +1160,10 @@ const mouseActions: Record<number, ActionId> = {
 	4: "go-forward",
 };
 
+/** While a confirmation is open, nothing runs behind it but the privacy screen, which closes it. */
+const blocked = (id: ActionId) =>
+	ui.get().confirm !== undefined && id !== "privacy-screen";
+
 /** Runs bound Actions, and back and forward for the mouse's buttons. While the user types, only binds with Ctrl, Alt, or
  * Meta, and function keys, fire. */
 export function useKeybinds() {
@@ -1177,14 +1180,14 @@ export function useKeybinds() {
 			const key = eventKey(e);
 			const keys = binds(getGame().config.keys);
 			const id = available().find((id) => bindHas(keys[id], key));
-			if (!id) return;
+			if (!id || blocked(id)) return;
 			e.preventDefault();
 			actions[id].run();
 		}
 		// The page itself MUST NOT navigate, which a browser does on the release unless prevented.
 		function onMouseUp(e: MouseEvent) {
 			const id = mouseActions[e.button];
-			if (!id) return;
+			if (!id || blocked(id)) return;
 			e.preventDefault();
 			if (actions[id].when?.() ?? true) actions[id].run();
 		}

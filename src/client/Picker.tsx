@@ -1,4 +1,4 @@
-// The one fuzzy picker: command palette, quick open, prompts, and confirmations all use it.
+// The one fuzzy picker: command palette, quick open, and prompts all use it. Confirmations use `Confirm`.
 // fuzzysort ranks and highlights; cmdk only handles the list keys, so its own filter is off.
 import fuzzysort from "fuzzysort";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";

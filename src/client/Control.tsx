@@ -1,4 +1,4 @@
-// The control window: sidebar, tabs, the table bar, plus the picker and toasts on top.
+// The control window: sidebar, tabs, the table bar, plus the popups and toasts on top.
 import { cn } from "cn";
 import { XIcon } from "lucide-react";
 import { useEffect, useRef } from "react";
@@ -7,6 +7,7 @@ import { Toaster } from "#components/ui/sonner.tsx";
 import { TooltipProvider } from "#components/ui/tooltip.tsx";
 import { useKeybinds } from "./actions.ts";
 import { Bar } from "./Bar.tsx";
+import { Confirm } from "./Confirm.tsx";
 import { ActionButton } from "./controls.tsx";
 import { Picker } from "./Picker.tsx";
 import { PrivacyScreen } from "./PrivacyScreen.tsx";
@@ -20,7 +21,7 @@ export function Control() {
 	useKeybinds();
 	useProblemToasts();
 	useEffect(forgetMissingTabs, []);
-	const { sidebar, active, picker, roller } = ui.use((s) => s);
+	const { sidebar, active, picker, confirm, roller } = ui.use((s) => s);
 	return (
 		<TooltipProvider>
 			<div
@@ -46,6 +47,7 @@ export function Control() {
 			</div>
 			{roller && <Roller />}
 			{picker && <Picker key={picker.title} spec={picker} />}
+			{confirm && <Confirm key={confirm.title} spec={confirm} />}
 			<Toaster
 				// Under the dialogs (z-50), so an open popup covers it.
 				className="toaster group z-40!"
