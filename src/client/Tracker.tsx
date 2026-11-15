@@ -433,6 +433,11 @@ export function CombatView({ arg: name }: { arg: string }) {
 							key={label}
 							role="option"
 							tabIndex={-1}
+							// A pressed row hands focus to the tracker, so the cursor is the one mark and never a focus ring.
+							onFocus={(e) =>
+								e.target === e.currentTarget &&
+								ref.current?.focus({ preventScroll: true })
+							}
 							aria-selected={i === nav.index}
 							data-turn={active || undefined}
 							data-picked={selected.includes(label) || undefined}
