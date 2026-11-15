@@ -3,7 +3,15 @@
 import type { EditorView } from "@codemirror/view";
 import { cn } from "cn";
 import { CrosshairIcon } from "lucide-react";
-import { createRef, useEffect, useMemo, useRef } from "react";
+import {
+	type Dispatch,
+	type RefObject,
+	type SetStateAction,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { Badge } from "#components/ui/badge.tsx";
 import { Button } from "#components/ui/button.tsx";
 import {
@@ -50,56 +58,73 @@ import {
 	openTab,
 	pick,
 	toast,
-	ui,
 } from "./ui.ts";
 import {
+	activePane,
+	argOf,
 	KindMark,
 	kindLabels,
 	kindOf,
 	pageMeta,
+	paneArg,
 	TitleField,
+	usePane,
 	useTabFocus,
 } from "./views.tsx";
 
 export const combatTab = (name: string) => `combat:${name}`;
 
-/** The tracker as last rendered: its Combat, labels in turn order, and the cursor row. */
-let tracker: { combat: string; labels: string[]; cursor?: string } | undefined;
-/** The editor of the cursor row's note. */
-const noteEditor = createRef<EditorView>();
+/** A combat view's tracker as last rendered, kept in its pane: labels in turn order, the cursor row, the selection,
+ * the list, and the editor of the cursor row's note. */
+export type Tracker = {
+	labels: string[];
+	cursor?: string;
+	selected: string[];
+	select: Dispatch<SetStateAction<string[]>>;
+	list: RefObject<HTMLDivElement | null>;
+	note: RefObject<EditorView | null>;
+};
+
+/** The active view's tracker. */
+const tracker = () => activePane()?.tracker;
 
 export const trackerFocused = () =>
-	tracker !== undefined && !!document.activeElement?.closest("[data-tracker]");
+	!!tracker()?.list.current?.contains(document.activeElement);
 
 export type Target = { combat: string; labels: string[] };
 
-/** What tracker Actions act on: the selected rows, else the cursor row. */
+/** The selected rows, else the cursor row. */
+const aim = ({ labels, cursor, selected }: Tracker) => {
+	const picked = selected.filter((l) => labels.includes(l));
+	return picked.length ? picked : cursor ? [cursor] : [];
+};
+
+/** What tracker Actions act on: in the active view's Combat, the selected rows, else the cursor row. */
 export function target(): Target {
-	const { combat = "", labels = [], cursor } = tracker ?? {};
-	const selected = ui.get().selected.filter((l) => labels.includes(l));
-	return {
-		combat,
-		labels: selected.length ? selected : cursor ? [cursor] : [],
-	};
+	const pane = activePane();
+	return pane?.tracker
+		? { combat: argOf(pane), labels: aim(pane.tracker) }
+		: { combat: "", labels: [] };
 }
 
-export const cursorLabel = () => tracker?.cursor;
+export const cursorLabel = () => tracker()?.cursor;
 
 export const describe = (labels: string[]) =>
 	labels.length > 3 ? `${labels.length} combatants` : labels.join(", ");
 
-/** Selects or deselects a Combatant, by default the cursor row. */
-export function toggleSelect(label = tracker?.cursor) {
-	if (!label) return;
-	const { selected } = ui.get();
-	ui.set({
-		selected: selected.includes(label)
-			? selected.filter((l) => l !== label)
-			: [...selected, label],
-	});
+/** Adds `label` to a selection, or takes it out. */
+const toggled = (label: string) => (selected: string[]) =>
+	selected.includes(label)
+		? selected.filter((l) => l !== label)
+		: [...selected, label];
+
+/** Selects or deselects the cursor row of the active view's tracker. */
+export function toggleSelect() {
+	const t = tracker();
+	if (t?.cursor) t.select(toggled(t.cursor));
 }
 
-export const focusNote = () => noteEditor.current?.focus();
+export const focusNote = () => tracker()?.note.current?.focus();
 
 const combatantsOf = ({ combat, labels }: Target) =>
 	labels.map((l) => getGame().combats[combat]?.combatants?.[l]);
@@ -304,7 +329,9 @@ export function CombatView({ arg: name }: { arg: string }) {
 	const combat = useGame((game) => game.combats[name] as Combat);
 	const notes = useGame((game) => game.notes);
 	const running = useGame((game) => game.runtime.combat === name);
-	const selected = ui.use((s) => s.selected);
+	const pane = usePane();
+	const [selected, select] = useState<string[]>([]);
+	const note = useRef<EditorView>(null);
 	const labels = useMemo(() => order(combat, notes), [combat, notes]);
 	const openCreature = (i: number, newTab: boolean) => {
 		const c = combat.combatants?.[labels[i] as string];
@@ -312,10 +339,10 @@ export function CombatView({ arg: name }: { arg: string }) {
 	};
 	const nav = useListNav(labels.length, openCreature);
 	const cursor = labels[nav.index];
-	tracker = { combat: name, labels, cursor };
+	const t = { labels, cursor, selected, select, list: nav.ref, note };
+	pane.tracker = t;
 	const { ref, setIndex } = nav;
 	useTabFocus(() => ref.current?.focus());
-	useEffect(() => () => ui.set({ selected: [] }), []);
 	// The cursor follows the turn; otherwise it stays on its Combatant when the order changes, even when renamed.
 	const turn = combat.turn;
 	const last = useRef<{ turn?: string; cursor?: string; labels?: string[] }>(
@@ -332,7 +359,9 @@ export function CombatView({ arg: name }: { arg: string }) {
 		const i = labels.indexOf(follow ?? "");
 		if (i < 0) return;
 		setIndex(i);
-		ref.current?.children[i]?.scrollIntoView({ block: "nearest" });
+		// A hidden view never scrolls.
+		if (ref.current?.checkVisibility())
+			ref.current.children[i]?.scrollIntoView({ block: "nearest" });
 	}, [labels, turn, setIndex, ref]);
 	useEffect(() => {
 		last.current.cursor = cursor;
@@ -345,8 +374,8 @@ export function CombatView({ arg: name }: { arg: string }) {
 				<TitleField
 					name={name}
 					rename={renameCombat}
-					onDone={() => ref.current?.focus()}
-					className="w-auto text-2xl field-sizing-content md:text-2xl"
+					// Its negative margins make it 1rem wider than the heading.
+					className="w-auto max-w-[calc(100%+1rem)] text-2xl field-sizing-content md:text-2xl"
 				/>
 				<p className={cn(pageMeta, "mt-0")}>
 					<span className={cn(running && "font-bold text-primary")}>
@@ -367,7 +396,10 @@ export function CombatView({ arg: name }: { arg: string }) {
 			</header>
 			<Toolbar
 				running={running}
-				focusTracker={() => trackerFocused() || ref.current?.focus()}
+				who={describe(aim(t))}
+				focusTracker={() =>
+					ref.current?.contains(document.activeElement) || ref.current?.focus()
+				}
 			/>
 			<div
 				className={cn(
@@ -410,7 +442,7 @@ export function CombatView({ arg: name }: { arg: string }) {
 								if (!e.shiftKey) return;
 								e.stopPropagation();
 								nav.setIndex(i);
-								toggleSelect(label);
+								select(toggled(label));
 							}}
 							onMouseDownCapture={(e) => {
 								if (!e.shiftKey) return;
@@ -460,16 +492,16 @@ export function CombatView({ arg: name }: { arg: string }) {
 						}}
 					>
 						<MarkdownBox
-							key={`${name}\0${cursor}`}
+							key={cursor}
 							value={c.note ?? ""}
 							placeholder="Notes on this combatant"
-							view={noteEditor}
-							onSave={(note) =>
+							view={note}
+							onSave={async (text) =>
 								send({
 									type: "setCombatantNote",
-									combat: name,
+									combat: await paneArg(pane),
 									labels: [cursor],
-									note,
+									note: text,
 								})
 							}
 						/>
@@ -485,12 +517,13 @@ export function CombatView({ arg: name }: { arg: string }) {
  * the tracker, unless it has focus, so the keys work after and a picker returns there. */
 function Toolbar({
 	running,
+	who,
 	focusTracker,
 }: {
 	running: boolean;
+	who: string;
 	focusTracker: () => void;
 }) {
-	const who = describe(target().labels);
 	const lead = "border-primary/50 text-primary dark:border-primary/50";
 	return (
 		<div

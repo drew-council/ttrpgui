@@ -5,7 +5,6 @@ import { produce } from "immer";
 import { CheckIcon } from "lucide-react";
 import {
 	type CSSProperties,
-	createRef,
 	type Ref,
 	useEffect,
 	useRef,
@@ -25,7 +24,8 @@ import {
 import { ActionButton } from "./controls.tsx";
 import { MarkdownBox } from "./MarkdownBox.tsx";
 import { getGame, send, useGame } from "./sync.ts";
-import { confirm, pick, toast, ui } from "./ui.ts";
+import { confirm, pick, toast } from "./ui.ts";
+import { activePane } from "./views.tsx";
 
 type Field = {
 	key: Exclude<keyof Statblock, "abilities" | "sections">;
@@ -76,9 +76,6 @@ const sectionNames = [
 	"Legendary Actions",
 ];
 
-/** The open form. Only the active note can open one. */
-const form = createRef<HTMLDivElement>();
-
 /** Shows the stat block of the creature titled `title`. `editing` turns every field into an input. */
 export function StatBlock({
 	title,
@@ -92,6 +89,7 @@ export function StatBlock({
 	const broken = useGame((game) =>
 		game.problems.some((p) => p.file === `notes/${title}/statblock.toml`),
 	);
+	const form = useRef<HTMLDivElement>(null);
 	useEffect(() => {
 		if (editing) form.current?.querySelector("input")?.focus();
 	}, [editing]);
@@ -131,7 +129,7 @@ export function StatBlock({
 			data-statblock
 			data-editing={editing || undefined}
 			data-title={title}
-			ref={editing ? form : undefined}
+			ref={form}
 			onKeyDown={(e) => {
 				if (!editing || e.key !== "Escape" || e.isDefaultPrevented()) return;
 				e.preventDefault();
@@ -324,8 +322,9 @@ const format = (field: Field, value: unknown) =>
 const parse = (field: Field, text: string) =>
 	text.trim() ? (field.parse ?? ((t) => t))(text.trim()) : undefined;
 
-/** A one-line field that saves on blur. A new saved value replaces the draft; a rejected save reverts it. With `onDone`,
- * Enter and Tab save and call it, and Escape reverts and calls it. */
+/** A one-line field that saves on blur. A new saved value replaces the draft. A refused save keeps the draft, unless it
+ * is blank, which reverts. With `onDone`, Enter and Tab save and call it, and a refused save brings focus back; Escape
+ * reverts and calls it. */
 export function SaveInput({
 	label,
 	saved,
@@ -346,6 +345,7 @@ export function SaveInput({
 	const [draft, setDraft] = useState(saved);
 	useEffect(() => setDraft(saved), [saved]);
 	const reverting = useRef(false);
+	const committing = useRef(false);
 	return (
 		<Input
 			ref={ref}
@@ -363,12 +363,19 @@ export function SaveInput({
 					reverting.current = true;
 					setDraft(saved);
 				} else if (e.key !== "Enter" && e.key !== "Tab") return;
+				else committing.current = true;
 				e.preventDefault();
 				onDone();
 			}}
-			onBlur={async () => {
+			onBlur={async (e) => {
+				const input = e.currentTarget;
+				const committed = committing.current;
+				committing.current = false;
 				if (reverting.current) reverting.current = false;
-				else if (draft !== saved && !(await onSave(draft))) setDraft(saved);
+				else if (draft !== saved && !(await onSave(draft))) {
+					if (!draft.trim()) setDraft(saved);
+					else if (committed) input.focus();
+				}
 			}}
 		/>
 	);
@@ -404,9 +411,14 @@ const editEntry = (
 		if (entry) recipe(entry);
 	});
 
-type Cursor = { title: string; section?: number; entry?: number };
+type Cursor = {
+	form: HTMLElement;
+	title: string;
+	section?: number;
+	entry?: number;
+};
 
-/** Where focus is in the open stat block form, if it is there. */
+/** Where focus is in an open stat block form, if it is there. Focus is only ever in the active tab's view. */
 export function formCursor(): Cursor | undefined {
 	const field = document.activeElement;
 	const form = field?.closest<HTMLElement>("[data-statblock][data-editing]");
@@ -416,25 +428,26 @@ export function formCursor(): Cursor | undefined {
 		return el ? Number(el.getAttribute(`data-${name}`)) : undefined;
 	};
 	return {
+		form,
 		title: form.dataset.title as string,
 		section: at("section"),
 		entry: at("entry"),
 	};
 }
 
-/** Closes the form. The note view then focuses its text box. */
+/** Closes the active view's form. The note view then focuses its text box. */
 export function stopEditing() {
 	// Blurring saves the field being edited before it unmounts.
 	(document.activeElement as HTMLElement | null)?.blur();
-	ui.set({ editing: undefined });
+	activePane()?.statblock?.edit(false);
 }
 
 /** Focuses the name of a section, or of an entry in it. Falls back to the first field. */
-function focusName(section: number, entry?: number) {
-	const s = form.current?.querySelector(`[data-section="${section}"]`);
+function focusName(form: HTMLElement, section: number, entry?: number) {
+	const s = form.querySelector(`[data-section="${section}"]`);
 	const target =
 		entry === undefined ? s : s?.querySelector(`[data-entry="${entry}"]`);
-	(target ?? form.current)?.querySelector("input")?.focus();
+	(target ?? form).querySelector("input")?.focus();
 }
 
 /** Runs `op` at the cursor, after the field being edited saves: blurring saves it, and edits run in order. */
@@ -450,7 +463,7 @@ const atCursor = (op: (at: Cursor) => void) => () => {
 const sectionsOf = (title: string) =>
 	getGame().notes[title]?.statblock?.sections ?? [];
 
-export const addSection = atCursor(({ title, section }) => {
+export const addSection = atCursor(({ form, title, section }) => {
 	const used = sectionsOf(title).map((s) => s.name);
 	const at = section === undefined ? used.length : section + 1;
 	const add = async (name: string) => {
@@ -458,7 +471,7 @@ export const addSection = atCursor(({ title, section }) => {
 			d.sections ??= [];
 			d.sections.splice(at, 0, { name, entries: [{ name: "", text: "" }] });
 		});
-		if (added) focusName(at, 0);
+		if (added) focusName(form, at, 0);
 	};
 	pick({
 		title: "Name the new section",
@@ -475,16 +488,16 @@ export const addSection = atCursor(({ title, section }) => {
 
 /** Adds an empty entry after the cursor's entry, or first in its section. Outside any section, adds a section. */
 export const addEntry = atCursor(async (at) => {
-	const { title, section: s, entry = -1 } = at;
+	const { form, title, section: s, entry = -1 } = at;
 	if (s === undefined) return addSection();
 	const added = await editStatblock(title, (d) => {
 		d.sections?.[s]?.entries.splice(entry + 1, 0, { name: "", text: "" });
 	});
-	if (added) focusName(s, entry + 1);
+	if (added) focusName(form, s, entry + 1);
 });
 
 /** Removes the cursor's entry, or its section when on a section name. Asks first unless the entry is blank. */
-export const removeItem = atCursor(({ title, section: s, entry: e }) => {
+export const removeItem = atCursor(({ form, title, section: s, entry: e }) => {
 	const section = s === undefined ? undefined : sectionsOf(title)[s];
 	if (s === undefined || !section) return;
 	const entry = e === undefined ? undefined : section.entries[e];
@@ -494,8 +507,8 @@ export const removeItem = atCursor(({ title, section: s, entry: e }) => {
 			else d.sections?.[s]?.entries.splice(e, 1);
 		});
 		if (!removed) return;
-		if (e === undefined) focusName(Math.max(0, s - 1));
-		else focusName(s, e > 0 ? e - 1 : undefined);
+		if (e === undefined) focusName(form, Math.max(0, s - 1));
+		else focusName(form, s, e > 0 ? e - 1 : undefined);
 	};
 	if (entry && !entry.name && !entry.text) return void remove();
 	confirm({
@@ -505,13 +518,13 @@ export const removeItem = atCursor(({ title, section: s, entry: e }) => {
 		no: "Keep",
 		destructive: true,
 		run: remove,
-		cancel: () => focusName(s, e),
+		cancel: () => focusName(form, s, e),
 	});
 });
 
 /** Moves the cursor's entry within its section, or its section when on a section name. */
 export const moveItem = (step: number) =>
-	atCursor(async ({ title, section: s, entry: e }) => {
+	atCursor(async ({ form, title, section: s, entry: e }) => {
 		if (s === undefined) return;
 		const sections = sectionsOf(title);
 		const from = e ?? s;
@@ -525,6 +538,6 @@ export const moveItem = (step: number) =>
 			list?.splice(to, 0, ...list.splice(from, 1));
 		});
 		if (!moved) return;
-		if (e === undefined) focusName(to);
-		else focusName(s, to);
+		if (e === undefined) focusName(form, to);
+		else focusName(form, s, to);
 	});

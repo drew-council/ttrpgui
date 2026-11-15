@@ -117,6 +117,7 @@ import {
 	pick,
 	replaceTab,
 	shiftTab,
+	tabOf,
 	toast,
 	travel,
 	travelTarget,
@@ -124,10 +125,12 @@ import {
 	zoom,
 } from "./ui.ts";
 import {
+	activePane,
 	chooseImageRole,
 	kindLabels,
 	kindOf,
 	nameSession,
+	paneOf,
 	parseTab,
 	roleLabel,
 	tabExists,
@@ -147,9 +150,10 @@ export type Action = {
 	unavailable?: () => string | undefined;
 };
 
-/** The argument of the active tab, if it is a `view` tab whose target is in `existing`. */
+/** The argument of the active view's tab, if it is a `view` tab whose target is in `existing`. */
 function activeTab(view: string, existing: object) {
-	const [v, arg] = parseTab(ui.get().active ?? "");
+	const pane = activePane();
+	const [v, arg] = parseTab((pane && tabOf(pane.key)) ?? "");
 	return v === view && Object.hasOwn(existing, arg) ? arg : undefined;
 }
 
@@ -201,6 +205,11 @@ async function newSession() {
 	openTab(noteTab(title));
 }
 
+/** Waits for a rename of what the active view shows, if one is in flight, so a mutation names the new name. */
+const renamed = async () => {
+	await activePane()?.renaming;
+};
+
 /** Makes Actions on what the active `view` tab shows, available when it exists and passes `test`. */
 const onTab =
 	<T>(view: string, all: (game: GameState) => Record<string, T>) =>
@@ -209,38 +218,40 @@ const onTab =
 			const arg = activeTab(view, all(getGame()));
 			return arg !== undefined && test(all(getGame())[arg] as T);
 		},
-		run: () => run(activeTab(view, all(getGame())) as string),
+		run: async () => {
+			await renamed();
+			const arg = activeTab(view, all(getGame()));
+			if (arg !== undefined) run(arg);
+		},
 	});
 
 const onNote = onTab("note", (game) => game.notes);
 const inCombatTab = onTab("combat", (game) => game.combats);
 const inAtmosphereTab = onTab("atmosphere", (game) => game.atmospheres);
 
-/** Asks for a new name for `from`, then calls `apply`. */
-function rename(
-	from: string,
-	apply: (from: string, to: string) => unknown,
-	detail?: string,
-) {
-	pick({
-		title: `Rename “${from}”`,
-		value: from,
-		items: [],
-		fromQuery: (to) =>
-			to && to !== from
-				? { label: `Rename to “${to}”`, detail, run: () => apply(from, to) }
-				: undefined,
+/** Focuses and selects the active view's title field, where renaming happens. */
+function focusTitle() {
+	const field = activePane()?.title?.current;
+	field?.focus();
+	field?.select();
+}
+
+/** Renames what tab `from` shows to `to` through `sent`, and resolves whether it applied. The tab follows as soon as
+ * synced state shows the rename, so its view never sees its target missing; its view's saves wait for it (`paneArg`). */
+function followRename(sent: Promise<boolean>, from: string, to: string) {
+	const off = subscribeGame(() => {
+		const game = getGame();
+		if (tabExists(from, game) || !tabExists(to, game)) return;
+		off();
+		replaceTab(from, to);
 	});
+	const done = sent.finally(off);
+	const pane = paneOf(from);
+	if (pane) pane.renaming = done;
+	return done;
 }
 
-/** Follows a rename from tab `from` to `to` once `sent` applies. Resolves whether it did. */
-async function followRename(sent: Promise<boolean>, from: string, to: string) {
-	if (!(await sent)) return false;
-	replaceTab(from, to);
-	return true;
-}
-
-/** Renames a note, which updates every link, and its tab. The Action and the title field both end here. */
+/** Renames a note, which updates every link, and its tab. The title field calls it. */
 export const renameNote = (from: string, to: string) =>
 	followRename(
 		send({ type: "renameNote", from, to }),
@@ -300,7 +311,10 @@ const onTracker = (
 ): Action => ({
 	title,
 	when: (control) => (control || trackerFocused()) && when(),
-	run: () => run(target()),
+	run: async () => {
+		await renamed();
+		run(target());
+	},
 });
 
 /** A Mutation that acts on tracker targets, without them. */
@@ -632,7 +646,7 @@ export const actions: Record<ActionId, Action> = {
 	"rename-note": {
 		title: "Rename note",
 		icon: PencilIcon,
-		...onNote((from) => rename(from, renameNote, "Updates every link")),
+		...onNote(focusTitle),
 	},
 	"delete-note": {
 		title: "Delete note",
@@ -757,11 +771,11 @@ export const actions: Record<ActionId, Action> = {
 		title: "Edit stat block",
 		icon: SquarePenIcon,
 		label: "Edit stat block",
-		...onNote(
-			(title) =>
-				ui.get().editing === title ? stopEditing() : ui.set({ editing: title }),
-			canFight,
-		),
+		...onNote(() => {
+			const form = activePane()?.statblock;
+			if (form?.editing) stopEditing();
+			else form?.edit(true);
+		}, canFight),
 	},
 	"add-statblock-section": {
 		title: "Add stat block section",
@@ -817,7 +831,7 @@ export const actions: Record<ActionId, Action> = {
 	"rename-combat": {
 		title: "Rename combat",
 		icon: PencilIcon,
-		...inCombatTab((from) => rename(from, renameCombat)),
+		...inCombatTab(focusTitle),
 	},
 	"delete-combat": {
 		title: "Delete combat",
@@ -891,19 +905,31 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"remove-combatant": {
 		...onTracker("Remove combatant", async (t) => {
-			if (await send({ type: "removeCombatants", ...t }))
-				ui.set({ selected: [] });
+			const select = activePane()?.tracker?.select;
+			if (await send({ type: "removeCombatants", ...t })) select?.([]);
 		}),
 		icon: UserMinusIcon,
 	},
 	"rename-combatant": {
 		...onTracker("Rename combatant", ({ combat }) => {
 			const label = cursorLabel() as string;
-			rename(label, async (_, to) => {
-				if (await send({ type: "renameCombatant", combat, label, to }))
-					ui.set({
-						selected: ui.get().selected.map((l) => (l === label ? to : l)),
-					});
+			const select = activePane()?.tracker?.select;
+			pick({
+				title: `Rename “${label}”`,
+				value: label,
+				items: [],
+				fromQuery: (to) =>
+					to && to !== label
+						? {
+								label: `Rename to “${to}”`,
+								run: async () => {
+									if (
+										await send({ type: "renameCombatant", combat, label, to })
+									)
+										select?.((s) => s.map((l) => (l === label ? to : l)));
+								},
+							}
+						: undefined,
 			});
 		}),
 		icon: PencilIcon,
@@ -919,8 +945,8 @@ export const actions: Record<ActionId, Action> = {
 	"clear-selection": {
 		...onTracker(
 			"Clear selection",
-			() => ui.set({ selected: [] }),
-			() => ui.get().selected.length > 0,
+			() => activePane()?.tracker?.select([]),
+			() => !!activePane()?.tracker?.selected.length,
 		),
 		icon: SquareXIcon,
 	},
@@ -1099,7 +1125,7 @@ export const actions: Record<ActionId, Action> = {
 	"rename-atmosphere": {
 		title: "Rename atmosphere",
 		icon: PencilIcon,
-		...inAtmosphereTab((from) => rename(from, renameAtmosphere)),
+		...inAtmosphereTab(focusTitle),
 	},
 	"delete-atmosphere": {
 		title: "Delete atmosphere",
@@ -1186,9 +1212,11 @@ const mouseActions: Record<number, ActionId> = {
 	4: "go-forward",
 };
 
-/** While a confirmation is open, nothing runs behind it but the privacy screen, which closes it. */
-const blocked = (id: ActionId) =>
-	ui.get().confirm !== undefined && id !== "privacy-screen";
+/** While a confirmation or a menu is open, nothing runs behind it but the privacy screen. The menu's own keys work. */
+const blocked = (id: ActionId) => {
+	const { confirm, menu } = ui.get();
+	return (confirm !== undefined || menu) && id !== "privacy-screen";
+};
 
 /** Runs bound Actions, and back and forward for the mouse's buttons. While the user types, only binds with Ctrl, Alt, or
  * Meta, and function keys, fire. */

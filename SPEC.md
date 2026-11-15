@@ -86,7 +86,7 @@ Settled in the design interview. Where this section and the text above differ, t
 - React and TypeScript.
 - One `Game` is open at a time. The start page lists recent ones with the last one under the cursor, so Enter reopens it. Switching goes back through the start page and is rare.
 - Keybinds live in one user-level config file. Most `Action`s have no bind. Every `Action` appears in the command palette.
-- A yes or no question is a dialog, never the picker: `Y` confirms, `N` or Escape cancels, and Enter alone never destroys anything.
+- A yes or no question is a dialog, never the picker: `Y` confirms, `N` or Escape cancels, and neither Enter nor Space alone destroys anything.
 - Pickers chosen from again and again (quick open, the command palette, the atmosphere switcher, creatures to add, conditions) list the most recent rows first while the query is empty. Quick open counts every tab shown, not only its own picks, and never leads with the tab shown now. The lists persist per window, like tabs.
 - Lists use `j`/`k`. The `ttrpgtui` binds carry over: `g`/`G`, `Space` multi-select, `+`/`-` HP, `i` initiative, `n` new, `r` rename, `d` description, `u`/`Ctrl+R` undo and redo.
 - All text editing MUST reuse one markdown text box. Modal editing is deferred.
@@ -98,7 +98,7 @@ Settled in the design interview. Where this section and the text above differ, t
 - All notes sit in one flat directory. Each note is a directory holding `note.md`, `metadata.toml`, an optional `statblock.toml`, and its images.
 - Titles are unique. Links resolve by title.
 - A `Note` has zero or one kind: `Session`, `Creature`, `Location`, `Vehicle`.
-- The control window has tabs and a collapsible sidebar. Tabs reorder by dragging or with Actions. The sidebar lists notes grouped by kind, and combats, with a filter box.
+- The control window has tabs and a collapsible sidebar. Tabs reorder by dragging or with Actions. A tab shown again is as it was left: scroll position, cursor, undo history, unsaved form fields. The sidebar lists notes grouped by kind, and combats, with a filter box.
 - Ctrl+K fuzzy-matches titles of notes and combats. A missing title can be created as a plain note.
 - Full-text search is a separate `Action`.
 - `Action`s create a note of a given kind and change a note's kind.

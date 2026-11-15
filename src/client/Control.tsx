@@ -1,7 +1,7 @@
 // The control window: sidebar, tabs, the table bar, plus the popups and toasts on top.
 import { cn } from "cn";
 import { XIcon } from "lucide-react";
-import { type DragEvent, useEffect, useRef, useState } from "react";
+import { type DragEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "#components/ui/button.tsx";
 import { Toaster } from "#components/ui/sonner.tsx";
 import { TooltipProvider } from "#components/ui/tooltip.tsx";
@@ -9,19 +9,28 @@ import { useKeybinds } from "./actions.ts";
 import { Bar } from "./Bar.tsx";
 import { Confirm } from "./Confirm.tsx";
 import { ActionButton } from "./controls.tsx";
+import { focusAgain } from "./MarkdownBox.tsx";
 import { Picker } from "./Picker.tsx";
 import { PrivacyScreen } from "./PrivacyScreen.tsx";
 import { Roller } from "./Roller.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 import { getGame, useGame } from "./sync.ts";
-import { closeTab, moveTab, toast, ui } from "./ui.ts";
-import { TabBody, TabLabel, tabExists, Welcome } from "./views.tsx";
+import { closeTab, mountKey, moveTab, toast, ui } from "./ui.ts";
+import {
+	focusMain,
+	PaneContext,
+	TabBody,
+	TabLabel,
+	tabExists,
+	useNewPane,
+	Welcome,
+} from "./views.tsx";
 
 export function Control() {
 	useKeybinds();
 	useProblemToasts();
 	useEffect(forgetMissingTabs, []);
-	const { sidebar, active, picker, confirm, roller } = ui.use((s) => s);
+	const { sidebar, tabs, active, picker, confirm, roller } = ui.use((s) => s);
 	return (
 		<TooltipProvider>
 			<div
@@ -35,12 +44,15 @@ export function Control() {
 				{sidebar && <Sidebar />}
 				<main className="flex min-h-0 flex-col">
 					<TabBar />
-					{/* Keyed so each tab starts at the top. */}
-					<div
-						key={active}
-						className="@container min-h-0 flex-1 overflow-y-auto"
-					>
-						{active ? <TabBody tab={active} /> : <Welcome />}
+					<div className="relative min-h-0 flex-1">
+						{/* In mount key order, so switching, reordering, or renaming tabs moves no element. */}
+						{tabs
+							.map((tab) => [mountKey(tab), tab] as const)
+							.sort(([a], [b]) => (a < b ? -1 : 1))
+							.map(([key, tab]) => (
+								<TabPane key={key} tab={tab} shown={tab === active} />
+							))}
+						{!tabs.length && <TabPane shown />}
 					</div>
 				</main>
 				<Bar />
@@ -59,6 +71,57 @@ export function Control() {
 			/>
 			<PrivacyScreen />
 		</TooltipProvider>
+	);
+}
+
+/** An open tab's view, or the welcome hints with none open. Every open tab's view stays mounted and only the active
+ * one shows, so a tab shown again finds its scroll positions, focus, text, and state as they were. When its tab shows
+ * again, focus goes back to the element in it that had focus, else to its main element; `openTab` on a tab already
+ * shown focuses its main element. */
+function TabPane({ tab, shown }: { tab?: string; shown: boolean }) {
+	const pane = useNewPane(tab ? mountKey(tab) : "");
+	const refocus = ui.use((s) => s.refocus);
+	const wasShown = useRef(false);
+	// biome-ignore lint/correctness/useExhaustiveDependencies: runs when the tab shows, and on each refocus while it does.
+	useEffect(() => {
+		const appeared = shown && !wasShown.current;
+		wasShown.current = shown;
+		if (!shown || ui.get().picker) return;
+		const { last, root } = pane;
+		if (appeared && last instanceof HTMLElement && root?.contains(last))
+			focusAgain(last);
+		else focusMain(pane);
+	}, [shown, refocus]);
+	// The view rerenders on its own state, not on its tab showing or hiding.
+	const body = useMemo(
+		() => (tab ? <TabBody tab={tab} /> : <Welcome />),
+		[tab],
+	);
+	return (
+		<PaneContext value={pane}>
+			{/* Hidden, it skips rendering and takes no focus or input. Its layout stays, so its scroll positions do. */}
+			<div
+				inert={!shown}
+				className={cn(
+					"absolute inset-0",
+					!shown && "invisible [content-visibility:hidden]",
+				)}
+			>
+				<div
+					ref={(root) => {
+						pane.root = root;
+					}}
+					role="tabpanel"
+					tabIndex={-1}
+					className="@container h-full overflow-y-auto outline-none"
+					onFocus={(e) => {
+						if (e.currentTarget.contains(e.target)) pane.last = e.target;
+					}}
+				>
+					{body}
+				</div>
+			</div>
+		</PaneContext>
 	);
 }
 

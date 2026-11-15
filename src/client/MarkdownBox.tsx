@@ -37,6 +37,7 @@ import {
 	noteLabel,
 	parseLinks,
 } from "../shared/notes.ts";
+import type { GameState } from "../shared/state.ts";
 import { getGame, send, useGame } from "./sync.ts";
 import { noteTab, openTab, wantsNewTab } from "./ui.ts";
 
@@ -61,10 +62,10 @@ export function MarkdownBox(props: Props) {
 	latest.current = props;
 	const editor = useRef<EditorView>(null);
 	const receive = useRef<(value: string) => void>(null);
-	const notes = useGame((game) => game.notes);
+	const links = useGame((game) => linkKey(game.notes));
 
 	useEffect(() => {
-		const { value, imageBase = "", placeholder, onSave } = latest.current;
+		const { value, placeholder, onSave } = latest.current;
 		// Texts we saved whose echo may still arrive as `value`.
 		const sent: string[] = [];
 		let timer: ReturnType<typeof setTimeout> | undefined;
@@ -111,7 +112,7 @@ export function MarkdownBox(props: Props) {
 						completeHTMLTags: false,
 					}),
 					syntaxHighlighting(highlight),
-					livePreview(imageBase),
+					livePreview(() => latest.current.imageBase ?? ""),
 					autocompletion({ override: [completeTitles], icons: false }),
 					placeholder ? placeholderText(placeholder) : [],
 					EditorView.domEventHandlers({
@@ -228,9 +229,10 @@ export function MarkdownBox(props: Props) {
 
 	useEffect(() => receive.current?.(props.value), [props.value]);
 
-	// Links turn dangling or resolved as notes come and go: an empty update makes the preview recheck them.
-	// biome-ignore lint/correctness/useExhaustiveDependencies: it runs when notes change.
-	useEffect(() => editor.current?.dispatch({}), [notes]);
+	// Links turn dangling or resolved as notes come and go, and images move with a renamed note: an empty update makes
+	// the preview recheck them.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: it runs when link targets or the image base change.
+	useEffect(() => editor.current?.dispatch({}), [links, props.imageBase]);
 
 	// Escape focuses the box itself, so plain-key binds work; Enter goes back in.
 	return (
@@ -246,6 +248,27 @@ export function MarkdownBox(props: Props) {
 			}}
 		/>
 	);
+}
+
+const linkKeys = new WeakMap<GameState["notes"], string>();
+
+/** What link decorations depend on: every note's title and label. Cached per state, as many text boxes ask. */
+function linkKey(notes: GameState["notes"]) {
+	const cached = linkKeys.get(notes);
+	if (cached !== undefined) return cached;
+	const key = Object.entries(notes)
+		.map(([title, note]) => `${title}\0${noteLabel(title, note)}`)
+		.join("\n");
+	linkKeys.set(notes, key);
+	return key;
+}
+
+/** Focuses `el` again without scrolling. A text box's editor takes back its own selection, which a plain focus loses
+ * once its view was hidden. */
+export function focusAgain(el: HTMLElement) {
+	const view = EditorView.findFromDOM(el);
+	if (view?.contentDOM === el) view.focus();
+	else el.focus({ preventScroll: true });
 }
 
 /** The title of the wiki link under the cursor in the focused text box. */
@@ -424,7 +447,7 @@ const lineClasses: Record<string, string> = {
  * Obsidian-style live preview: markup is hidden unless the cursor touches its element (its line, for
  * headings, quotes, and lists). Wiki links show their label, and images render after their source.
  */
-function livePreview(imageBase: string) {
+function livePreview(imageBase: () => string) {
 	const build = (view: EditorView) => {
 		const { state } = view;
 		const { notes } = getGame();
@@ -500,7 +523,7 @@ function livePreview(imageBase: string) {
 						if (!url) break;
 						const src = new URL(
 							state.sliceDoc(url.from, url.to),
-							location.origin + imageBase,
+							location.origin + imageBase(),
 						).href;
 						const widget = new ImageWidget(src);
 						decorations.push(
@@ -550,20 +573,23 @@ function livePreview(imageBase: string) {
 
 	return ViewPlugin.fromClass(
 		class {
-			notes = getGame().notes;
+			links = linkKey(getGame().notes);
+			base = imageBase();
 			decorations: DecorationSet;
 			constructor(view: EditorView) {
 				this.decorations = build(view);
 			}
 			update(update: ViewUpdate) {
 				if (
-					this.notes !== getGame().notes ||
+					this.links !== linkKey(getGame().notes) ||
+					this.base !== imageBase() ||
 					update.docChanged ||
 					update.selectionSet ||
 					update.viewportChanged ||
 					syntaxTree(update.startState) !== syntaxTree(update.state)
 				) {
-					this.notes = getGame().notes;
+					this.links = linkKey(getGame().notes);
+					this.base = imageBase();
 					this.decorations = build(update.view);
 				}
 			}

@@ -2,7 +2,16 @@
 import { EditorView } from "@codemirror/view";
 import { cn } from "cn";
 import { CalendarDaysIcon, MonitorUpIcon, TagIcon } from "lucide-react";
-import { type FC, type ReactNode, useEffect, useRef, useState } from "react";
+import {
+	createContext,
+	type FC,
+	type ReactNode,
+	type RefObject,
+	useContext,
+	useEffect,
+	useRef,
+	useState,
+} from "react";
 import { Badge } from "#components/ui/badge.tsx";
 import { Button } from "#components/ui/button.tsx";
 import { Calendar } from "#components/ui/calendar.tsx";
@@ -41,8 +50,16 @@ import { listClass, rowClass, useListNav } from "./list.ts";
 import { MarkdownBox } from "./MarkdownBox.tsx";
 import { SaveInput, StatBlock } from "./StatBlock.tsx";
 import { getGame, send, useGame } from "./sync.ts";
-import { CombatView, combatTab } from "./Tracker.tsx";
-import { clickOpens, justRenamed, noteTab, openTab, pick, ui } from "./ui.ts";
+import { CombatView, combatTab, type Tracker } from "./Tracker.tsx";
+import {
+	clickOpens,
+	mountKey,
+	noteTab,
+	openTab,
+	pick,
+	tabOf,
+	ui,
+} from "./ui.ts";
 
 type View = {
 	/** Shown in tabs and the sidebar. */
@@ -74,15 +91,71 @@ export const views: Record<string, View> = {
 	new: { Label: () => "New tab", Body: Welcome },
 };
 
-/** Focuses a view's main element when its tab shows, and again each time `openTab` opens it. Not while the picker is
- * open, nor when a rename remounts the tab after focus left it. */
-export function useTabFocus(focus: () => void) {
-	const refocus = ui.use((s) => s.refocus);
-	// biome-ignore lint/correctness/useExhaustiveDependencies: runs on mount and on each refocus.
+/** An open tab's mounted view, as Actions reach it. `TabPane` makes one per tab; its view fills in what it has. */
+export type Pane = {
+	/** Its tab's mount key. See `mountKey`. */
+	key: string;
+	/** Focuses the view's main element. See `useTabFocus`. */
+	focus?: () => void;
+	/** Its scroll container, which takes focus when nothing in it does. */
+	root?: HTMLElement | null;
+	/** The element in it that last had focus, which takes focus again when its tab shows again. */
+	last?: Element;
+	/** The title field that F2 focuses. */
+	title?: RefObject<HTMLInputElement | null>;
+	/** A rename of what it shows, while in flight. See `paneArg`. */
+	renaming?: Promise<boolean>;
+	/** The combat view's tracker. */
+	tracker?: Tracker;
+	/** The note view's stat block form: whether it is open, and the switch. */
+	statblock?: { editing: boolean; edit: (editing: boolean) => void };
+};
+
+const panes = new Map<string, Pane>();
+export const PaneContext = createContext<Pane>({ key: "" });
+/** The pane of the view rendering this. */
+export const usePane = () => useContext(PaneContext);
+/** A new pane for the tab mounted under `key`, registered from the start and while it stays mounted. */
+export function useNewPane(key: string) {
+	const [pane] = useState<Pane>(() => {
+		const pane = { key };
+		panes.set(key, pane);
+		return pane;
+	});
 	useEffect(() => {
-		if (justRenamed() && document.activeElement !== document.body) return;
-		if (!ui.get().picker) focus();
-	}, [refocus]);
+		panes.set(key, pane);
+		return () => void panes.delete(key);
+	}, [key, pane]);
+	return pane;
+}
+/** The pane of the open tab `tab`. */
+export const paneOf = (tab: string) => panes.get(mountKey(tab));
+/** The pane that Actions act on: the active tab's. Every lookup of "the" view, and of what it shows, goes through here,
+ * so side-by-side panes need only redefine it. */
+export const activePane = () => {
+	const { active } = ui.get();
+	return active === undefined ? undefined : paneOf(active);
+};
+/** The argument of a pane's tab now, such as a note's title. */
+export const argOf = (pane: Pane) => parseTab(tabOf(pane.key) ?? "")[1];
+/** The argument of a pane's tab once a rename in flight has landed. A mutation sent from a view names its target with
+ * this, so the server, which applies mutations in order, never sees the old name after the rename. */
+export async function paneArg(pane: Pane) {
+	await pane.renaming;
+	return argOf(pane);
+}
+
+/** Names a view's main element, which `TabPane` focuses when the tab is opened, or shows again with nothing in it that
+ * had focus. */
+export function useTabFocus(focus: () => void) {
+	usePane().focus = focus;
+}
+
+/** Focuses a pane's main element, else the pane itself, so focus never falls to the page body. */
+export function focusMain(pane: Pane) {
+	pane.focus?.();
+	if (!pane.focus || !pane.root?.contains(document.activeElement))
+		pane.root?.focus({ preventScroll: true });
 }
 
 export function parseTab(tab: string): [view: string, arg: string] {
@@ -178,20 +251,21 @@ export const pageTitle =
 const titleField =
 	"-mx-2 h-auto rounded-lg border-transparent px-2 hover:border-input focus-visible:border-input focus-visible:ring-0 dark:bg-transparent dark:focus-visible:bg-input/30";
 
-/** A page title that renames what it names: Enter or Tab saves and calls `onDone`, Escape reverts, blur saves. One
- * line, so a long title ends in an ellipsis at rest and shows in full in its tooltip. */
+/** A page title that renames what it names, and that F2 focuses: Enter or Tab saves and focuses the view's main
+ * element, Escape reverts, blur saves. A refused name stays to fix. One line, so a long title ends in an ellipsis at
+ * rest and shows in full in its tooltip. */
 export function TitleField({
 	name,
 	rename,
-	onDone,
 	className,
 }: {
 	name: string;
 	rename: (from: string, to: string) => Promise<boolean>;
-	onDone?: () => void;
 	className?: string;
 }) {
+	const pane = usePane();
 	const ref = useRef<HTMLInputElement>(null);
+	pane.title = ref;
 	return (
 		<h1 className="min-w-0" title={name}>
 			<SaveInput
@@ -199,9 +273,9 @@ export function TitleField({
 				label="Title"
 				saved={name}
 				onSave={async (to) =>
-					!!to.trim() && to.trim() !== name && rename(name, to.trim())
+					!!to.trim() && (to.trim() === name || rename(name, to.trim()))
 				}
-				onDone={onDone ?? (() => ref.current?.blur())}
+				onDone={() => focusMain(pane)}
 				className={cn(
 					pageTitle,
 					titleField,
@@ -265,9 +339,19 @@ export const nameSession = (title: string) => {
 };
 
 function NoteView({ arg: title }: { arg: string }) {
-	const notes = useGame((game) => game.notes);
-	const combats = useGame((game) => game.combats);
-	const note = notes[title] as Note;
+	// Narrow selections, so a change elsewhere in the Game does not rerender every open note. Lists come joined by
+	// "\0", which compares by value.
+	const note = useGame((game) => game.notes[title] as Note);
+	const linkedFrom = useGame((game) =>
+		backlinks(game.notes, title).sort(sessionOrder(game.notes)).join("\0"),
+	);
+	const fights = useGame((game) =>
+		Object.keys(game.combats)
+			.filter((name) => game.combats[name]?.session === title)
+			.join("\0"),
+	);
+	const { metadata } = note;
+	const pane = usePane();
 	const [body, setBody] = useState<string>();
 	const loaded = body !== undefined;
 	const editor = useRef<EditorView>(null);
@@ -275,18 +359,22 @@ function NoteView({ arg: title }: { arg: string }) {
 	const nameField = useRef<HTMLInputElement>(null);
 	const tab = noteTab(title);
 	const reveal = ui.use((s) => (s.reveal?.tab === tab ? s.reveal : undefined));
-	const editing = ui.use((s) => s.editing === title);
+	const [editing, edit] = useState(false);
+	pane.statblock = { editing, edit };
+	if (metadata.kind === "session") pane.title = nameField;
 	const version = note.bodyVersion;
-	// biome-ignore lint/correctness/useExhaustiveDependencies: refetches when note.md changes.
+	// Refetches when note.md changes, not on a rename, which keeps the text. A failed fetch, such as one for the old
+	// title as a rename lands, leaves loaded text alone.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: only the version decides.
 	useEffect(() => {
 		let live = true;
 		fetch(gameUrl("notes", title, "note.md"), { cache: "no-store" })
-			.then((res) => (res.ok ? res.text() : ""))
-			.then((text) => live && setBody(text));
+			.then((res) => (res.ok ? res.text() : undefined))
+			.then((text) => live && setBody((was) => text ?? was ?? ""));
 		return () => {
 			live = false;
 		};
-	}, [title, version]);
+	}, [version]);
 
 	// The wrapper passes focus to the editor. Until the text loads it holds focus, and hands it over on load if it still has it.
 	// Without scrolling, as the editor focuses: in the narrow layout the text sits below the stat block.
@@ -323,7 +411,7 @@ function NoteView({ arg: title }: { arg: string }) {
 		ui.set({ reveal: undefined });
 	}, [reveal, loaded]);
 
-	const { metadata, images } = note;
+	const { images } = note;
 	const kind = kindOf(note);
 	const main = mainImage(note);
 	const maps = images.filter((image) => metadata.images?.[image] === "map");
@@ -384,7 +472,7 @@ function NoteView({ arg: title }: { arg: string }) {
 						/>
 					</h1>
 				) : (
-					<TitleField name={title} rename={renameNote} onDone={focusText} />
+					<TitleField name={title} rename={renameNote} />
 				)}
 				<div className={pageMeta}>
 					<KindMark kind={kind} className="-mr-2" />
@@ -420,7 +508,13 @@ function NoteView({ arg: title }: { arg: string }) {
 					{loaded && (
 						<MarkdownBox
 							value={body}
-							onSave={(text) => send({ type: "saveNote", title, body: text })}
+							onSave={async (text) =>
+								send({
+									type: "saveNote",
+									title: await paneArg(pane),
+									body: text,
+								})
+							}
 							imageBase={gameUrl("notes", title, "")}
 							onImage={(file) => addImage(title, file)}
 							placeholder="Empty note. Start writing…"
@@ -468,16 +562,14 @@ function NoteView({ arg: title }: { arg: string }) {
 				</ListBox>
 				<ListBox
 					label="Combats"
-					items={Object.keys(combats).filter(
-						(name) => combats[name]?.session === title,
-					)}
+					items={fights ? fights.split("\0") : []}
 					open={(name, newTab) => openTab(combatTab(name), newTab)}
 				>
 					{(name) => <KindLabel kind="combat" name={name} />}
 				</ListBox>
 				<ListBox
 					label="Linked from"
-					items={backlinks(notes, title).sort(sessionOrder(notes))}
+					items={linkedFrom ? linkedFrom.split("\0") : []}
 					open={(other, newTab) => openTab(noteTab(other), newTab)}
 				>
 					{(other) => <NoteLabel arg={other} />}

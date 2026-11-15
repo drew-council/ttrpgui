@@ -1,5 +1,5 @@
-// The one confirmation: a yes or no question. Y confirms; N and Escape cancel. Focus starts on the safe button, so
-// Enter alone never destroys anything. Arrows and Tab move between the two buttons. Other keys reach no keybind but
+// The one confirmation: a yes or no question. Y confirms; N and Escape cancel. Enter and Space press the focused
+// button, which starts on the safe one, so neither alone destroys anything. Arrows and Tab move between the two buttons. Other keys reach no keybind but
 // the privacy screen's (see `useKeybinds`).
 import { useRef } from "react";
 import {
@@ -38,7 +38,7 @@ export function Confirm({ spec }: { spec: ConfirmSpec }) {
 				onCloseAutoFocus={(e) => e.preventDefault()}
 				onKeyDown={(e) => {
 					const k = e.key.toLowerCase();
-					if (["tab", "enter", "escape"].includes(k)) return;
+					if (["tab", "enter", "escape", " "].includes(k)) return;
 					if (e.ctrlKey || e.altKey || e.metaKey) return;
 					e.preventDefault();
 					if (k === "y") choose(spec.run);

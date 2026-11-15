@@ -8,6 +8,8 @@ import {
 	type ComponentProps,
 	type MouseEvent,
 	type ReactNode,
+	useEffect,
+	useState,
 	useSyncExternalStore,
 } from "react";
 import { Button } from "#components/ui/button.tsx";
@@ -196,7 +198,8 @@ export const afterMenu = (run: () => void) => {
 	chosen = run;
 };
 
-/** A menu, by default "More" behind an ellipsis. When it closes, focus goes back where it was before it opened. */
+/** A menu, by default "More" behind an ellipsis. While it is open, no keybind runs (`ui.menu`). When it closes, focus
+ * goes back where it was before it opened. */
 export function ActionMenu({
 	label = "More",
 	tooltip,
@@ -210,10 +213,18 @@ export function ActionMenu({
 	trigger?: ReactNode;
 	children: ReactNode;
 }) {
+	const [open, setOpen] = useState(false);
+	useEffect(() => {
+		if (!open) return;
+		ui.set({ menu: true });
+		return () => ui.set({ menu: false });
+	}, [open]);
 	return (
 		<DropdownMenu
+			open={open}
 			onOpenChange={(open) => {
 				if (open) before = document.activeElement;
+				setOpen(open);
 			}}
 		>
 			<Tooltip>
@@ -238,7 +249,8 @@ export function ActionMenu({
 				className="w-auto min-w-52"
 				onCloseAutoFocus={(e) => {
 					e.preventDefault();
-					if (before instanceof HTMLElement) before.focus();
+					if (before instanceof HTMLElement)
+						before.focus({ preventScroll: true });
 					const run = chosen;
 					chosen = undefined;
 					run?.();

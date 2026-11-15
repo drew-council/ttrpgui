@@ -1,6 +1,6 @@
-// Per-client UI state: tabs and their history, sidebar, the open picker or confirmation, stat block editing, the tracker
-// selection, the privacy screen, the dice roller and its rolls, and zoom. Tabs, their history, the sidebar and its
-// collapsed groups, the pickers' recent lists, and each page's zoom survive a reload.
+// Per-client UI state: tabs, their history and mount keys, sidebar, the open picker, confirmation, or menu, the privacy
+// screen, the dice roller and its rolls, and zoom. Tabs, their history, the sidebar and its collapsed groups, the
+// pickers' recent lists, and each page's zoom survive a reload.
 import type { MouseEvent, ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { toast as sonner } from "sonner";
@@ -76,13 +76,11 @@ type Ui = {
 	recent: Record<string, string[]>;
 	picker?: PickerSpec;
 	confirm?: ConfirmSpec;
-	/** The creature whose stat block is open as a form. */
-	editing?: string;
+	/** Whether a dropdown menu is open. See `ActionMenu`. */
+	menu: boolean;
 	/** A place in a note tab to move the cursor to, consumed by the note view. */
 	reveal?: { tab: string; line: number; column: number };
-	/** Labels of the Combatants selected in the open tracker. */
-	selected: string[];
-	/** Bumped by `openTab`: the shown view focuses its main element again. See `useTabFocus`. */
+	/** Bumped by `openTab`: the shown view focuses its main element again. See `TabPane`. */
 	refocus: number;
 	/** Whether the player display window is open. Electron only. */
 	display: boolean;
@@ -111,7 +109,7 @@ export const ui = createStore<Ui>({
 	sidebar: true,
 	collapsed: [],
 	recent: {},
-	selected: [],
+	menu: false,
 	refocus: 0,
 	display: false,
 	privacy: false,
@@ -235,19 +233,25 @@ export function closeTab(tab: string) {
 	});
 }
 
-let renamedTab: string | undefined;
+const mountKeys = new Map<string, string>();
+let lastKey = 0;
 
-/** Whether the active tab just took a new id from `replaceTab`, and so remounts. Asking clears it. */
-export function justRenamed() {
-	const was = renamedTab === ui.get().active;
-	renamedTab = undefined;
-	return was;
+/** The key an open tab's view mounts under. It stays through `replaceTab`, so a rename keeps the view and its state. */
+export function mountKey(tab: string) {
+	if (!mountKeys.has(tab)) mountKeys.set(tab, `#${++lastKey}`);
+	return mountKeys.get(tab) as string;
 }
 
-/** Renames `from` to `to` in the tabs, every tab's history, and the recent tabs, as after renaming what they show. */
+/** The open tab mounted under `key`. */
+export const tabOf = (key: string) =>
+	ui.get().tabs.find((tab) => mountKey(tab) === key);
+
+/** Renames `from` to `to` in the tabs, every tab's history, and the recent tabs, as after renaming what they show. Its
+ * view stays mounted. */
 export function replaceTab(from: string, to: string) {
 	const { tabs, active, history, recent } = ui.get();
-	if (active === from) renamedTab = to;
+	mountKeys.set(to, mountKey(from));
+	mountKeys.delete(from);
 	const rename = (t: string) => (t === from ? to : t);
 	ui.set({
 		recent: { ...recent, tabs: [...new Set(recent.tabs?.map(rename))] },
@@ -333,7 +337,8 @@ export function closePopup() {
 	if (!popupOpen()) return;
 	// The dialog's focus trap must be gone before focus can leave it.
 	flushSync(() => ui.set(closed));
-	if (returnFocus instanceof HTMLElement) returnFocus.focus();
+	if (returnFocus instanceof HTMLElement)
+		returnFocus.focus({ preventScroll: true });
 }
 
 /** Shows a message for a few seconds. The control window's `Toaster` renders it. A toast with the same `id` replaces it. */
