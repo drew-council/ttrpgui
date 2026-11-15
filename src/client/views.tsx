@@ -4,8 +4,15 @@ import { cn } from "cn";
 import { CalendarDaysIcon, MonitorUpIcon, TagIcon } from "lucide-react";
 import { type FC, type ReactNode, useEffect, useRef, useState } from "react";
 import { Badge } from "#components/ui/badge.tsx";
+import { Button } from "#components/ui/button.tsx";
+import { Calendar } from "#components/ui/calendar.tsx";
 import { DropdownMenuSeparator } from "#components/ui/dropdown-menu.tsx";
 import { Kbd } from "#components/ui/kbd.tsx";
+import {
+	Popover,
+	PopoverAnchor,
+	PopoverContent,
+} from "#components/ui/popover.tsx";
 import { canFight } from "../shared/combat.ts";
 import { binds, formatKey } from "../shared/keys.ts";
 import {
@@ -14,6 +21,7 @@ import {
 	imageFile,
 	isDateTitle,
 	labelParts,
+	localDate,
 	mainImage,
 	sessionOrder,
 } from "../shared/notes.ts";
@@ -487,34 +495,58 @@ const longDate = (iso: string) =>
 		day: "numeric",
 	});
 
-/** A Session's date as a quiet button that opens the native date picker, which yields only whole dates or a clear. */
+/** A Session's date as a quiet button that opens a calendar under it. Keys stay inside, as in a menu. */
 function SessionDate({ title, date }: { title: string; date?: string }) {
-	const input = useRef<HTMLInputElement>(null);
+	const [open, setOpen] = useState(false);
+	const button = useRef<HTMLButtonElement>(null);
+	const day = date ? new Date(`${date}T00:00`) : undefined;
+	const save = (date: string | null) => {
+		setOpen(false);
+		send({ type: "setMetadata", title, fields: { date } });
+	};
 	return (
-		<span className="relative -mx-1.5 flex">
-			<ToolButton
-				icon={CalendarDaysIcon}
-				label={date ? formatDate(date) : "Add a date"}
-				title="Set the date"
-				className="text-sm font-normal tabular-nums"
-				onClick={() => input.current?.showPicker()}
-			/>
-			<input
-				ref={input}
-				type="date"
-				tabIndex={-1}
-				aria-hidden
-				className="pointer-events-none absolute bottom-0 left-0 size-0 opacity-0"
-				value={date ?? ""}
-				onChange={(e) =>
-					send({
-						type: "setMetadata",
-						title,
-						fields: { date: e.target.value || null },
-					})
-				}
-			/>
-		</span>
+		<Popover open={open} onOpenChange={setOpen}>
+			<PopoverAnchor className="-mx-1.5 flex">
+				<ToolButton
+					ref={button}
+					icon={CalendarDaysIcon}
+					label={date ? formatDate(date) : "Add a date"}
+					title="Set the date"
+					className="text-sm font-normal tabular-nums"
+					onClick={() => setOpen(true)}
+				/>
+			</PopoverAnchor>
+			<PopoverContent
+				align="start"
+				className="max-h-(--radix-popover-content-available-height) w-auto gap-0 overflow-y-auto p-0"
+				onKeyDown={(e) => e.stopPropagation()}
+				onCloseAutoFocus={(e) => {
+					e.preventDefault();
+					button.current?.focus({ preventScroll: true });
+				}}
+			>
+				<Calendar
+					mode="single"
+					required
+					autoFocus
+					weekStartsOn={0}
+					selected={day}
+					defaultMonth={day}
+					onSelect={(d) => d && save(localDate(d))}
+					className="p-2 tabular-nums [--cell-size:--spacing(8)]"
+				/>
+				<div className="flex justify-between border-t p-1">
+					<Button variant="ghost" size="sm" onClick={() => save(localDate())}>
+						Today
+					</Button>
+					{date && (
+						<Button variant="ghost" size="sm" onClick={() => save(null)}>
+							Clear
+						</Button>
+					)}
+				</div>
+			</PopoverContent>
+		</Popover>
 	);
 }
 

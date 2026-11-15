@@ -50,9 +50,8 @@ export function mainImage({ metadata, images }: Note) {
 	return roles[images[0] as string] ? undefined : images[0];
 }
 
-/** Today as `2026-11-07`, in local time: a new Session's date. */
-export function localDate() {
-	const d = new Date();
+/** A day, by default today, as `2026-11-07` in local time: a new Session's date. */
+export function localDate(d = new Date()) {
 	return [d.getFullYear(), d.getMonth() + 1, d.getDate()]
 		.map((n) => String(n).padStart(2, "0"))
 		.join("-");

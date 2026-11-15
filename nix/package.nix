@@ -47,7 +47,7 @@ let
     outputHashMode = "recursive";
     outputHash =
       {
-        x86_64-linux = "sha256-maPagB8VT2vvZp6lVIyCK112DLlKRCbGWVBHEjItv5g=";
+        x86_64-linux = "sha256-HyyvsR722uDRUrjVibndITBzNxe9Bypqcd/z/FVcHeM=";
       }
       .${stdenvNoCC.hostPlatform.system} or lib.fakeHash;
   };
