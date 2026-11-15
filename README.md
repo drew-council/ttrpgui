@@ -116,6 +116,7 @@ Every field is optional, and so is the file: without it a note is a plain note.
 | `name`         | session  | shown after the date, such as `"Aruun"`                                  |
 | `pc`           | creature | `true` for a PC; absent means NPC                                        |
 | `display_name` | creature, vehicle | what players see instead of the title                           |
+| `pronouns`     | creature | free text such as `"she/her"`, shown only on the note                    |
 | `hp`           | creature | PC state between combats: `current`, `temp`, `max_adjust`                |
 | `images`       | any      | image file to role: `"main"`, `"map"`, or `"landscape"`                  |
 
@@ -129,6 +130,7 @@ A vehicle, such as a ship, has a stat block like a creature's and its floor plan
 kind = "creature"
 pc = true
 display_name = "The Masked Captain"
+pronouns = "he/him"
 
 [images]
 "portrait.png" = "main"

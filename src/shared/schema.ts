@@ -45,6 +45,8 @@ export const Metadata = z.discriminatedUnion(
 			pc: z.boolean().optional(),
 			/** What players see. Defaults to the title. */
 			display_name: text.optional(),
+			/** For the game master only, such as "she/her". */
+			pronouns: text.optional(),
 			/** PC state carried between combats. */
 			hp: Hp.optional(),
 			...shared,

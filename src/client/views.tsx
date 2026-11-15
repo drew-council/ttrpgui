@@ -105,6 +105,8 @@ export type Pane = {
 	last?: Element;
 	/** The title field that F2 focuses. */
 	title?: RefObject<HTMLInputElement | null>;
+	/** A creature's pronouns field. */
+	pronouns?: RefObject<HTMLInputElement | null>;
 	/** The main text box, whose selection a place keeps. See `placeOf`. */
 	editor?: RefObject<EditorView | null>;
 	/** Opens a Session's date calendar. */
@@ -364,6 +366,11 @@ export function TitleField({
 	);
 }
 
+/** A creature's pronouns in the line under its title: quiet text that is a field only on hover and focus. Its text
+ * sits a little lower, on the baseline of the `capText` beside it. */
+const pronounsClass =
+	"-mx-2 h-auto w-auto max-w-56 min-w-[calc(3ch+1rem)] rounded-md border-transparent px-2 pt-[calc(0.125rem+0.07em)] pb-[calc(0.125rem-0.07em)] text-sm [field-sizing:content] placeholder:text-faint hover:border-input focus-visible:border-input focus-visible:ring-0 md:text-sm dark:bg-transparent dark:focus-visible:bg-input/30";
+
 /** The line of facts under a page title. */
 export const pageMeta =
 	"mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-muted-foreground";
@@ -433,12 +440,14 @@ function NoteView({ arg: title }: { arg: string }) {
 	const editor = useRef<EditorView>(null);
 	const wrapper = useRef<HTMLDivElement>(null);
 	const nameField = useRef<HTMLInputElement>(null);
+	const pronounsField = useRef<HTMLInputElement>(null);
 	const tab = noteTab(title);
 	const reveal = ui.use((s) => (s.reveal?.tab === tab ? s.reveal : undefined));
 	const [editing, edit] = useState(false);
 	pane.statblock = { editing, edit };
 	pane.editor = editor;
 	if (metadata.kind === "session") pane.title = nameField;
+	pane.pronouns = pronounsField;
 	const version = note.bodyVersion;
 	// Refetches when note.md changes, not on a rename, which keeps the text. A failed fetch, such as one for the old
 	// title as a rename lands, leaves loaded text alone.
@@ -554,6 +563,23 @@ function NoteView({ arg: title }: { arg: string }) {
 				<div className={pageMeta}>
 					<KindMark kind={kind} className="-mr-2" />
 					<span className={capText}>{kindLabels[kind]}</span>
+					{metadata.kind === "creature" && (
+						<SaveInput
+							ref={pronounsField}
+							label="Pronouns"
+							saved={metadata.pronouns ?? ""}
+							placeholder="Pronouns"
+							onSave={(pronouns) =>
+								send({
+									type: "setMetadata",
+									title,
+									fields: { pronouns: pronouns.trim() || null },
+								})
+							}
+							onDone={focusText}
+							className={pronounsClass}
+						/>
+					)}
 					{"display_name" in metadata && metadata.display_name && (
 						<span className={capText}>
 							Players see “{metadata.display_name}”

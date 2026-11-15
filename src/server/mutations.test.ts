@@ -129,17 +129,18 @@ test("stat blocks and metadata are validated, then written as readable TOML", as
 	await run({
 		type: "setMetadata",
 		title: "Goblin Skulker",
-		fields: { pc: true, display_name: "Snik" },
+		fields: { pc: true, display_name: "Snik", pronouns: "he/him" },
 	});
 	expect(game.state.notes["Goblin Skulker"]?.metadata).toEqual({
 		kind: "creature",
 		pc: true,
 		display_name: "Snik",
+		pronouns: "he/him",
 	});
 	await run({
 		type: "setMetadata",
 		title: "Goblin Skulker",
-		fields: { pc: null },
+		fields: { pc: null, pronouns: null },
 	});
 	expect(game.state.notes["Goblin Skulker"]?.metadata).toEqual({
 		kind: "creature",
@@ -212,6 +213,7 @@ test("combat edits write PC HP to metadata, and undo and redo restore every file
 	expect(game.state.notes["Mira Quickfoot"]?.metadata).toEqual({
 		kind: "creature",
 		pc: true,
+		pronouns: "she/her",
 	});
 	expect(game.state.problems).toEqual([]);
 });

@@ -1,3 +1,4 @@
 kind = "creature"
 pc = true
+pronouns = "she/her"
 hp = { current = 27, temp = 5 }

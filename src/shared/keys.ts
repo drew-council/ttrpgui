@@ -40,6 +40,7 @@ export const defaultKeys = {
 	"mark-pc": "",
 	"mark-npc": "",
 	"set-display-name": "",
+	"set-pronouns": "",
 	"set-session-date": "",
 	"edit-statblock": "ctrl+shift+e",
 	"add-statblock-section": "alt+s",

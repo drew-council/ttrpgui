@@ -1,5 +1,6 @@
 kind = "creature"
 display_name = "The Masked Captain"
+pronouns = "he/him"
 
 [images]
 "portrait.png" = "main"

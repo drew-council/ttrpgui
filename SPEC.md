@@ -117,6 +117,7 @@ Settled in the design interview. Where this section and the text above differ, t
 
 - A `Creature` is a PC or an NPC. This does not constrain stat block shape.
 - A `Creature` MAY have a display name, which is what players see.
+- A `Creature` MAY have pronouns, free text such as "she/her". Only the game master sees them, on its note.
 - Every stat block field is optional. Known fields: AC, HP, speed, abilities, saves, skills, resistances and immunities, senses, languages, CR, initiative bonus, legendary action count, legendary resistance count.
 - All other content is an ordered list of freely named sections. Each holds entries of a name plus markdown text.
 - The layout is neutral between 5e 2014 and 2024.

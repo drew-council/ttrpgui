@@ -235,12 +235,13 @@ const onNote = onTab("note", (game) => game.notes);
 const inCombatTab = onTab("combat", (game) => game.combats);
 const inAtmosphereTab = onTab("atmosphere", (game) => game.atmospheres);
 
-/** Focuses and selects the active view's title field, where renaming happens. */
-function focusTitle() {
-	const field = activePane()?.title?.current;
+/** Focuses and selects a field of the active view: its title, where renaming happens, or a creature's pronouns. */
+const selectField = (name: "title" | "pronouns") => () => {
+	const field = activePane()?.[name]?.current;
 	field?.focus();
 	field?.select();
-}
+};
+const focusTitle = selectField("title");
 
 /** Renames what tab `from` shows to `to` through `sent`, and resolves whether it applied. The tab follows as soon as
  * synced state shows the rename, so its view never sees its target missing; its view's saves wait for it (`paneArg`). */
@@ -782,6 +783,13 @@ export const actions: Record<ActionId, Action> = {
 				(name) => setFields(title, { display_name: name || null }),
 			);
 		}, canFight),
+	},
+	"set-pronouns": {
+		title: "Set pronouns",
+		...onNote(
+			selectField("pronouns"),
+			({ metadata: m }) => m.kind === "creature",
+		),
 	},
 	"set-session-date": {
 		title: "Set session date",
