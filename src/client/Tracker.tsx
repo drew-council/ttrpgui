@@ -372,7 +372,7 @@ export function CombatView({ arg: name }: { arg: string }) {
 
 	const c = cursor === undefined ? undefined : combat.combatants?.[cursor];
 	return (
-		<section className="mx-auto grid h-full max-w-[110rem] grid-cols-[minmax(0,1fr)_minmax(20rem,28rem)] grid-rows-[auto_auto_auto_minmax(0,1fr)] gap-x-6 px-6 pt-3 @min-[100rem]:grid-cols-[minmax(0,1fr)_34rem] @max-[52rem]:h-auto @max-[52rem]:grid-cols-[minmax(0,1fr)] @max-[52rem]:grid-rows-none">
+		<section className="mx-auto grid h-full max-w-[110rem] grid-cols-[minmax(0,1fr)_minmax(20rem,28rem)] grid-rows-[auto_auto_auto_minmax(0,1fr)] gap-x-6 px-6 pt-3 @max-[30rem]:px-3 @min-[100rem]:grid-cols-[minmax(0,1fr)_34rem] @max-[52rem]:h-auto @max-[52rem]:grid-cols-[minmax(0,1fr)] @max-[52rem]:grid-rows-none">
 			<header className="col-span-full flex flex-wrap items-baseline gap-x-5">
 				<TitleField
 					name={name}

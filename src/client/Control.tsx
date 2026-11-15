@@ -26,7 +26,7 @@ import {
 	change,
 	closeTab,
 	groupArea,
-	minGroupWidth,
+	groupFloor,
 	mountKey,
 	moveTab,
 	places,
@@ -51,9 +51,16 @@ export function Control() {
 	useKeybinds();
 	useProblemToasts();
 	useEffect(forgetMissingTabs, []);
-	const { sidebar, groups, focus, drag, picker, confirm, roller } = ui.use(
-		(s) => s,
-	);
+	const { sidebar, groups, focus, drag, picker, confirm, roller, refocus } =
+		ui.use((s) => s);
+	// The focused group scrolls fully into view, after any tab bar scrolls to its active tab. Its tab bar spans its column.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: runs when a group takes focus, a tab opens, or the groups change.
+	useEffect(() => {
+		groupArea.current?.children[focus]?.scrollIntoView({
+			block: "nearest",
+			inline: "nearest",
+		});
+	}, [focus, refocus, groups]);
 	const placedIn = groups.flatMap((g, i) =>
 		g.tabs.map((tab) => [tab, i] as const),
 	);
@@ -68,12 +75,13 @@ export function Control() {
 				)}
 			>
 				{sidebar && <Sidebar />}
-				{/* A column per group: its tab bar on top, its panes stacked under it. Too narrow for them, it scrolls. */}
+				{/* A column per group, tab bars first: its tab bar on top, its panes stacked under it. Too narrow for them, it
+				    scrolls. */}
 				<main
 					ref={groupArea}
 					className="relative grid min-h-0 grid-rows-[auto_minmax(0,1fr)] overflow-x-auto"
 					style={{
-						gridTemplateColumns: `repeat(${groups.length}, minmax(${minGroupWidth}rem, 1fr))`,
+						gridTemplateColumns: `repeat(${groups.length}, minmax(${groupFloor}rem, 1fr))`,
 					}}
 				>
 					{groups.map((_, i) => (
@@ -119,6 +127,10 @@ export function Control() {
 		</TooltipProvider>
 	);
 }
+
+/** What a press can focus. */
+const focusable =
+	"[tabindex],a[href],button,input,select,textarea,[contenteditable],audio[controls],video[controls]";
 
 /** Focuses group `group` if it is not focused. */
 const focusOn = (group: number) =>
@@ -219,6 +231,11 @@ function TabPane({
 						onPointerDownCapture={() => {
 							focusOn(group);
 							if (!pane.root?.contains(document.activeElement)) focusPane(pane);
+						}}
+						// A press on nothing focusable would focus the pane itself; focus stays in its view instead.
+						onMouseDown={(e) => {
+							if ((e.target as Element).closest(focusable) === e.currentTarget)
+								e.preventDefault();
 						}}
 						onFocus={(e) => {
 							if (e.currentTarget.contains(e.target)) pane.last = e.target;
@@ -427,6 +444,9 @@ function TabBar({ group }: { group: number }) {
 						<ActionButton id="new-tab" />
 					</span>
 				</div>
+				<span className="flex flex-none items-center border-l px-1">
+					<ActionButton id="split-right" />
+				</span>
 			</div>
 		</GroupContext>
 	);

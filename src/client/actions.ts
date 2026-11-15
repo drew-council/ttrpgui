@@ -14,6 +14,7 @@ import {
 	CircleStopIcon,
 	CloudFogIcon,
 	CloudOffIcon,
+	Columns2Icon,
 	CrownIcon,
 	DicesIcon,
 	DownloadIcon,
@@ -114,11 +115,11 @@ import {
 	groupMove,
 	type Item,
 	newTab,
-	noRoom,
 	noteTab,
 	openRoller,
 	openTab,
 	pick,
+	regroup,
 	replaceTab,
 	shiftTab,
 	splitMove,
@@ -530,8 +531,7 @@ const inGroup = {
 /** Moves the active tab to the next (1) or previous (-1) group. See `groupMove`. */
 const toGroup = (step: -1 | 1) => ({
 	when: () => groupMove(step) !== undefined,
-	unavailable: noRoom,
-	run: () => ui.set(groupMove(step) ?? {}),
+	run: () => regroup(groupMove(step)),
 });
 
 const zoomBy = (step: -1 | 0 | 1) => () =>
@@ -648,9 +648,9 @@ export const actions: Record<ActionId, Action> = {
 	},
 	"split-right": {
 		title: "Split tab right into a new group",
+		icon: Columns2Icon,
 		when: () => splitMove() !== undefined,
-		unavailable: noRoom,
-		run: () => ui.set(splitMove() ?? {}),
+		run: () => regroup(splitMove()),
 	},
 	"move-tab-to-next-group": {
 		title: "Move tab to the next group",

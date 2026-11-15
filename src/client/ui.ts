@@ -362,8 +362,10 @@ export function shiftTab(step: -1 | 1) {
 		moveTab(active, s.focus, tabs.indexOf(active) + (step < 0 ? -1 : 2));
 }
 
-/** The narrowest a tab group may be, in rem. */
+/** The narrowest a new tab group may be, in rem. */
 export const minGroupWidth = 22;
+/** The narrowest an open tab group gets before the groups scroll sideways, in rem. */
+export const groupFloor = 18;
 /** The element the tab groups share. `Control` sets it. */
 export const groupArea: { current: HTMLElement | null } = { current: null };
 
@@ -374,8 +376,6 @@ export function roomFor(count: number) {
 	);
 	return (groupArea.current?.clientWidth ?? 0) >= count * minGroupWidth * rem;
 }
-export const noRoom = () =>
-	roomFor(ui.get().groups.length + 1) ? undefined : "No room for another group";
 
 /** `next`, unless it changes nothing or adds a group there is no room for. */
 export const change = (s: Groups, next: Groups) =>
@@ -384,32 +384,33 @@ export const change = (s: Groups, next: Groups) =>
 		? undefined
 		: next;
 
+/** Shows `next`, if any, or says there is no room for it. */
+export function regroup(next: Groups | undefined) {
+	if (next && change(ui.get(), next)) ui.set(next);
+	else if (next) toast("No room for another group", "no-room");
+}
+
 /** Where moving the active tab to the next (1) or previous (-1) group puts it: the end of that group, else a new group
- * at that edge. Undefined when that changes nothing, as for the only tab of an edge group. */
+ * at that edge. Undefined when that changes nothing, as for the only tab of an edge group. See `regroup`. */
 export function groupMove(step: -1 | 1) {
 	const s = ui.get();
 	const active = activeTab(s);
 	if (!active) return;
 	const to = s.focus + step;
-	return change(
-		s,
-		s.groups[to]
-			? placed(s, active, to, s.groups[to].tabs.length)
-			: placed(s, active, Math.max(to, 0)),
-	);
+	const next = s.groups[to]
+		? placed(s, active, to, s.groups[to].tabs.length)
+		: placed(s, active, Math.max(to, 0));
+	return sameGroups(s, next) ? undefined : next;
 }
 
 /** Where moving the active tab into a new group to the right of its own puts it. Its group's only tab stays, and an
- * empty tab opens there instead. */
+ * empty tab opens there instead. See `regroup`. */
 export function splitMove() {
 	const s = ui.get();
 	const active = activeTab(s);
 	if (!active) return;
 	const next = placed(s, active, s.focus + 1);
-	return change(
-		s,
-		sameGroups(s, next) ? placed(s, emptyTab(), s.focus + 1) : next,
-	);
+	return sameGroups(s, next) ? placed(s, emptyTab(), s.focus + 1) : next;
 }
 
 /** Focuses the next (1) or previous (-1) group, which focuses its view. */
