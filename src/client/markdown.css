@@ -82,6 +82,8 @@
 	cursor: pointer;
 	text-decoration: underline 1px rgb(242 185 91 / 0.4);
 	text-underline-offset: 0.2em;
+	/* One even line: skipping descenders leaves a thin line in pieces. */
+	text-decoration-skip-ink: none;
 }
 .md-wikilink[data-link]:hover {
 	text-decoration-color: var(--primary);
@@ -90,6 +92,7 @@
 	color: var(--muted-foreground);
 	text-decoration: underline dashed 1px var(--faint);
 	text-underline-offset: 0.2em;
+	text-decoration-skip-ink: none;
 }
 .md-code {
 	font-family: var(--font-mono);
