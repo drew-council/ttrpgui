@@ -785,19 +785,7 @@ export const actions: Record<ActionId, Action> = {
 		icon: CalendarDaysIcon,
 		label: "Set date",
 		...onNote(
-			(title) => {
-				const metadata = getGame().notes[title]?.metadata;
-				ask(
-					{
-						title: `Date of “${noteLabel(title, getGame().notes[title])}”`,
-						placeholder: "YYYY-MM-DD",
-						value:
-							(metadata?.kind === "session" && metadata.date) || localDate(),
-					},
-					(date) => (date ? `Set the date to ${date}` : "Clear the date"),
-					(date) => setFields(title, { date: date || null }),
-				);
-			},
+			() => activePane()?.calendar?.(),
 			(note) => note.metadata.kind === "session",
 		),
 	},

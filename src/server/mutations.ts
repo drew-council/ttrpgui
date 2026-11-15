@@ -404,7 +404,9 @@ function newTitle(taken: object, raw: string, noun = "note") {
 			`“${title}” is not a valid title: it cannot be empty, start with “.”, or contain / \\ [ ] | #`,
 		);
 	if (Object.hasOwn(taken, title))
-		throw new Error(`A ${noun} named “${title}” already exists`);
+		throw new Error(
+			`${/^[aeiou]/.test(noun) ? "An" : "A"} ${noun} named “${title}” already exists`,
+		);
 	return title;
 }
 

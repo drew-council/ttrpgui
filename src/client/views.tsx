@@ -1,7 +1,7 @@
 // Tab views. A tab id is `view:arg` (or just `view`); adding a view is one entry in `views`.
 import { EditorView } from "@codemirror/view";
 import { cn } from "cn";
-import { CalendarDaysIcon, MonitorUpIcon, TagIcon } from "lucide-react";
+import { MonitorUpIcon, TagIcon } from "lucide-react";
 import {
 	createContext,
 	type FC,
@@ -47,7 +47,7 @@ import {
 } from "./controls.tsx";
 import { gameUrl } from "./Display.tsx";
 import { listClass, rowClass, useListNav } from "./list.ts";
-import { MarkdownBox } from "./MarkdownBox.tsx";
+import { focusAgain, MarkdownBox } from "./MarkdownBox.tsx";
 import { SaveInput, StatBlock } from "./StatBlock.tsx";
 import { getGame, send, useGame } from "./sync.ts";
 import { CombatView, combatTab, type Tracker } from "./Tracker.tsx";
@@ -57,6 +57,7 @@ import {
 	mountKey,
 	noteTab,
 	openTab,
+	type Place,
 	pick,
 	tabOf,
 	ui,
@@ -104,6 +105,10 @@ export type Pane = {
 	last?: Element;
 	/** The title field that F2 focuses. */
 	title?: RefObject<HTMLInputElement | null>;
+	/** The main text box, whose selection a place keeps. See `placeOf`. */
+	editor?: RefObject<EditorView | null>;
+	/** Opens a Session's date calendar. */
+	calendar?: () => void;
 	/** A rename of what it shows, while in flight. See `paneArg`. */
 	renaming?: Promise<boolean>;
 	/** The combat view's tracker. */
@@ -157,6 +162,55 @@ export function focusMain(pane: Pane) {
 	pane.focus?.();
 	if (!pane.focus || !pane.root?.contains(document.activeElement))
 		pane.root?.focus({ preventScroll: true });
+}
+
+/** Focuses the element in a pane that last had focus, else its main element, as when its tab shows again. */
+export function focusPane(pane = activePane()) {
+	const last = pane?.last;
+	if (last instanceof HTMLElement && pane?.root?.contains(last))
+		focusAgain(last);
+	else if (pane) focusMain(pane);
+}
+
+/** Where a pane's view is now. See `savePlace`. */
+export function placeOf(pane: Pane): Place {
+	const selection = pane.editor?.current?.state.selection.main;
+	return {
+		top: pane.root?.scrollTop ?? 0,
+		...(selection && { anchor: selection.anchor, head: selection.head }),
+	};
+}
+
+/** Puts a pane's view back at `place` once its content has laid out, and again as it grows, such as when its text or
+ * images load, until the user scrolls, presses, or types, or two seconds pass. Returns the stop. */
+export function restorePlace(pane: Pane, place: Place) {
+	const root = pane.root;
+	if (!root) return;
+	let { anchor, head } = place;
+	const observer = new ResizeObserver(() => {
+		const view = pane.editor?.current;
+		if (view && anchor !== undefined) {
+			const end = view.state.doc.length;
+			view.dispatch({
+				selection: {
+					anchor: Math.min(anchor, end),
+					head: Math.min(head ?? anchor, end),
+				},
+			});
+			anchor = undefined;
+		}
+		root.scrollTop = place.top;
+	});
+	for (const child of root.children) observer.observe(child);
+	const inputs = ["wheel", "pointerdown", "keydown"];
+	const stop = () => {
+		clearTimeout(timer);
+		observer.disconnect();
+		for (const e of inputs) root.removeEventListener(e, stop, true);
+	};
+	for (const e of inputs) root.addEventListener(e, stop, true);
+	const timer = setTimeout(stop, 2000);
+	return stop;
 }
 
 export function parseTab(tab: string): [view: string, arg: string] {
@@ -362,6 +416,7 @@ function NoteView({ arg: title }: { arg: string }) {
 	const reveal = ui.use((s) => (s.reveal?.tab === tab ? s.reveal : undefined));
 	const [editing, edit] = useState(false);
 	pane.statblock = { editing, edit };
+	pane.editor = editor;
 	if (metadata.kind === "session") pane.title = nameField;
 	const version = note.bodyVersion;
 	// Refetches when note.md changes, not on a rename, which keeps the text. A failed fetch, such as one for the old
@@ -588,10 +643,20 @@ const longDate = (iso: string) =>
 		day: "numeric",
 	});
 
-/** A Session's date as a quiet button that opens a calendar under it. Keys stay inside, as in a menu. */
+/** A Session's date as a quiet button that opens a calendar under it, as `set-session-date` does. While it is open it
+ * counts as a menu: no keybind runs but the privacy screen's. Closing returns focus to where it was. */
 function SessionDate({ title, date }: { title: string; date?: string }) {
 	const [open, setOpen] = useState(false);
-	const button = useRef<HTMLButtonElement>(null);
+	const before = useRef<Element>(null);
+	usePane().calendar = () => {
+		before.current = document.activeElement;
+		setOpen(true);
+	};
+	useEffect(() => {
+		if (!open) return;
+		ui.set({ menu: true });
+		return () => ui.set({ menu: false });
+	}, [open]);
 	const day = date ? new Date(`${date}T00:00`) : undefined;
 	const save = (date: string | null) => {
 		setOpen(false);
@@ -600,22 +665,19 @@ function SessionDate({ title, date }: { title: string; date?: string }) {
 	return (
 		<Popover open={open} onOpenChange={setOpen}>
 			<PopoverAnchor className="-mx-1.5 flex">
-				<ToolButton
-					ref={button}
-					icon={CalendarDaysIcon}
+				<ActionButton
+					id="set-session-date"
 					label={date ? formatDate(date) : "Add a date"}
-					title="Set the date"
 					className="text-sm font-normal tabular-nums"
-					onClick={() => setOpen(true)}
 				/>
 			</PopoverAnchor>
 			<PopoverContent
 				align="start"
 				className="max-h-(--radix-popover-content-available-height) w-auto gap-0 overflow-y-auto p-0"
-				onKeyDown={(e) => e.stopPropagation()}
 				onCloseAutoFocus={(e) => {
 					e.preventDefault();
-					button.current?.focus({ preventScroll: true });
+					if (before.current instanceof HTMLElement)
+						before.current.focus({ preventScroll: true });
 				}}
 			>
 				<Calendar

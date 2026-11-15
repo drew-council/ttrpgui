@@ -1,7 +1,14 @@
 // The control window: sidebar, tab groups, the table bar, plus the popups and toasts on top.
 import { cn } from "cn";
 import { XIcon } from "lucide-react";
-import { type DragEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+	type DragEvent,
+	useEffect,
+	useLayoutEffect,
+	useMemo,
+	useRef,
+	useState,
+} from "react";
 import { Button } from "#components/ui/button.tsx";
 import { Toaster } from "#components/ui/sonner.tsx";
 import { TooltipProvider } from "#components/ui/tooltip.tsx";
@@ -17,16 +24,27 @@ import {
 	sameGroups,
 	without,
 } from "./groups.ts";
-import { focusAgain } from "./MarkdownBox.tsx";
 import { Picker } from "./Picker.tsx";
 import { PrivacyScreen } from "./PrivacyScreen.tsx";
 import { Roller } from "./Roller.tsx";
 import { Sidebar } from "./Sidebar.tsx";
 import { getGame, useGame } from "./sync.ts";
-import { closeTab, mountKey, moveTab, toast, travelTarget, ui } from "./ui.ts";
+import {
+	closeTab,
+	mountKey,
+	moveTab,
+	places,
+	savePlace,
+	toast,
+	travelTarget,
+	ui,
+} from "./ui.ts";
 import {
 	focusMain,
+	focusPane,
 	PaneContext,
+	placeOf,
+	restorePlace,
 	TabBody,
 	TabLabel,
 	tabExists,
@@ -114,7 +132,8 @@ const focusOn = (group: number) =>
  * once shown and only its group's active one shows, so a tab shown again finds its scroll positions, focus, text, and
  * state as they were. Its view mounts when it first shows. When its tab shows in the focused group, focus goes back to
  * the element in it that had focus, else to its main element; `openTab` on a tab already shown focuses its main
- * element. Focus or a press inside focuses its group. */
+ * element, and so does a closed popup whose focus has nowhere to return. Focus or a press inside focuses its group. A
+ * view that unmounts leaves its place (`savePlace`), which it finds again when its tab comes back. */
 function TabPane({
 	tab,
 	group,
@@ -128,6 +147,7 @@ function TabPane({
 }) {
 	const pane = useNewPane(tab ? mountKey(tab) : "");
 	const refocus = ui.use((s) => s.refocus);
+	const popup = ui.use((s) => !!(s.picker || s.confirm || s.roller));
 	/** The group it shows in with focus, else -1. */
 	const at = shown && focused ? group : -1;
 	const was = useRef(-1);
@@ -135,16 +155,43 @@ function TabPane({
 	useEffect(() => {
 		const appeared = at !== was.current;
 		was.current = at;
-		if (at < 0 || ui.get().picker) return;
-		const { last, root } = pane;
+		if (at < 0 || popup) return;
 		// Focus already landed in it, as from a click.
-		if (appeared && root?.contains(document.activeElement)) return;
-		if (appeared && last instanceof HTMLElement && root?.contains(last))
-			focusAgain(last);
+		if (appeared && pane.root?.contains(document.activeElement)) return;
+		if (appeared) focusPane(pane);
 		else focusMain(pane);
 	}, [at, refocus]);
+	// A closed popup returns focus to where it was. If that is gone or hidden, as after switching tabs under it, focus
+	// comes here.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: runs when a popup closes.
+	useEffect(() => {
+		const lost = document.activeElement;
+		if (
+			at >= 0 &&
+			!popup &&
+			(!lost || lost === document.body || lost.closest("[inert]"))
+		)
+			focusPane(pane);
+	}, [popup]);
 	const [seen, setSeen] = useState(shown);
 	if (shown && !seen) setSeen(true);
+	const now = useRef(tab);
+	now.current = tab;
+	// Before its elements go, so it can still read them.
+	// biome-ignore lint/correctness/useExhaustiveDependencies: runs when its view first shows, and as it unmounts.
+	useLayoutEffect(() => {
+		if (!seen || !tab) return;
+		const place = places.get(tab);
+		// A search result's place in it wins.
+		const stop =
+			place && ui.get().reveal?.tab !== tab
+				? restorePlace(pane, place)
+				: undefined;
+		return () => {
+			stop?.();
+			if (now.current) savePlace(now.current, placeOf(pane));
+		};
+	}, [seen]);
 	// The view rerenders on its own state, not on its tab showing or hiding.
 	const body = useMemo(
 		() => seen && (tab ? <TabBody tab={tab} /> : <Welcome />),
@@ -185,8 +232,9 @@ function TabPane({
 /** The drag data type that carries a dragged tab's id. Any drop target MAY read it. */
 export const tabDrag = "application/x-ttrpgui-tab";
 
+/** A drag's insertion mark: a caret-like bar, clear of the active tab's amber stripe. */
 const insertMark =
-	"before:absolute before:inset-y-0 before:z-10 before:w-0.5 before:bg-primary";
+	"before:absolute before:inset-y-1.5 before:z-10 before:w-0.5 before:rounded-full before:bg-foreground";
 
 type Side = "left" | "right" | "middle";
 
@@ -296,7 +344,7 @@ function TabBar({ group }: { group: number }) {
 			<div
 				role="tablist"
 				ref={tablist}
-				className="flex min-w-0 flex-1 overflow-x-auto border-l [scrollbar-width:none]"
+				className="flex min-w-0 flex-1 scroll-pr-10 overflow-x-auto border-l [scrollbar-width:none]"
 				onDragEnter={dragOver}
 				onDragOver={dragOver}
 				onDragLeave={(e) => {
@@ -326,11 +374,17 @@ function TabBar({ group }: { group: number }) {
 							// Changing the page as the drag starts would cancel it.
 							setTimeout(() => ui.set({ drag: tab }));
 						}}
+						// A press focuses it, since refusing focus would stop it dragging. A click or a drag hands focus to the
+						// shown view, as showing a tab does.
 						onDragEnd={() => {
 							setGap(undefined);
 							ui.set({ drag: undefined });
+							focusPane();
 						}}
-						onClick={() => moveTab(tab, group, i)}
+						onClick={() => {
+							moveTab(tab, group, i);
+							focusPane();
+						}}
 						onAuxClick={(e) => e.button === 1 && closeTab(tab)}
 						onMouseDown={(e) => e.button === 1 && e.preventDefault()}
 						className={cn(
@@ -362,7 +416,8 @@ function TabBar({ group }: { group: number }) {
 						</Button>
 					</div>
 				))}
-				<span className="flex flex-none items-center px-1">
+				{/* Stays in view when the tabs overflow. */}
+				<span className="sticky right-0 flex flex-none items-center bg-card px-1">
 					<ActionButton id="new-tab" />
 				</span>
 			</div>

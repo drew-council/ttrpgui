@@ -85,7 +85,7 @@ test("mutations change files, and the reloaded Game reflects them", async () => 
 	]);
 
 	await expect(run({ type: "createNote", title: "Ash Wyrm" })).rejects.toThrow(
-		"already exists",
+		"A note named “Ash Wyrm” already exists",
 	);
 	await expect(run({ type: "createNote", title: "a/b" })).rejects.toThrow(
 		"not a valid title",
@@ -250,6 +250,9 @@ test("atmospheres switch around combat, and renames and deletes keep references"
 	await run({ type: "deleteNote", title: "The Keep" });
 	await run({ type: "deleteAtmosphere", name: "Lair" });
 	await run({ type: "createAtmosphere", name: "Rain" });
+	await expect(run({ type: "createAtmosphere", name: "Rain" })).rejects.toThrow(
+		"An atmosphere named “Rain” already exists",
+	);
 	await run({ type: "setDefaultAtmosphere", name: "Rain" });
 	expect(game.state.atmospheres["Emberfall Night"]?.settings).toEqual({});
 	expect(game.state.atmospheres.Rain?.settings).toEqual({ default: true });

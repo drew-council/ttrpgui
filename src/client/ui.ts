@@ -266,6 +266,18 @@ export function closeTab(tab: string) {
 	ui.set({ ...without(s, tab), history: withoutHistory(s.history, tab) });
 }
 
+/** Where a tab's view was as it unmounted: its pane's scroll offset and its text box's selection. */
+export type Place = { top: number; anchor?: number; head?: number };
+/** Places by tab id, in memory only. The least recently left go first. See `TabPane`. */
+export const places = new Map<string, Place>();
+
+/** Remembers `tab`'s place. */
+export function savePlace(tab: string, place: Place) {
+	places.delete(tab);
+	places.set(tab, place);
+	for (const old of places.keys()) if (places.size > 100) places.delete(old);
+}
+
 const mountKeys = new Map<string, string>();
 let lastKey = 0;
 
@@ -285,6 +297,9 @@ export function replaceTab(from: string, to: string) {
 	const { groups, history, recent } = ui.get();
 	mountKeys.set(to, mountKey(from));
 	mountKeys.delete(from);
+	const place = places.get(from);
+	if (place) savePlace(to, place);
+	places.delete(from);
 	const rename = (t: string) => (t === from ? to : t);
 	ui.set({
 		recent: { ...recent, tabs: [...new Set(recent.tabs?.map(rename))] },
