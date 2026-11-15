@@ -1034,12 +1034,11 @@ export const actions: Record<ActionId, Action> = {
 		title: "Party rest: restore every PC to full HP",
 		icon: BedIcon,
 		run: () =>
-			pick({
+			confirm({
 				title: "Restore every PC to full HP?",
-				items: [
-					{ label: "Not yet", run() {} },
-					{ label: "Rest", run: () => send({ type: "partyRest" }) },
-				],
+				yes: "Rest",
+				no: "Not yet",
+				run: () => send({ type: "partyRest" }),
 			}),
 	},
 	"open-display": {
