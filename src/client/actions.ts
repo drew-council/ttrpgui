@@ -561,11 +561,13 @@ export const actions: Record<ActionId, Action> = {
 		run() {
 			const { notes, combats, atmospheres } = getGame();
 			const isSession = (t: string) => notes[t]?.metadata.kind === "session";
+			// Quick open always opens beside the current tab, or fills an empty one.
+			const beside = !activeTab()?.startsWith("new:");
 			const item = (label: string, detail: string, tab: string): Item => ({
 				label,
 				detail,
 				key: tab,
-				run: (newTab) => openTab(tab, newTab),
+				run: () => openTab(tab, beside),
 			});
 			ask(
 				{
@@ -602,7 +604,7 @@ export const actions: Record<ActionId, Action> = {
 					title && !Object.hasOwn(notes, title)
 						? `Create note “${title}”`
 						: undefined,
-				followLink,
+				(title) => followLink(title, beside),
 			);
 		},
 	},
